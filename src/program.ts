@@ -1,6 +1,8 @@
 import { Command } from "commander";
+import { showSession } from "./commands/show.js";
 import { formatStarted, startSession } from "./commands/start.js";
 import { formatStopped, stopSession, type StopOptions } from "./commands/stop.js";
+import { formatSession } from "./render/terminal.js";
 
 const NOT_IMPLEMENTED = "not implemented";
 
@@ -41,9 +43,13 @@ export function buildProgram(options: StopOptions = {}): Command {
 
   program
     .command("show")
-    .description("Show the active session")
-    .action(() => {
-      console.log(NOT_IMPLEMENTED);
+    .description("Show the last closed session")
+    .argument("[id]", "a session id, or an unambiguous prefix of one")
+    .action(async (id?: string) => {
+      const session = await showSession(id, options);
+      for (const line of formatSession(session)) {
+        console.log(line);
+      }
     });
 
   program

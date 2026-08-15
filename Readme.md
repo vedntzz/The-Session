@@ -23,12 +23,11 @@ $ session show
 
   declared    api/orders.py  api/middleware/
   changed     api/orders.py  api/middleware/rate_limit.py
-  outside     db/schema.py                              ← you did not declare this
+  outside     ! db/schema.py                            ← you did not declare this
 
   3 turns, 1 without edits                              84,200 tokens
   41 api calls, 30 without edits
-  tests      12 passed
-  outcome    open
+  outcome     open
 ```
 
 ## Why declare intent first

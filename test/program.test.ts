@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
+import { readSessions, type Session } from "../src/store.js";
 import type { StopOptions } from "../src/commands/stop.js";
 
 const execFileAsync = promisify(execFile);
@@ -45,8 +46,49 @@ afterEach(async () => {
 });
 
 describe("session", () => {
-  it.each(["show", "week"])("%s prints not implemented", async (name) => {
-    await expect(run(name)).resolves.toEqual(["not implemented"]);
+  it("week prints not implemented", async () => {
+    await expect(run("week")).resolves.toEqual(["not implemented"]);
+  });
+
+  it("show prints the last closed session", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    const lines = await run("show");
+
+    expect(lines[1]).toMatch(/^ {2}touch a\.txt {2,}\d{2}:\d{2} → \d{2}:\d{2}$/);
+    expect(lines).toContain("  declared    a.txt");
+    expect(lines).toContain("  changed     a.txt");
+    expect(lines).toContain("  outcome     open");
+  });
+
+  it("show marks drift", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await writeFile(path.join(store.cwd as string, "undeclared.txt"), "surprise", "utf8");
+    await run("stop");
+
+    const outside = (await run("show")).find((line) => line.includes("outside")) as string;
+
+    expect(outside).toContain("! undeclared.txt");
+    expect(outside).toContain("← you did not declare this");
+  });
+
+  it("show takes a session id", async () => {
+    await run("start", "the first thing");
+    await run("stop");
+    await run("start", "the last thing");
+    await run("stop");
+
+    const [first] = await readSessions(store);
+    const lines = await run("show", (first as Session).id);
+
+    expect(lines[1]).toContain("the first thing");
+  });
+
+  it("show surfaces a refusal when no session has closed", async () => {
+    await expect(run("show")).rejects.toThrow(/No closed sessions yet/);
   });
 
   it("start prints a two-line confirmation", async () => {
