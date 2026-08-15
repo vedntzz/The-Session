@@ -1,12 +1,15 @@
 import { Command } from "commander";
+import { formatStarted, startSession } from "./commands/start.js";
+import type { StoreOptions } from "./store.js";
 
 const NOT_IMPLEMENTED = "not implemented";
 
 /**
  * Builds the `session` command tree. Kept separate from the executable entry
- * point so tests can drive it without spawning a process.
+ * point so tests can drive it without spawning a process; `options` is the
+ * seam that lets them point the store somewhere temporary.
  */
-export function buildProgram(): Command {
+export function buildProgram(options: StoreOptions = {}): Command {
   const program = new Command();
 
   program
@@ -17,8 +20,13 @@ export function buildProgram(): Command {
   program
     .command("start")
     .description("Begin a new session")
-    .action(() => {
-      console.log(NOT_IMPLEMENTED);
+    .argument("<intent>", "what you are setting out to do")
+    .option("--scope <paths...>", "paths you expect to change")
+    .action(async (intent: string, flags: { scope?: string[] }) => {
+      const session = await startSession(intent, { ...options, scope: flags.scope });
+      for (const line of formatStarted(session)) {
+        console.log(line);
+      }
     });
 
   program

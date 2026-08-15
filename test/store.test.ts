@@ -12,6 +12,8 @@ import {
   repoKey,
   resolveStoreFile,
   updateSession,
+  type NewSession,
+  type SessionPatch,
   type StoreOptions,
 } from "../src/store.js";
 
@@ -39,12 +41,65 @@ const T = {
   later: "2026-08-15T14:00:00.000Z",
 };
 
+const COST = { tokens: 12_500, runs: 4, emptyRuns: 1, model: "claude-opus-5" };
+const HEAD = "cdd3b4f0000000000000000000000000000000ab";
+
+/** A session as `session start` would open it: intent, scope, HEAD, nothing else. */
+function started(intent: string, startedAt = T.start): NewSession {
+  return { startedAt, intent, startCommit: HEAD };
+}
+
 describe("appendSession / readSessions", () => {
   it("round-trips a session and generates an id", async () => {
-    const written = await appendSession({ start: T.start, note: "first" }, options);
+    const written = await appendSession(started("fix the parser"), options);
     expect(written.id).toMatch(/^[0-9a-f-]{36}$/);
 
     await expect(readSessions(options)).resolves.toEqual([written]);
+  });
+
+  it("round-trips every field, arrays and cost included", async () => {
+    const written = await appendSession(
+      {
+        startedAt: T.start,
+        endedAt: T.end,
+        intent: "extract the store layer",
+        scope: ["src/store.ts"],
+        reality: ["src/store.ts", "src/cli.ts"],
+        drift: ["src/cli.ts"],
+        cost: COST,
+        outcome: "merged",
+        startCommit: HEAD,
+      },
+      options,
+    );
+
+    await expect(readSessions(options)).resolves.toEqual([written]);
+  });
+
+  it("defaults the fields a session cannot know at start", async () => {
+    const written = await appendSession(started("look around"), options);
+
+    expect(written).toEqual({
+      id: written.id,
+      repo: written.repo,
+      intent: "look around",
+      scope: [],
+      reality: [],
+      drift: [],
+      cost: { tokens: 0, runs: 0, emptyRuns: 0, model: "" },
+      outcome: "open",
+      startedAt: T.start,
+      endedAt: null,
+      startCommit: HEAD,
+    });
+  });
+
+  it("derives repo from the store's cwd", async () => {
+    await execFileAsync("git", ["init", "-q", cwd]);
+    await execFileAsync("git", ["-C", cwd, "remote", "add", "origin", "git@github.com:acme/tool.git"]);
+
+    const written = await appendSession(started("identify me"), options);
+    expect(written.repo).toBe("remote:github.com/acme/tool");
   });
 
   it("returns an empty list when no log exists", async () => {
@@ -52,9 +107,9 @@ describe("appendSession / readSessions", () => {
   });
 
   it("writes one JSONL line per call and never rewrites earlier lines", async () => {
-    const first = await appendSession({ start: T.start }, options);
-    await appendSession({ start: T.later }, options);
-    await updateSession(first.id, { end: T.end }, options);
+    const first = await appendSession(started("a"), options);
+    await appendSession(started("b", T.later), options);
+    await updateSession(first.id, { endedAt: T.end }, options);
 
     const file = await resolveStoreFile(options);
     const lines = (await readFile(file, "utf8")).trimEnd().split("\n");
@@ -62,83 +117,142 @@ describe("appendSession / readSessions", () => {
 
     const firstRecord = JSON.parse(lines[0]!) as { id: string; set: Record<string, unknown> };
     expect(firstRecord.id).toBe(first.id);
-    expect(firstRecord.set["end"]).toBeUndefined();
+    // Still open on the line that created it: the later patch went to line 3.
+    expect(firstRecord.set["endedAt"]).toBeNull();
   });
 
   it("sorts by start time, not by write order", async () => {
-    await appendSession({ start: T.later, note: "afternoon" }, options);
-    await appendSession({ start: T.start, note: "morning" }, options);
+    await appendSession(started("afternoon", T.later), options);
+    await appendSession(started("morning", T.start), options);
 
-    const notes = (await readSessions(options)).map((session) => session.note);
-    expect(notes).toEqual(["morning", "afternoon"]);
+    const intents = (await readSessions(options)).map((session) => session.intent);
+    expect(intents).toEqual(["morning", "afternoon"]);
   });
 
-  it("rejects a non-ISO start", async () => {
-    await expect(appendSession({ start: "yesterday" }, options)).rejects.toThrow(/ISO-8601/);
+  it("rejects a non-ISO startedAt", async () => {
+    await expect(appendSession(started("whenever", "yesterday"), options)).rejects.toThrow(
+      /ISO-8601/,
+    );
   });
 
   it("keeps concurrent appends intact", async () => {
     const starts = Array.from({ length: 20 }, (_, i) =>
       new Date(Date.parse(T.start) + i * 60_000).toISOString(),
     );
-    await Promise.all(starts.map((start) => appendSession({ start }, options)));
+    await Promise.all(
+      starts.map((startedAt) => appendSession(started("concurrent", startedAt), options)),
+    );
 
     const sessions = await readSessions(options);
     expect(sessions).toHaveLength(20);
-    expect(sessions.map((s) => s.start)).toEqual(starts);
+    expect(sessions.map((s) => s.startedAt)).toEqual(starts);
   });
 });
 
 describe("updateSession", () => {
   it("folds a patch over the existing session", async () => {
-    const created = await appendSession({ start: T.start, note: "wip" }, options);
-    const updated = await updateSession(created.id, { end: T.end }, options);
+    const created = await appendSession(started("wip"), options);
+    const updated = await updateSession(created.id, { endedAt: T.end }, options);
 
-    expect(updated).toEqual({ id: created.id, start: T.start, note: "wip", end: T.end });
+    expect(updated).toEqual({ ...created, endedAt: T.end });
     await expect(readSessions(options)).resolves.toEqual([updated]);
   });
 
-  it("applies patches in order, last write winning", async () => {
-    const created = await appendSession({ start: T.start, note: "a" }, options);
-    await updateSession(created.id, { note: "b" }, options);
-    await updateSession(created.id, { note: "c" }, options);
+  it("closes out a session with the fields gathered along the way", async () => {
+    const created = await appendSession(
+      { ...started("extract the store layer"), scope: ["src/store.ts"] },
+      options,
+    );
+    const closed = await updateSession(
+      created.id,
+      {
+        endedAt: T.end,
+        reality: ["src/store.ts", "test/store.test.ts"],
+        drift: ["tests came along for the ride"],
+        cost: COST,
+        outcome: "merged",
+      },
+      options,
+    );
+
+    expect(closed.scope).toEqual(["src/store.ts"]);
+    expect(closed.outcome).toBe("merged");
+    expect(closed.cost).toEqual(COST);
+    await expect(readSessions(options)).resolves.toEqual([closed]);
+  });
+
+  it("replaces arrays wholesale rather than merging them", async () => {
+    const created = await appendSession(
+      { ...started("narrow the blast radius"), scope: ["a.ts", "b.ts"] },
+      options,
+    );
+    await updateSession(created.id, { scope: ["c.ts"] }, options);
 
     const [session] = await readSessions(options);
-    expect(session?.note).toBe("c");
+    expect(session?.scope).toEqual(["c.ts"]);
+  });
+
+  it("applies patches in order, last write winning", async () => {
+    const created = await appendSession(started("a"), options);
+    await updateSession(created.id, { outcome: "abandoned" }, options);
+    await updateSession(created.id, { outcome: "merged" }, options);
+
+    const [session] = await readSessions(options);
+    expect(session?.outcome).toBe("merged");
   });
 
   it("throws on an unknown id", async () => {
-    await expect(updateSession("nope", { end: T.end }, options)).rejects.toThrow(/no session with id/);
+    await expect(updateSession("nope", { endedAt: T.end }, options)).rejects.toThrow(
+      /no session with id/,
+    );
+  });
+
+  it("refuses to edit intent, which is written once at start", async () => {
+    const created = await appendSession(started("what I said"), options);
+
+    await expect(
+      updateSession(created.id, { intent: "what I wish I had said" } as SessionPatch, options),
+    ).rejects.toThrow(/written once/);
+
+    const [session] = await readSessions(options);
+    expect(session?.intent).toBe("what I said");
   });
 });
 
 describe("getOpenSession", () => {
-  it("returns undefined when nothing is open", async () => {
-    const created = await appendSession({ start: T.start }, options);
-    await updateSession(created.id, { end: T.end }, options);
+  it("returns undefined when nothing is running", async () => {
+    const created = await appendSession(started("done"), options);
+    await updateSession(created.id, { endedAt: T.end }, options);
 
     await expect(getOpenSession(options)).resolves.toBeUndefined();
   });
 
-  it("returns the session without an end", async () => {
-    const closed = await appendSession({ start: T.start }, options);
-    await updateSession(closed.id, { end: T.end }, options);
-    const open = await appendSession({ start: T.later }, options);
+  it("returns the session with a null endedAt", async () => {
+    const closed = await appendSession(started("done"), options);
+    await updateSession(closed.id, { endedAt: T.end }, options);
+    const open = await appendSession(started("still going", T.later), options);
 
     await expect(getOpenSession(options)).resolves.toEqual(open);
   });
 
-  it("prefers the most recently started when several are open", async () => {
-    await appendSession({ start: T.start }, options);
-    const newest = await appendSession({ start: T.later }, options);
+  it("prefers the most recently started when several are running", async () => {
+    await appendSession(started("older"), options);
+    const newest = await appendSession(started("newer", T.later), options);
 
     await expect(getOpenSession(options)).resolves.toEqual(newest);
+  });
+
+  it("ignores outcome, which tracks where a session landed, not whether it runs", async () => {
+    const created = await appendSession(started("stopped but unmerged"), options);
+    await updateSession(created.id, { endedAt: T.end, outcome: "open" }, options);
+
+    await expect(getOpenSession(options)).resolves.toBeUndefined();
   });
 });
 
 describe("log durability", () => {
   it("tolerates a truncated final line", async () => {
-    const kept = await appendSession({ start: T.start }, options);
+    const kept = await appendSession(started("kept"), options);
     const file = await resolveStoreFile(options);
     await writeFile(file, (await readFile(file, "utf8")) + '{"v":1,"id":"x","se', "utf8");
 
@@ -146,7 +260,7 @@ describe("log durability", () => {
   });
 
   it("throws on corruption before the final line", async () => {
-    await appendSession({ start: T.start }, options);
+    await appendSession(started("kept"), options);
     const file = await resolveStoreFile(options);
     await writeFile(file, `{ oops\n${await readFile(file, "utf8")}`, "utf8");
 
@@ -179,8 +293,8 @@ describe("repo key", () => {
   });
 
   it("writes exactly one file per repo", async () => {
-    await appendSession({ start: T.start }, options);
-    await appendSession({ start: T.later }, options);
+    await appendSession(started("one"), options);
+    await appendSession(started("two", T.later), options);
 
     await expect(readdir(home)).resolves.toHaveLength(1);
   });
@@ -191,7 +305,7 @@ describe("repo key", () => {
     const nested = path.join(cwd, "packages", "core");
     await mkdir(nested, { recursive: true });
 
-    const created = await appendSession({ start: T.start }, { home, cwd });
+    const created = await appendSession(started("shared"), { home, cwd });
     await expect(readSessions({ home, cwd: nested })).resolves.toEqual([created]);
   });
 

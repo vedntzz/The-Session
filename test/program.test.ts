@@ -1,21 +1,75 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
+import type { StoreOptions } from "../src/store.js";
+
+const execFileAsync = promisify(execFile);
+
+let root: string;
+let store: StoreOptions;
+
+/**
+ * A throwaway repo with one commit, so `start` has a HEAD to record and never
+ * touches the developer's real ~/.session.
+ */
+beforeEach(async () => {
+  root = await mkdtemp(path.join(tmpdir(), "session-program-"));
+  const cwd = path.join(root, "work");
+  await mkdir(cwd, { recursive: true });
+  store = { home: path.join(root, "store"), cwd };
+
+  await execFileAsync("git", ["init", "-q", cwd]);
+  await execFileAsync("git", ["-C", cwd, "config", "user.email", "test@example.com"]);
+  await execFileAsync("git", ["-C", cwd, "config", "user.name", "Test"]);
+  await writeFile(path.join(cwd, "a.txt"), "a", "utf8");
+  await execFileAsync("git", ["-C", cwd, "add", "-A"]);
+  await execFileAsync("git", ["-C", cwd, "commit", "-q", "--no-verify", "-m", "first"]);
+});
 
 /** Runs a subcommand and returns everything it wrote to stdout via console.log. */
 async function run(...argv: string[]): Promise<string[]> {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  const program = buildProgram().exitOverride();
+  const program = buildProgram(store).exitOverride();
   await program.parseAsync(argv, { from: "user" });
   return log.mock.calls.map((call) => String(call[0]));
 }
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
+  await rm(root, { recursive: true, force: true });
 });
 
 describe("session", () => {
-  it.each(["start", "stop", "show", "week"])("%s prints not implemented", async (name) => {
+  it.each(["stop", "show", "week"])("%s prints not implemented", async (name) => {
     await expect(run(name)).resolves.toEqual(["not implemented"]);
+  });
+
+  it("start prints a two-line confirmation", async () => {
+    const lines = await run("start", "add rate limiting to /orders");
+
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^ {2}started {2}add rate limiting to \/orders {2}\(head [0-9a-f]{7}\)$/);
+    expect(lines[1]).toBe("  scope    none declared");
+  });
+
+  it("start passes --scope through to the record", async () => {
+    const lines = await run("start", "touch the api", "--scope", "api/orders.py", "api/mw/");
+    expect(lines[1]).toBe("  scope    api/orders.py  api/mw/");
+  });
+
+  it("start requires an intent argument", async () => {
+    const program = buildProgram(store).exitOverride();
+    program.configureOutput({ writeErr: () => {} });
+    await expect(program.parseAsync(["start"], { from: "user" })).rejects.toThrow();
+  });
+
+  it("start surfaces a refusal as a rejection", async () => {
+    await run("start", "the first thing");
+    await expect(run("start", "the second thing")).rejects.toThrow(/already open/);
   });
 
   it("registers exactly the four subcommands", () => {

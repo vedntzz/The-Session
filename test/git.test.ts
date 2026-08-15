@@ -67,6 +67,7 @@ describe("currentCommit", () => {
   });
 
   it("returns the full HEAD sha", async () => {
+    await write("a.txt", "one");
     const sha = await commit("first");
     await expect(currentCommit(repo)).resolves.toBe(sha);
     expect(sha).toMatch(/^[0-9a-f]{40}$/);
