@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { startSession } from "../src/commands/start.js";
-import { computeDrift, formatStopped, stopSession } from "../src/commands/stop.js";
+import { computeDrift, computeReality, formatStopped, stopSession } from "../src/commands/stop.js";
 import { getOpenSession, readSessions } from "../src/store.js";
 
 const execFileAsync = promisify(execFile);
@@ -78,6 +78,20 @@ describe("computeDrift", () => {
   });
 });
 
+describe("computeReality", () => {
+  it("subtracts the baseline from what changed", () => {
+    expect(computeReality(["a.py", "b.py", "c.py"], ["b.py"])).toEqual(["a.py", "c.py"]);
+  });
+
+  it("is a no-op against an empty baseline", () => {
+    expect(computeReality(["a.py"], [])).toEqual(["a.py"]);
+  });
+
+  it("returns nothing when the session changed only what was already dirty", () => {
+    expect(computeReality(["a.py"], ["a.py", "b.py"])).toEqual([]);
+  });
+});
+
 describe("stopSession", () => {
   it("records reality, drift and an end time", async () => {
     await startSession("add rate limiting to /orders", {
@@ -145,6 +159,45 @@ describe("stopSession", () => {
     const stopped = await stopSession(options);
     expect(stopped.reality).toEqual(["api/orders.py", "db/schema.py"]);
     expect(stopped.drift).toEqual(["db/schema.py"]);
+  });
+
+  it("excludes work that was already in the tree when the session opened", async () => {
+    await write("db/schema.py", "edited before the session");
+    await write("api/orders.py", "also edited before");
+
+    await startSession("only touch middleware", { ...options, scope: ["api/middleware/"] });
+    await write("api/middleware/rate_limit.py");
+
+    const stopped = await stopSession(options);
+
+    expect(stopped.baseline).toEqual(["api/orders.py", "db/schema.py"]);
+    expect(stopped.reality).toEqual(["api/middleware/rate_limit.py"]);
+    // The pre-existing edits are not drift: this session never touched them.
+    expect(stopped.drift).toEqual([]);
+  });
+
+  it("reports nothing when the session changed nothing but the tree was dirty", async () => {
+    await write("db/schema.py", "edited before the session");
+    await startSession("a quiet session on a dirty tree", options);
+
+    const stopped = await stopSession(options);
+
+    expect(stopped.baseline).toEqual(["db/schema.py"]);
+    expect(stopped.reality).toEqual([]);
+    expect(stopped.drift).toEqual([]);
+  });
+
+  it("still credits a baseline file to the session once it is committed", async () => {
+    await write("db/schema.py", "edited before the session");
+    await startSession("commit the leftovers", options);
+    await commitAll("commit what was already dirty");
+    await write("api/orders.py", "changed by the session");
+
+    const stopped = await stopSession(options);
+
+    // db/schema.py stays excluded: it was dirty at start, so the session
+    // cannot claim it even though it was committed during the session.
+    expect(stopped.reality).toEqual(["api/orders.py"]);
   });
 
   it("refuses when no session is open", async () => {

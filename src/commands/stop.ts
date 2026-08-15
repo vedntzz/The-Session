@@ -20,6 +20,17 @@ function covers(entry: string, path: string): boolean {
 }
 
 /**
+ * What this session changed: everything different from the start commit,
+ * less whatever was already dirty when it opened. A file the session touched
+ * on top of pre-existing edits is still excluded, since git reports only that
+ * it differs from HEAD, not who made which hunk.
+ */
+export function computeReality(changed: readonly string[], baseline: readonly string[]): string[] {
+  const before = new Set(baseline);
+  return changed.filter((path) => !before.has(path));
+}
+
+/**
  * What changed that nobody declared: `reality` minus `scope`. Order follows
  * `reality`, which git already returns sorted.
  */
@@ -43,9 +54,9 @@ export async function stopSession(options: StoreOptions = {}): Promise<Session> 
   }
 
   const cwd = options.cwd ?? process.cwd();
-  let reality: string[];
+  let changed: string[];
   try {
-    reality = await changedFilesSince(open.startCommit, cwd);
+    changed = await changedFilesSince(open.startCommit, cwd);
   } catch (error) {
     throw new Error(
       `Cannot diff against the commit this session started from ` +
@@ -54,6 +65,8 @@ export async function stopSession(options: StoreOptions = {}): Promise<Session> 
       { cause: error },
     );
   }
+
+  const reality = computeReality(changed, open.baseline);
 
   return updateSession(
     open.id,

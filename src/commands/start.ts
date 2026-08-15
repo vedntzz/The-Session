@@ -1,4 +1,4 @@
-import { currentCommit, isRepo } from "../git.js";
+import { changedFilesSince, currentCommit, isRepo } from "../git.js";
 import { appendSession, getOpenSession, type Session, type StoreOptions } from "../store.js";
 
 /** What `session start` needs, on top of where the store lives. */
@@ -47,12 +47,17 @@ export async function startSession(intent: string, options: StartOptions = {}): 
     throw new Error("No commits yet, so there is no base to diff against. Make one commit first.");
   }
 
+  // Whatever is already dirty is not this session's doing. Recording it now
+  // is what lets `stop` subtract it back out.
+  const baseline = await changedFilesSince(startCommit, cwd);
+
   return appendSession(
     {
       intent: declared,
       startedAt: new Date().toISOString(),
       startCommit,
       scope: normalizeScope(options.scope),
+      baseline,
     },
     options,
   );

@@ -84,6 +84,7 @@ describe("appendSession / readSessions", () => {
       repo: written.repo,
       intent: "look around",
       scope: [],
+      baseline: [],
       reality: [],
       drift: [],
       cost: { tokens: 0, runs: 0, emptyRuns: 0, model: "" },

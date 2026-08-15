@@ -33,6 +33,11 @@ export interface Session {
   intent: string;
   /** The paths the developer declared. May be empty. */
   scope: string[];
+  /**
+   * Paths already modified when the session opened. Subtracted from `reality`
+   * so a session is not blamed for work that was sitting there before it.
+   */
+  baseline: string[];
   /** The paths that actually changed, observed from git. */
   reality: string[];
   /** `reality` minus `scope` — recorded, never blocked. */
@@ -204,6 +209,7 @@ function isComplete(value: Partial<Session>): value is Omit<Session, "id"> {
     "repo",
     "intent",
     "scope",
+    "baseline",
     "reality",
     "drift",
     "cost",
@@ -242,6 +248,7 @@ export async function appendSession(
     repo: await repoIdentity(options.cwd ?? process.cwd()),
     intent: input.intent,
     scope: input.scope ?? [],
+    baseline: input.baseline ?? [],
     reality: input.reality ?? [],
     drift: input.drift ?? [],
     cost: input.cost ?? { tokens: 0, runs: 0, emptyRuns: 0, model: "" },

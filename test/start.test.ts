@@ -83,6 +83,23 @@ describe("startSession", () => {
     expect(session.scope).toEqual(["b.ts", "a.ts", "c.ts"]);
   });
 
+  it("records an empty baseline when the tree is clean", async () => {
+    await commit("a.txt");
+    const session = await startSession("clean start", options);
+
+    expect(session.baseline).toEqual([]);
+  });
+
+  it("records already-modified files as the baseline", async () => {
+    await commit("a.txt");
+    await writeFile(path.join(cwd, "a.txt"), "edited before the session", "utf8");
+    await writeFile(path.join(cwd, "untracked.txt"), "also here first", "utf8");
+
+    const session = await startSession("start on a dirty tree", options);
+
+    expect(session.baseline).toEqual(["a.txt", "untracked.txt"]);
+  });
+
   it("refuses when a session is already open, naming it", async () => {
     await commit("a.txt");
     await startSession("the first thing", options);
