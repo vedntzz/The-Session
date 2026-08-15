@@ -1,17 +1,18 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildProgram } from "../src/program.js";
+import { buildProgram, type ProgramOptions } from "../src/program.js";
 import { readSessions, type Session } from "../src/store.js";
-import type { StopOptions } from "../src/commands/stop.js";
 
 const execFileAsync = promisify(execFile);
 
 let root: string;
-let store: StopOptions;
+let store: ProgramOptions;
+/** Files `--open` was asked to hand to the desktop. No browser is launched. */
+let opened: string[];
 
 /**
  * A throwaway repo with one commit, so `start` has a HEAD to record and never
@@ -21,8 +22,18 @@ beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), "session-program-"));
   const cwd = path.join(root, "work");
   await mkdir(cwd, { recursive: true });
-  // `adapters: []` keeps these tests off the machine's real transcripts.
-  store = { home: path.join(root, "store"), cwd, adapters: [] };
+  opened = [];
+  // `adapters: []` keeps these tests off the machine's real transcripts, and
+  // `launch` keeps `--open` from opening a browser on whoever runs them.
+  store = {
+    home: path.join(root, "store"),
+    cwd,
+    adapters: [],
+    tmp: root,
+    launch: async (file) => {
+      opened.push(file);
+    },
+  };
 
   await execFileAsync("git", ["init", "-q", cwd]);
   await execFileAsync("git", ["-C", cwd, "config", "user.email", "test@example.com"]);
@@ -76,6 +87,49 @@ describe("session", () => {
 
   it("week refuses a --days that is not a whole number of days", async () => {
     await expect(run("week", "--days", "0")).rejects.toThrow(/whole number of days/);
+  });
+
+  it("week --open writes a page, says where, and opens it", async () => {
+    await run("start", "the thing on the page");
+    await run("stop");
+
+    const lines = await run("week", "--open");
+    const file = lines[0]?.replace("  wrote    ", "") as string;
+
+    expect(lines).toHaveLength(1);
+    expect(file).toMatch(/session-week-[0-9a-f]{16}\.html$/);
+    expect(opened).toEqual([file]);
+    await expect(readFile(file, "utf8")).resolves.toContain("the thing on the page");
+  });
+
+  it("week --open prints the path before reaching for a browser", async () => {
+    // A desktop that cannot open the page still leaves the developer holding
+    // it, so the failure names the file rather than losing it.
+    store.launch = async () => {
+      throw new Error("Could not open a browser with xdg-open.");
+    };
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const program = buildProgram(store).exitOverride();
+
+    await expect(program.parseAsync(["week", "--open"], { from: "user" })).rejects.toThrow(
+      /Could not open a browser/,
+    );
+    expect(String(log.mock.calls[0]?.[0])).toMatch(/^ {2}wrote {4}\S+\.html$/);
+  });
+
+  it("week --open honours --days", async () => {
+    await run("start", "today's thing");
+    await run("stop");
+
+    const lines = await run("week", "--open", "--days", "30");
+    const file = lines[0]?.replace("  wrote    ", "") as string;
+
+    await expect(readFile(file, "utf8")).resolves.toContain("The last 30 days");
+  });
+
+  it("week without --open opens nothing", async () => {
+    await run("week");
+    expect(opened).toEqual([]);
   });
 
   it("show prints the last closed session", async () => {

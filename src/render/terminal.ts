@@ -176,8 +176,12 @@ const HEADINGS: WeekCells = {
   outcome: "outcome",
 };
 
-/** Date and local time, so a row is placeable in the week without a header. */
-function stamp(iso: string): string {
+/**
+ * Date and local time, so a row is placeable in the week without a header.
+ * Exported because the HTML view writes the same stamp: one definition means
+ * the two views cannot come to disagree about when a session ran.
+ */
+export function stamp(iso: string): string {
   const at = new Date(iso);
   const month = String(at.getMonth() + 1).padStart(2, "0");
   const day = String(at.getDate()).padStart(2, "0");

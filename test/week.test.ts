@@ -1,8 +1,14 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_DAYS, parseDays, weekSessions } from "../src/commands/week.js";
+import {
+  DEFAULT_DAYS,
+  openInBrowser,
+  parseDays,
+  weekSessions,
+  writeWeekPage,
+} from "../src/commands/week.js";
 import { appendSession, updateSession, type StoreOptions } from "../src/store.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -119,5 +125,70 @@ describe("weekSessions", () => {
     await record("last month", 40);
 
     await expect(weekSessions(7, options)).resolves.toEqual([]);
+  });
+});
+
+describe("writeWeekPage", () => {
+  let tmp: string;
+
+  beforeEach(async () => {
+    tmp = path.join(root, "tmp");
+    await mkdir(tmp, { recursive: true });
+  });
+
+  it("writes the page where it says it did", async () => {
+    const file = await writeWeekPage("<!doctype html><html></html>", { ...options, tmp });
+
+    expect(path.dirname(file)).toBe(tmp);
+    expect(path.basename(file)).toMatch(/^session-week-[0-9a-f]{16}\.html$/);
+    await expect(readFile(file, "utf8")).resolves.toBe("<!doctype html><html></html>");
+  });
+
+  it("rewrites one page per repo rather than leaving a trail of them", async () => {
+    const first = await writeWeekPage("<p>one</p>", { ...options, tmp });
+    const second = await writeWeekPage("<p>two</p>", { ...options, tmp });
+
+    expect(second).toBe(first);
+    await expect(readFile(first, "utf8")).resolves.toBe("<p>two</p>");
+  });
+
+  it("gives a different repo a different page", async () => {
+    const other = path.join(root, "elsewhere");
+    await mkdir(other, { recursive: true });
+
+    const mine = await writeWeekPage("<p>mine</p>", { ...options, tmp });
+    const theirs = await writeWeekPage("<p>theirs</p>", { ...options, cwd: other, tmp });
+
+    expect(theirs).not.toBe(mine);
+  });
+
+  it("keeps the page to the owner: it holds the same intents the store does", async () => {
+    const file = await writeWeekPage("<p>private</p>", { ...options, tmp });
+
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
+  });
+});
+
+describe("openInBrowser", () => {
+  it("hands the file to the launcher it was given", async () => {
+    const opened: string[] = [];
+
+    await openInBrowser("/tmp/session-week-abc.html", {
+      launch: async (file) => {
+        opened.push(file);
+      },
+    });
+
+    expect(opened).toEqual(["/tmp/session-week-abc.html"]);
+  });
+
+  it("surfaces a launcher that fails", async () => {
+    await expect(
+      openInBrowser("/tmp/page.html", {
+        launch: async () => {
+          throw new Error("no browser here");
+        },
+      }),
+    ).rejects.toThrow(/no browser here/);
   });
 });
