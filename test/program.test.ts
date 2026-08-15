@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 describe("session", () => {
-  it.each(["stop", "show", "week"])("%s prints not implemented", async (name) => {
+  it.each(["show", "week"])("%s prints not implemented", async (name) => {
     await expect(run(name)).resolves.toEqual(["not implemented"]);
   });
 
@@ -70,6 +70,30 @@ describe("session", () => {
   it("start surfaces a refusal as a rejection", async () => {
     await run("start", "the first thing");
     await expect(run("start", "the second thing")).rejects.toThrow(/already open/);
+  });
+
+  it("stop prints what changed", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+
+    await expect(run("stop")).resolves.toEqual(["  stopped  touch a.txt", "  changed  a.txt"]);
+  });
+
+  it("stop exits 0 when the session drifted: drift is recorded, never blocked", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await writeFile(path.join(store.cwd as string, "undeclared.txt"), "surprise", "utf8");
+
+    // Resolving is the assertion: cli.ts only sets a non-zero exit code when
+    // the action throws, so a clean resolve here is an exit 0.
+    const lines = await run("stop");
+
+    expect(lines).toContain("  outside  undeclared.txt");
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("stop surfaces a refusal as a rejection when nothing is open", async () => {
+    await expect(run("stop")).rejects.toThrow(/No session is open/);
   });
 
   it("registers exactly the four subcommands", () => {

@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { formatStarted, startSession } from "./commands/start.js";
+import { formatStopped, stopSession } from "./commands/stop.js";
 import type { StoreOptions } from "./store.js";
 
 const NOT_IMPLEMENTED = "not implemented";
@@ -32,8 +33,11 @@ export function buildProgram(options: StoreOptions = {}): Command {
   program
     .command("stop")
     .description("End the active session")
-    .action(() => {
-      console.log(NOT_IMPLEMENTED);
+    .action(async () => {
+      const session = await stopSession(options);
+      for (const line of formatStopped(session)) {
+        console.log(line);
+      }
     });
 
   program
