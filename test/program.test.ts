@@ -46,8 +46,36 @@ afterEach(async () => {
 });
 
 describe("session", () => {
-  it("week prints not implemented", async () => {
-    await expect(run("week")).resolves.toEqual(["not implemented"]);
+  it("week prints a row per session", async () => {
+    await run("start", "the first thing");
+    await run("stop");
+    await run("start", "the second thing");
+    await run("stop");
+
+    const lines = await run("week");
+
+    expect(lines[1]).toContain("started");
+    expect(lines[2]).toContain("the first thing");
+    expect(lines[3]).toContain("the second thing");
+    expect(lines.at(-1)).toContain("2 sessions");
+  });
+
+  it("week says so when nothing is in the window", async () => {
+    await expect(run("week")).resolves.toEqual(["", "  No sessions in the last 7 days"]);
+  });
+
+  it("week narrows the window with --days", async () => {
+    await run("start", "today's thing");
+    await run("stop");
+
+    const lines = await run("week", "--days", "1");
+
+    expect(lines[2]).toContain("today's thing");
+    expect(lines.at(-1)).toContain("1 session");
+  });
+
+  it("week refuses a --days that is not a whole number of days", async () => {
+    await expect(run("week", "--days", "0")).rejects.toThrow(/whole number of days/);
   });
 
   it("show prints the last closed session", async () => {

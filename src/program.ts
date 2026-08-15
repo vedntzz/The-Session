@@ -2,9 +2,8 @@ import { Command } from "commander";
 import { showSession } from "./commands/show.js";
 import { formatStarted, startSession } from "./commands/start.js";
 import { formatStopped, stopSession, type StopOptions } from "./commands/stop.js";
-import { formatSession } from "./render/terminal.js";
-
-const NOT_IMPLEMENTED = "not implemented";
+import { DEFAULT_DAYS, parseDays, weekSessions } from "./commands/week.js";
+import { formatSession, formatWeek } from "./render/terminal.js";
 
 /**
  * Builds the `session` command tree. Kept separate from the executable entry
@@ -54,9 +53,13 @@ export function buildProgram(options: StopOptions = {}): Command {
 
   program
     .command("week")
-    .description("Summarize the current week")
-    .action(() => {
-      console.log(NOT_IMPLEMENTED);
+    .description("Summarize recent sessions, one row each")
+    .option("--days <n>", "how many days back to look", String(DEFAULT_DAYS))
+    .action(async (flags: { days?: string }) => {
+      const days = parseDays(flags.days);
+      for (const line of formatWeek(await weekSessions(days, options), days)) {
+        console.log(line);
+      }
     });
 
   return program;

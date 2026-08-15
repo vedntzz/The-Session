@@ -43,7 +43,8 @@ Without it there is one entry in the ledger — what the machine produced — an
 | `session start "<intent>"` | Open a session. Records HEAD and your declared scope. |
 | `session stop` | Close it. Diffs the repo, reads the agent transcript, writes the record. |
 | `session show` | The last session, in full. |
-| `session week` | One row per session. Row height is spend. |
+| `session week` | One row per session over the last 7 days, and what they came to. |
+| `session week --days <n>` | The same, over a window you choose. |
 | `session week --open` | The same week as an HTML page, in your browser. |
 
 ## The record
