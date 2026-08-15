@@ -41,6 +41,8 @@ export function mergeCosts(costs: readonly SessionCost[]): SessionCost {
     total.cacheReadTokens += cost.cacheReadTokens;
     total.cacheCreationTokens += cost.cacheCreationTokens;
     total.outputTokens += cost.outputTokens;
+    total.turns += cost.turns;
+    total.emptyTurns += cost.emptyTurns;
     total.apiCalls += cost.apiCalls;
     total.callsWithoutEdits += cost.callsWithoutEdits;
     if (cost.model !== "") {

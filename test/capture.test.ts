@@ -52,6 +52,26 @@ function assistant(params: {
   });
 }
 
+/** A developer-authored prompt: `type: "user"` with plain string content. */
+function prompt(timestamp: string, text = "do the thing"): string {
+  return JSON.stringify({
+    type: "user",
+    timestamp,
+    cwd: "/repo",
+    message: { role: "user", content: text },
+  });
+}
+
+/** The harness feeding a tool result back to the agent — not a new turn. */
+function toolResult(timestamp: string): string {
+  return JSON.stringify({
+    type: "user",
+    timestamp,
+    cwd: "/repo",
+    message: { role: "user", content: [{ type: "tool_result", tool_use_id: "x", content: "ok" }] },
+  });
+}
+
 /**
  * Writes a transcript under a project slug. The mtime defaults to the end of
  * the window, since these fixtures use timestamps that are not "now".
@@ -246,6 +266,143 @@ describe("claude-code adapter", () => {
 
   it("is available once the transcript root exists", async () => {
     await expect(createClaudeCodeAdapter({ root: projects }).isAvailable()).resolves.toBe(true);
+  });
+});
+
+describe("turn segmentation", () => {
+  const at = (minute: number) => `2026-08-15T09:${String(minute).padStart(2, "0")}:00.000Z`;
+
+  it("groups every call after a prompt into one turn", async () => {
+    await transcript("a", [
+      prompt(at(1)),
+      assistant({ requestId: "req_1", timestamp: at(2) }),
+      assistant({ requestId: "req_2", timestamp: at(3) }),
+      assistant({ requestId: "req_3", timestamp: at(4) }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost.turns).toBe(1);
+    expect(cost.apiCalls).toBe(3);
+  });
+
+  it("starts a new turn at each prompt", async () => {
+    await transcript("a", [
+      prompt(at(1)),
+      assistant({ requestId: "req_1", timestamp: at(2) }),
+      prompt(at(3)),
+      assistant({ requestId: "req_2", timestamp: at(4) }),
+      assistant({ requestId: "req_3", timestamp: at(5) }),
+      prompt(at(6)),
+      assistant({ requestId: "req_4", timestamp: at(7) }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost.turns).toBe(3);
+    expect(cost.apiCalls).toBe(4);
+  });
+
+  it("does not split on a tool result, which is the harness talking", async () => {
+    await transcript("a", [
+      prompt(at(1)),
+      assistant({ requestId: "req_1", timestamp: at(2), tool: "Bash" }),
+      toolResult(at(3)),
+      assistant({ requestId: "req_2", timestamp: at(4), tool: "Bash" }),
+      toolResult(at(5)),
+      assistant({ requestId: "req_3", timestamp: at(6) }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost.turns).toBe(1);
+    expect(cost.apiCalls).toBe(3);
+  });
+
+  it("counts a turn as empty only when none of its calls edited", async () => {
+    await transcript("a", [
+      // Productive: the edit lands on the third call of the turn.
+      prompt(at(1)),
+      assistant({ requestId: "req_1", timestamp: at(2), tool: "Read" }),
+      assistant({ requestId: "req_2", timestamp: at(3), tool: "Bash" }),
+      assistant({ requestId: "req_3", timestamp: at(4), tool: "Edit" }),
+      // Empty: a whole turn that only looked around.
+      prompt(at(5)),
+      assistant({ requestId: "req_4", timestamp: at(6), tool: "Read" }),
+      assistant({ requestId: "req_5", timestamp: at(7), tool: "Bash" }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost.turns).toBe(2);
+    expect(cost.emptyTurns).toBe(1);
+    // The per-call view of the same transcript is much coarser.
+    expect(cost.apiCalls).toBe(5);
+    expect(cost.callsWithoutEdits).toBe(4);
+  });
+
+  it("segments in timestamp order even when lines are out of order", async () => {
+    await transcript("a", [
+      assistant({ requestId: "req_2", timestamp: at(4) }),
+      prompt(at(3)),
+      assistant({ requestId: "req_1", timestamp: at(2) }),
+      prompt(at(1)),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost.turns).toBe(2);
+  });
+
+  it("counts a turn whose prompt predates the window but whose calls do not", async () => {
+    await transcript("a", [
+      prompt(T.before),
+      assistant({ requestId: "early", timestamp: T.before }),
+      assistant({ requestId: "inside", timestamp: T.during }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost.turns).toBe(1);
+    expect(cost.apiCalls).toBe(1);
+  });
+
+  it("keeps turns from separate transcripts apart", async () => {
+    await transcript("a", [prompt(at(1)), assistant({ requestId: "req_1", timestamp: at(2) })]);
+    await transcript(
+      "b",
+      [prompt(at(3)), assistant({ requestId: "req_2", timestamp: at(4) })],
+      undefined,
+      "-other",
+    );
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost.turns).toBe(2);
+  });
+
+  it("attributes calls made before any prompt to their own turn", async () => {
+    await transcript("a", [
+      assistant({ requestId: "orphan", timestamp: at(1) }),
+      prompt(at(2)),
+      assistant({ requestId: "req_1", timestamp: at(3) }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost.turns).toBe(2);
+  });
+
+  it("does not treat a subagent's prompt as a developer turn", async () => {
+    const sidechain = JSON.stringify({
+      type: "user",
+      timestamp: at(3),
+      cwd: "/repo",
+      isSidechain: true,
+      message: { role: "user", content: "go research this" },
+    });
+    await transcript("a", [
+      prompt(at(1)),
+      assistant({ requestId: "req_1", timestamp: at(2) }),
+      sidechain,
+      assistant({ requestId: "req_2", timestamp: at(4) }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost.turns).toBe(1);
+    expect(cost.apiCalls).toBe(2);
   });
 });
 

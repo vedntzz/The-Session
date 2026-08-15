@@ -108,10 +108,11 @@ export function formatStopped(session: Session): string[] {
     lines.push(`  outside  ${session.drift.join("  ")}`);
   }
   if (session.cost.apiCalls > 0) {
-    const { apiCalls, callsWithoutEdits } = session.cost;
+    const { turns, emptyTurns, apiCalls, callsWithoutEdits } = session.cost;
     lines.push(
       `  cost     ${totalTokens(session.cost).toLocaleString("en-US")} tokens  ` +
-        `${apiCalls} api calls, ${callsWithoutEdits} without edits`,
+        `${turns} turns, ${emptyTurns} without edits  ` +
+        `(${apiCalls} api calls, ${callsWithoutEdits} without edits)`,
     );
   }
   return lines;

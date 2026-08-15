@@ -24,6 +24,14 @@ interface Call {
   outputTokens: number;
   model: string;
   edited: boolean;
+  /** Which developer turn this call belongs to; unique across transcripts. */
+  turn: number;
+}
+
+/** State threaded through every transcript so ids stay unique across files. */
+interface Fold {
+  calls: Map<string, Call>;
+  nextTurn: number;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -50,6 +58,33 @@ function readUsage(usage: unknown): Pick<
     cacheCreationTokens: num(fields["cache_creation_input_tokens"]),
     outputTokens: num(fields["output_tokens"]),
   };
+}
+
+/**
+ * True when the developer wrote this entry, as opposed to the harness feeding
+ * a tool result back to the agent. Both look like `type: "user"`; only the
+ * content tells them apart — a tool result is always a list of `tool_result`
+ * blocks, while a prompt is a string or a list of text blocks.
+ *
+ * Sidechain entries are excluded: a subagent's prompt is part of the turn the
+ * developer started, not a turn of its own.
+ */
+function isUserAuthored(entry: Record<string, unknown>): boolean {
+  if (entry["type"] !== "user" || entry["isSidechain"] === true || entry["isMeta"] === true) {
+    return false;
+  }
+  const message = entry["message"];
+  if (!isObject(message)) {
+    return false;
+  }
+  const content = message["content"];
+  if (typeof content === "string") {
+    return true;
+  }
+  if (!Array.isArray(content)) {
+    return false;
+  }
+  return !content.some((block) => isObject(block) && block["type"] === "tool_result");
 }
 
 /** True when the assistant message contains a tool call that writes files. */
@@ -116,36 +151,63 @@ async function transcriptsTouchedIn(root: string, from: number): Promise<string[
   return found;
 }
 
-/**
- * Folds one transcript's assistant entries into `calls`, keyed by requestId
- * so repeated streaming fragments collapse into a single API call.
- */
-function foldTranscript(text: string, window: CaptureWindow, calls: Map<string, Call>): void {
-  const from = Date.parse(window.from);
-  const to = Date.parse(window.to);
-
+/** Parses a transcript into timestamped entries, dropping what we cannot read. */
+function parseEntries(text: string): { at: number; entry: Record<string, unknown> }[] {
+  const entries: { at: number; entry: Record<string, unknown> }[] = [];
   for (const line of text.split("\n")) {
     if (line.trim() === "") {
       continue;
     }
-
-    let entry: unknown;
+    let parsed: unknown;
     try {
-      entry = JSON.parse(line);
+      parsed = JSON.parse(line);
     } catch {
       continue; // a partial trailing line, or a format we do not know
     }
-    if (!isObject(entry) || entry["type"] !== "assistant") {
+    if (!isObject(parsed)) {
+      continue;
+    }
+    const timestamp = parsed["timestamp"];
+    const at = typeof timestamp === "string" ? Date.parse(timestamp) : Number.NaN;
+    if (Number.isNaN(at)) {
+      continue;
+    }
+    entries.push({ at, entry: parsed });
+  }
+  return entries;
+}
+
+/**
+ * Folds one transcript into `fold`, splitting it into turns at every
+ * developer-authored entry and keying calls by requestId so repeated
+ * streaming fragments collapse into a single API call.
+ *
+ * Segmentation looks at the whole transcript, but only calls inside the
+ * window are recorded — so a turn that began before the session started
+ * still counts, on the strength of the calls it made once it had.
+ */
+function foldTranscript(text: string, window: CaptureWindow, fold: Fold): void {
+  const from = Date.parse(window.from);
+  const to = Date.parse(window.to);
+
+  // Sort is stable, so entries sharing a timestamp keep their file order and
+  // an assistant reply can never sort ahead of the prompt that caused it.
+  const entries = parseEntries(text).sort((a, b) => a.at - b.at);
+
+  // Calls before the first prompt (a resumed transcript) form their own turn.
+  let turn = fold.nextTurn++;
+
+  for (const { at, entry } of entries) {
+    if (isUserAuthored(entry)) {
+      turn = fold.nextTurn++;
+      continue;
+    }
+    if (entry["type"] !== "assistant") {
       continue;
     }
 
     const requestId = entry["requestId"];
-    const timestamp = entry["timestamp"];
-    if (typeof requestId !== "string" || typeof timestamp !== "string") {
-      continue;
-    }
-    const at = Date.parse(timestamp);
-    if (Number.isNaN(at) || at < from || at > to) {
+    if (typeof requestId !== "string" || at < from || at > to) {
       continue;
     }
     if (window.cwd !== undefined) {
@@ -161,7 +223,7 @@ function foldTranscript(text: string, window: CaptureWindow, calls: Map<string, 
     }
     const edited = touchesFiles(message);
 
-    const existing = calls.get(requestId);
+    const existing = fold.calls.get(requestId);
     if (existing) {
       // Same call, another fragment: usage is already counted, but a later
       // fragment may be the one carrying the tool call.
@@ -169,10 +231,11 @@ function foldTranscript(text: string, window: CaptureWindow, calls: Map<string, 
       continue;
     }
 
-    calls.set(requestId, {
+    fold.calls.set(requestId, {
       ...readUsage(message["usage"]),
       model: typeof message["model"] === "string" ? message["model"] : "",
       edited,
+      turn,
     });
   }
 }
@@ -211,7 +274,7 @@ export function createClaudeCodeAdapter(options: ClaudeCodeOptions = {}): Adapte
       }
 
       const files = await transcriptsTouchedIn(root, from);
-      const calls = new Map<string, Call>();
+      const fold: Fold = { calls: new Map(), nextTurn: 0 };
 
       for (const file of files) {
         let text: string;
@@ -220,12 +283,16 @@ export function createClaudeCodeAdapter(options: ClaudeCodeOptions = {}): Adapte
         } catch {
           continue;
         }
-        foldTranscript(text, window, calls);
+        foldTranscript(text, window, fold);
       }
 
       const callsByModel = new Map<string, number>();
+      // A turn counts once it has a call in the window, and edits anywhere in
+      // it make the whole turn productive.
+      const turnEdited = new Map<number, boolean>();
       const cost = zeroCost();
-      for (const call of calls.values()) {
+
+      for (const call of fold.calls.values()) {
         cost.inputTokens += call.inputTokens;
         cost.cacheReadTokens += call.cacheReadTokens;
         cost.cacheCreationTokens += call.cacheCreationTokens;
@@ -236,9 +303,12 @@ export function createClaudeCodeAdapter(options: ClaudeCodeOptions = {}): Adapte
         if (call.model !== "") {
           callsByModel.set(call.model, (callsByModel.get(call.model) ?? 0) + 1);
         }
+        turnEdited.set(call.turn, (turnEdited.get(call.turn) ?? false) || call.edited);
       }
 
-      cost.apiCalls = calls.size;
+      cost.apiCalls = fold.calls.size;
+      cost.turns = turnEdited.size;
+      cost.emptyTurns = [...turnEdited.values()].filter((edited) => !edited).length;
       cost.model = dominant(callsByModel);
       return cost;
     },

@@ -23,6 +23,10 @@ export interface SessionCost {
   /** Input written into cache, billed at a premium. */
   cacheCreationTokens: number;
   outputTokens: number;
+  /** Developer turns: one per prompt, covering everything it set off. */
+  turns: number;
+  /** Turns that wrote no files — a whole prompt that produced nothing. */
+  emptyTurns: number;
   /** API calls observed, after streaming fragments are collapsed. */
   apiCalls: number;
   /** Calls that wrote no files: they cost tokens and changed nothing. */
@@ -42,6 +46,8 @@ export function zeroCost(): SessionCost {
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
     outputTokens: 0,
+    turns: 0,
+    emptyTurns: 0,
     apiCalls: 0,
     callsWithoutEdits: 0,
     model: "",

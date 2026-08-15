@@ -25,7 +25,8 @@ $ session show
   changed     api/orders.py  api/middleware/rate_limit.py
   outside     db/schema.py                              ← you did not declare this
 
-  3 runs, 2 changed no files                            84,200 tokens
+  3 turns, 1 without edits                              84,200 tokens
+  41 api calls, 30 without edits
   tests      12 passed
   outcome    open
 ```
@@ -48,13 +49,16 @@ Without it there is one entry in the ledger — what the machine produced — an
 
 ## The record
 
-Five fields. Everything else is a query over them.
+Six fields. Everything else is a query over them.
 
 - **intent** — what you said you were doing, in your own words. Written once, never editable.
-- **scope** — the files you expected to change.
-- **reality** — the files that actually changed.
-- **cost** — tokens, runs, and how many of those runs changed nothing.
+- **scope** — the files you expected to change. Path prefixes, matched at directory boundaries: `api/middleware/` covers everything beneath it, `api/order` never covers `api/orders.py`.
+- **baseline** — what was already modified when the session opened, so you are not billed for work that was sitting there before it.
+- **reality** — the files that actually changed, less the baseline.
+- **cost** — four token counters, kept apart because cache reads, cache writes, input and output all bill differently; plus how much of the work produced nothing.
 - **outcome** — merged, abandoned, or open.
+
+Cost counts two ways, because they answer different questions. **Turns** are your prompts: one per thing you asked for. **API calls** are what each prompt set off — the reads, the greps, the edits. A turn that ends without touching a file is waste you can act on; a call that ends without touching a file is usually just the agent looking something up.
 
 Stored as JSONL under `~/.session/`. Your data, your disk. No account, no server, no telemetry.
 
@@ -66,7 +70,7 @@ Five practices. The tool is the argument for them; you can adopt them without it
 
 **2. Scope is declared, drift is recorded — not blocked.** Agents wander for good reasons. The failure isn't wandering, it's wandering unnoticed.
 
-**3. Count what produced nothing.** A run that changes no files still costs money. Waste is a first-class number or it is invisible.
+**3. Count what produced nothing.** A turn that changes no files still costs money. Waste is a first-class number or it is invisible.
 
 **4. The session is the unit of work.** Not the ticket, not the sprint, not the line of code. The session is what you can actually reason about.
 

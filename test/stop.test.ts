@@ -155,8 +155,10 @@ describe("stopSession", () => {
             cacheReadTokens: 70_000,
             cacheCreationTokens: 12_000,
             outputTokens: 1_000,
-            apiCalls: 3,
-            callsWithoutEdits: 2,
+            turns: 3,
+            emptyTurns: 2,
+            apiCalls: 41,
+            callsWithoutEdits: 30,
             model: "claude-opus-5",
           }),
         },
@@ -168,8 +170,10 @@ describe("stopSession", () => {
       cacheReadTokens: 70_000,
       cacheCreationTokens: 12_000,
       outputTokens: 1_000,
-      apiCalls: 3,
-      callsWithoutEdits: 2,
+      turns: 3,
+      emptyTurns: 2,
+      apiCalls: 41,
+      callsWithoutEdits: 30,
       model: "claude-opus-5",
     });
   });
@@ -346,8 +350,10 @@ describe("formatStopped", () => {
             cacheReadTokens: 70_000,
             cacheCreationTokens: 12_000,
             outputTokens: 1_000,
-            apiCalls: 3,
-            callsWithoutEdits: 2,
+            turns: 3,
+            emptyTurns: 2,
+            apiCalls: 41,
+            callsWithoutEdits: 30,
             model: "claude-opus-5",
           }),
         },
@@ -355,7 +361,7 @@ describe("formatStopped", () => {
     });
 
     expect(formatStopped(stopped).at(-1)).toBe(
-      "  cost     84,200 tokens  3 api calls, 2 without edits",
+      "  cost     84,200 tokens  3 turns, 2 without edits  (41 api calls, 30 without edits)",
     );
   });
 

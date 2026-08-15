@@ -9,7 +9,7 @@
 1. **`intent` is immutable.** Written once at `session start`, never edited afterward. A declaration you can revise after seeing the result is a rationalisation, not a declaration. No `--edit-intent` flag, ever.
 2. **No server, no database, no account.** Data lives in JSONL on the user's disk. If a change requires network access, it's wrong.
 3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant".
-4. **Failed runs are first-class.** Runs that produced no file changes are counted and displayed, never dropped.
+4. **Turns that produced nothing are first-class.** Turns and API calls that changed no files are counted and displayed, never dropped.
 5. **Cross-tool.** Nothing may assume Claude Code specifically. Adapters go behind an interface; the core reads a normalised shape.
 
 ## Stack
@@ -39,13 +39,33 @@ type Session = {
   repo: string
   intent: string          // immutable
   scope: string[]         // declared, may be empty
-  reality: string[]       // observed from git diff
+  baseline: string[]      // already dirty at start, subtracted from reality
+  reality: string[]       // observed from git diff, less baseline
   drift: string[]         // reality minus scope
-  cost: { tokens: number; runs: number; emptyRuns: number; model: string }
+  cost: SessionCost
   outcome: 'open' | 'merged' | 'abandoned'
   startedAt: string
   endedAt: string | null
   startCommit: string
+}
+
+type SessionCost = {
+  // Four counters, never one sum: each bills at a different rate, so a total
+  // cannot be converted back into money.
+  inputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  outputTokens: number
+
+  // Turns are prompts; calls are what each prompt set off. Both are kept:
+  // turns are the honest unit for "how much of this produced nothing",
+  // calls are what the transcript measures directly.
+  turns: number
+  emptyTurns: number             // turns that wrote no files
+  apiCalls: number               // streaming fragments collapsed by requestId
+  callsWithoutEdits: number
+
+  model: string                  // the model that did the most calls
 }
 ```
 
@@ -60,6 +80,6 @@ type Session = {
 ## Don't
 
 - Don't add config files or a `session config` command in v1.
-- Don't build a spec language. Scope is a list of paths or globs.
+- Don't build a spec language. Scope is a list of path prefixes, matched at directory boundaries.
 - Don't add telemetry of any kind.
 - Don't add a knowledge graph, a web server, or a dashboard. Those are week-two questions.

@@ -47,6 +47,8 @@ const COST = {
   cacheReadTokens: 9_000,
   cacheCreationTokens: 2_000,
   outputTokens: 300,
+  turns: 2,
+  emptyTurns: 1,
   apiCalls: 4,
   callsWithoutEdits: 1,
   model: "claude-opus-5",
