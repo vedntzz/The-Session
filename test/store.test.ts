@@ -12,6 +12,7 @@ import {
   repoKey,
   resolveStoreFile,
   updateSession,
+  zeroCost,
   type NewSession,
   type SessionPatch,
   type StoreOptions,
@@ -41,7 +42,15 @@ const T = {
   later: "2026-08-15T14:00:00.000Z",
 };
 
-const COST = { tokens: 12_500, runs: 4, emptyRuns: 1, model: "claude-opus-5" };
+const COST = {
+  inputTokens: 1_200,
+  cacheReadTokens: 9_000,
+  cacheCreationTokens: 2_000,
+  outputTokens: 300,
+  apiCalls: 4,
+  callsWithoutEdits: 1,
+  model: "claude-opus-5",
+};
 const HEAD = "cdd3b4f0000000000000000000000000000000ab";
 
 /** A session as `session start` would open it: intent, scope, HEAD, nothing else. */
@@ -87,7 +96,7 @@ describe("appendSession / readSessions", () => {
       baseline: [],
       reality: [],
       drift: [],
-      cost: { tokens: 0, runs: 0, emptyRuns: 0, model: "" },
+      cost: zeroCost(),
       outcome: "open",
       startedAt: T.start,
       endedAt: null,

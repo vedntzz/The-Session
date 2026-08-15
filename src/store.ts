@@ -10,13 +10,42 @@ const execFileAsync = promisify(execFile);
 /** Bumped only if the on-disk record shape changes incompatibly. */
 const RECORD_VERSION = 1;
 
-/** What the session spent to get where it got. */
+/**
+ * What the session spent to get where it got. Token counters stay separate
+ * because the four kinds bill at different rates; collapsing them to one
+ * number throws away the information a price calculation needs.
+ */
 export interface SessionCost {
-  tokens: number;
-  runs: number;
-  /** Runs that produced no change worth keeping. */
-  emptyRuns: number;
+  /** Fresh input, billed at the full input rate. */
+  inputTokens: number;
+  /** Input served from cache, billed at a discount. */
+  cacheReadTokens: number;
+  /** Input written into cache, billed at a premium. */
+  cacheCreationTokens: number;
+  outputTokens: number;
+  /** API calls observed, after streaming fragments are collapsed. */
+  apiCalls: number;
+  /** Calls that wrote no files: they cost tokens and changed nothing. */
+  callsWithoutEdits: number;
   model: string;
+}
+
+/** Every token the session moved. For display only — never for pricing. */
+export function totalTokens(cost: SessionCost): number {
+  return cost.inputTokens + cost.cacheReadTokens + cost.cacheCreationTokens + cost.outputTokens;
+}
+
+/** A cost record with nothing counted yet. */
+export function zeroCost(): SessionCost {
+  return {
+    inputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    outputTokens: 0,
+    apiCalls: 0,
+    callsWithoutEdits: 0,
+    model: "",
+  };
 }
 
 /**
@@ -251,7 +280,7 @@ export async function appendSession(
     baseline: input.baseline ?? [],
     reality: input.reality ?? [],
     drift: input.drift ?? [],
-    cost: input.cost ?? { tokens: 0, runs: 0, emptyRuns: 0, model: "" },
+    cost: input.cost ?? zeroCost(),
     outcome: input.outcome ?? "open",
     startedAt: input.startedAt,
     endedAt: input.endedAt ?? null,

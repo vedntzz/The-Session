@@ -12,7 +12,7 @@ import {
   stopSession,
   type StopOptions,
 } from "../src/commands/stop.js";
-import { getOpenSession, readSessions } from "../src/store.js";
+import { getOpenSession, readSessions, zeroCost } from "../src/store.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -137,7 +137,7 @@ describe("stopSession", () => {
 
     const stopped = await stopSession(options);
 
-    expect(stopped.cost).toEqual({ tokens: 0, runs: 0, emptyRuns: 0, model: "" });
+    expect(stopped.cost).toEqual(zeroCost());
     expect(stopped.outcome).toBe("open");
   });
 
@@ -150,15 +150,26 @@ describe("stopSession", () => {
         {
           name: "stub",
           isAvailable: async () => true,
-          capture: async () => ({ tokens: 84_200, runs: 3, emptyRuns: 2, model: "claude-opus-5" }),
+          capture: async () => ({
+            inputTokens: 1_200,
+            cacheReadTokens: 70_000,
+            cacheCreationTokens: 12_000,
+            outputTokens: 1_000,
+            apiCalls: 3,
+            callsWithoutEdits: 2,
+            model: "claude-opus-5",
+          }),
         },
       ],
     });
 
     expect(stopped.cost).toEqual({
-      tokens: 84_200,
-      runs: 3,
-      emptyRuns: 2,
+      inputTokens: 1_200,
+      cacheReadTokens: 70_000,
+      cacheCreationTokens: 12_000,
+      outputTokens: 1_000,
+      apiCalls: 3,
+      callsWithoutEdits: 2,
       model: "claude-opus-5",
     });
   });
@@ -175,7 +186,7 @@ describe("stopSession", () => {
           isAvailable: async () => true,
           capture: async (window) => {
             seen = window;
-            return { tokens: 0, runs: 0, emptyRuns: 0, model: "" };
+            return zeroCost();
           },
         },
       ],
@@ -203,7 +214,7 @@ describe("stopSession", () => {
     });
 
     expect(stopped.endedAt).not.toBeNull();
-    expect(stopped.cost.tokens).toBe(0);
+    expect(stopped.cost).toEqual(zeroCost());
   });
 
   it("preserves intent and scope from start", async () => {
@@ -317,6 +328,41 @@ describe("formatStopped", () => {
       "  changed  api/orders.py  db/schema.py",
       "  outside  db/schema.py",
     ]);
+  });
+
+  it("adds a cost line reporting the token total and call counts", async () => {
+    await startSession("spend some tokens", { ...options, scope: ["api/"] });
+    await write("api/orders.py", "changed");
+
+    const stopped = await stopSession({
+      ...options,
+      adapters: [
+        {
+          name: "stub",
+          isAvailable: async () => true,
+          capture: async () => ({
+            ...zeroCost(),
+            inputTokens: 1_200,
+            cacheReadTokens: 70_000,
+            cacheCreationTokens: 12_000,
+            outputTokens: 1_000,
+            apiCalls: 3,
+            callsWithoutEdits: 2,
+            model: "claude-opus-5",
+          }),
+        },
+      ],
+    });
+
+    expect(formatStopped(stopped).at(-1)).toBe(
+      "  cost     84,200 tokens  3 api calls, 2 without edits",
+    );
+  });
+
+  it("omits the cost line when no adapter reported anything", async () => {
+    await startSession("a quiet session", options);
+
+    expect(formatStopped(await stopSession(options)).some((l) => l.includes("cost"))).toBe(false);
   });
 
   it("says nothing changed when the repo is untouched", async () => {

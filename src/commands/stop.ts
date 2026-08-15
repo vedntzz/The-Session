@@ -1,6 +1,12 @@
 import { captureCost, type Adapter } from "../capture/index.js";
 import { changedFilesSince } from "../git.js";
-import { getOpenSession, updateSession, type Session, type StoreOptions } from "../store.js";
+import {
+  getOpenSession,
+  totalTokens,
+  updateSession,
+  type Session,
+  type StoreOptions,
+} from "../store.js";
 
 /** What `session stop` needs, on top of where the store lives. */
 export interface StopOptions extends StoreOptions {
@@ -101,11 +107,11 @@ export function formatStopped(session: Session): string[] {
   if (session.drift.length > 0) {
     lines.push(`  outside  ${session.drift.join("  ")}`);
   }
-  if (session.cost.runs > 0) {
-    const { tokens, runs, emptyRuns } = session.cost;
+  if (session.cost.apiCalls > 0) {
+    const { apiCalls, callsWithoutEdits } = session.cost;
     lines.push(
-      `  cost     ${tokens.toLocaleString("en-US")} tokens  ` +
-        `${runs} runs, ${emptyRuns} changed no files`,
+      `  cost     ${totalTokens(session.cost).toLocaleString("en-US")} tokens  ` +
+        `${apiCalls} api calls, ${callsWithoutEdits} without edits`,
     );
   }
   return lines;

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { dominant, mergeCosts, NO_COST } from "../src/capture/adapter.js";
 import { createClaudeCodeAdapter } from "../src/capture/adapters/claude-code.js";
 import { captureCost } from "../src/capture/index.js";
+import { totalTokens, zeroCost } from "../src/store.js";
 
 let root: string;
 let projects: string;
@@ -80,7 +81,7 @@ afterEach(async () => {
 });
 
 describe("claude-code adapter", () => {
-  it("sums fresh input, both cache tiers and output", async () => {
+  it("keeps the four token counters separate, since they bill differently", async () => {
     await transcript("a", [
       assistant({
         requestId: "req_1",
@@ -90,8 +91,37 @@ describe("claude-code adapter", () => {
     ]);
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
-    expect(cost.tokens).toBe(2 + 8346 + 13929 + 132);
-    expect(cost.runs).toBe(1);
+    expect(cost.inputTokens).toBe(2);
+    expect(cost.cacheCreationTokens).toBe(8346);
+    expect(cost.cacheReadTokens).toBe(13929);
+    expect(cost.outputTokens).toBe(132);
+    expect(cost.apiCalls).toBe(1);
+    // The sum is still available for display, but only as a derived value.
+    expect(totalTokens(cost)).toBe(2 + 8346 + 13929 + 132);
+  });
+
+  it("adds each counter across calls without mixing them", async () => {
+    await transcript("a", [
+      assistant({
+        requestId: "req_1",
+        timestamp: T.during,
+        tokens: { input: 1, cacheWrite: 10, cacheRead: 100, output: 1000 },
+      }),
+      assistant({
+        requestId: "req_2",
+        timestamp: T.later,
+        tokens: { input: 2, cacheWrite: 20, cacheRead: 200, output: 2000 },
+      }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+    expect(cost).toMatchObject({
+      inputTokens: 3,
+      cacheCreationTokens: 30,
+      cacheReadTokens: 300,
+      outputTokens: 3000,
+      apiCalls: 2,
+    });
   });
 
   it("counts a streaming call once, however many fragments it wrote", async () => {
@@ -104,8 +134,9 @@ describe("claude-code adapter", () => {
     await transcript("a", [fragment, fragment, fragment, fragment]);
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
-    expect(cost.runs).toBe(1);
-    expect(cost.tokens).toBe(150);
+    expect(cost.apiCalls).toBe(1);
+    expect(cost.inputTokens).toBe(100);
+    expect(cost.outputTokens).toBe(50);
   });
 
   it("credits a call that edited in any one of its fragments", async () => {
@@ -115,11 +146,11 @@ describe("claude-code adapter", () => {
     ]);
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
-    expect(cost.runs).toBe(1);
-    expect(cost.emptyRuns).toBe(0);
+    expect(cost.apiCalls).toBe(1);
+    expect(cost.callsWithoutEdits).toBe(0);
   });
 
-  it("counts calls that wrote no files as empty runs", async () => {
+  it("counts calls that wrote no files", async () => {
     await transcript("a", [
       assistant({ requestId: "req_1", timestamp: T.during, tool: "Edit" }),
       assistant({ requestId: "req_2", timestamp: T.during, tool: "Write" }),
@@ -128,8 +159,8 @@ describe("claude-code adapter", () => {
     ]);
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
-    expect(cost.runs).toBe(4);
-    expect(cost.emptyRuns).toBe(2);
+    expect(cost.apiCalls).toBe(4);
+    expect(cost.callsWithoutEdits).toBe(2);
   });
 
   it("ignores activity outside the window", async () => {
@@ -140,8 +171,8 @@ describe("claude-code adapter", () => {
     ]);
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
-    expect(cost.runs).toBe(1);
-    expect(cost.tokens).toBe(7);
+    expect(cost.apiCalls).toBe(1);
+    expect(cost.outputTokens).toBe(7);
   });
 
   it("skips transcripts last written before the window opened", async () => {
@@ -165,7 +196,7 @@ describe("claude-code adapter", () => {
     );
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
-    expect(cost.runs).toBe(2);
+    expect(cost.apiCalls).toBe(2);
   });
 
   it("attributes only work from the same checkout when cwd is given", async () => {
@@ -178,7 +209,7 @@ describe("claude-code adapter", () => {
       ...WINDOW,
       cwd: "/repo",
     });
-    expect(cost.runs).toBe(1);
+    expect(cost.apiCalls).toBe(1);
   });
 
   it("reports the model that did the most calls", async () => {
@@ -202,8 +233,8 @@ describe("claude-code adapter", () => {
     ]);
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
-    expect(cost.runs).toBe(1);
-    expect(cost.tokens).toBe(5);
+    expect(cost.apiCalls).toBe(1);
+    expect(cost.outputTokens).toBe(5);
   });
 
   it("returns zeros when Claude Code has never run here", async () => {
@@ -220,16 +251,17 @@ describe("claude-code adapter", () => {
 
 describe("captureCost", () => {
   it("adds up every available adapter", async () => {
-    const stub = (name: string, tokens: number, runs: number) => ({
+    const stub = (name: string, outputTokens: number, apiCalls: number) => ({
       name,
       isAvailable: async () => true,
-      capture: async () => ({ tokens, runs, emptyRuns: 1, model: name }),
+      capture: async () => ({ ...zeroCost(), outputTokens, apiCalls, callsWithoutEdits: 1, model: name }),
     });
 
     await expect(captureCost(WINDOW, [stub("a", 100, 3), stub("b", 50, 1)])).resolves.toEqual({
-      tokens: 150,
-      runs: 4,
-      emptyRuns: 2,
+      ...zeroCost(),
+      outputTokens: 150,
+      apiCalls: 4,
+      callsWithoutEdits: 2,
       model: "a",
     });
   });
@@ -238,7 +270,7 @@ describe("captureCost", () => {
     const absent = {
       name: "absent",
       isAvailable: async () => false,
-      capture: async () => ({ tokens: 999, runs: 9, emptyRuns: 0, model: "nope" }),
+      capture: async () => ({ ...zeroCost(), outputTokens: 999, apiCalls: 9, model: "nope" }),
     };
 
     await expect(captureCost(WINDOW, [absent])).resolves.toEqual(NO_COST);
@@ -265,8 +297,8 @@ describe("mergeCosts", () => {
   it("names the model with the most calls", () => {
     expect(
       mergeCosts([
-        { tokens: 1, runs: 1, emptyRuns: 0, model: "small" },
-        { tokens: 1, runs: 5, emptyRuns: 0, model: "big" },
+        { ...zeroCost(), apiCalls: 1, model: "small" },
+        { ...zeroCost(), apiCalls: 5, model: "big" },
       ]).model,
     ).toBe("big");
   });

@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { SessionCost } from "../../store.js";
+import { zeroCost, type SessionCost } from "../../store.js";
 import { dominant, NO_COST, type Adapter, type CaptureWindow } from "../adapter.js";
 
 /** Claude Code keeps one JSONL transcript per session, grouped by project. */
@@ -18,7 +18,10 @@ const EDITING_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
  * block, so usage is taken once while tool use is OR-ed across fragments.
  */
 interface Call {
-  tokens: number;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  outputTokens: number;
   model: string;
   edited: boolean;
 }
@@ -32,17 +35,21 @@ function num(value: unknown): number {
 }
 
 /**
- * Every token the call moved: fresh input, both cache tiers, and output.
- * Cached input is most of the traffic in a long session, so leaving it out
- * would report a fraction of what was actually spent.
+ * The four token counters a call reports, kept apart because they bill at
+ * different rates. Cached input is most of the traffic in a long session, so
+ * none of these may be dropped.
  */
-function totalTokens(usage: Record<string, unknown>): number {
-  return (
-    num(usage["input_tokens"]) +
-    num(usage["cache_creation_input_tokens"]) +
-    num(usage["cache_read_input_tokens"]) +
-    num(usage["output_tokens"])
-  );
+function readUsage(usage: unknown): Pick<
+  Call,
+  "inputTokens" | "cacheReadTokens" | "cacheCreationTokens" | "outputTokens"
+> {
+  const fields = isObject(usage) ? usage : {};
+  return {
+    inputTokens: num(fields["input_tokens"]),
+    cacheReadTokens: num(fields["cache_read_input_tokens"]),
+    cacheCreationTokens: num(fields["cache_creation_input_tokens"]),
+    outputTokens: num(fields["output_tokens"]),
+  };
 }
 
 /** True when the assistant message contains a tool call that writes files. */
@@ -162,9 +169,8 @@ function foldTranscript(text: string, window: CaptureWindow, calls: Map<string, 
       continue;
     }
 
-    const usage = message["usage"];
     calls.set(requestId, {
-      tokens: isObject(usage) ? totalTokens(usage) : 0,
+      ...readUsage(message["usage"]),
       model: typeof message["model"] === "string" ? message["model"] : "",
       edited,
     });
@@ -179,10 +185,10 @@ export interface ClaudeCodeOptions {
 /**
  * Reads Claude Code's JSONL transcripts and reports what a session spent.
  *
- * A `run` here is one API call, not one prompt: assistant entries carry no
- * prompt identifier, so the request is the only unit the transcript makes
- * available without walking parent links. An `emptyRun` is a call that
- * produced no file-writing tool use — it cost tokens and changed nothing.
+ * The unit is one API call, not one prompt: assistant entries carry no prompt
+ * identifier, so the request is the only unit the transcript makes available
+ * without walking parent links. A call without edits produced no file-writing
+ * tool use — it cost tokens and changed nothing.
  */
 export function createClaudeCodeAdapter(options: ClaudeCodeOptions = {}): Adapter {
   const root = options.root ?? defaultRoot();
@@ -218,19 +224,23 @@ export function createClaudeCodeAdapter(options: ClaudeCodeOptions = {}): Adapte
       }
 
       const callsByModel = new Map<string, number>();
-      let tokens = 0;
-      let emptyRuns = 0;
+      const cost = zeroCost();
       for (const call of calls.values()) {
-        tokens += call.tokens;
+        cost.inputTokens += call.inputTokens;
+        cost.cacheReadTokens += call.cacheReadTokens;
+        cost.cacheCreationTokens += call.cacheCreationTokens;
+        cost.outputTokens += call.outputTokens;
         if (!call.edited) {
-          emptyRuns += 1;
+          cost.callsWithoutEdits += 1;
         }
         if (call.model !== "") {
           callsByModel.set(call.model, (callsByModel.get(call.model) ?? 0) + 1);
         }
       }
 
-      return { tokens, runs: calls.size, emptyRuns, model: dominant(callsByModel) };
+      cost.apiCalls = calls.size;
+      cost.model = dominant(callsByModel);
+      return cost;
     },
   };
 }

@@ -1,4 +1,4 @@
-import type { SessionCost } from "../store.js";
+import { zeroCost, type SessionCost } from "../store.js";
 
 /** The slice of wall-clock time a session occupied. */
 export interface CaptureWindow {
@@ -11,7 +11,7 @@ export interface CaptureWindow {
 }
 
 /** What every adapter returns when it finds nothing. */
-export const NO_COST: SessionCost = { tokens: 0, runs: 0, emptyRuns: 0, model: "" };
+export const NO_COST: SessionCost = zeroCost();
 
 /**
  * One coding tool's transcripts, reduced to the normalised shape the core
@@ -34,20 +34,22 @@ export interface Adapter {
  */
 export function mergeCosts(costs: readonly SessionCost[]): SessionCost {
   const callsByModel = new Map<string, number>();
-  let tokens = 0;
-  let runs = 0;
-  let emptyRuns = 0;
+  const total = zeroCost();
 
   for (const cost of costs) {
-    tokens += cost.tokens;
-    runs += cost.runs;
-    emptyRuns += cost.emptyRuns;
+    total.inputTokens += cost.inputTokens;
+    total.cacheReadTokens += cost.cacheReadTokens;
+    total.cacheCreationTokens += cost.cacheCreationTokens;
+    total.outputTokens += cost.outputTokens;
+    total.apiCalls += cost.apiCalls;
+    total.callsWithoutEdits += cost.callsWithoutEdits;
     if (cost.model !== "") {
-      callsByModel.set(cost.model, (callsByModel.get(cost.model) ?? 0) + cost.runs);
+      callsByModel.set(cost.model, (callsByModel.get(cost.model) ?? 0) + cost.apiCalls);
     }
   }
 
-  return { tokens, runs, emptyRuns, model: dominant(callsByModel) };
+  total.model = dominant(callsByModel);
+  return total;
 }
 
 /** The key with the highest count, ties broken by name. "" when empty. */
