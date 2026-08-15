@@ -5,14 +5,21 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { startSession } from "../src/commands/start.js";
-import { computeDrift, computeReality, formatStopped, stopSession } from "../src/commands/stop.js";
+import {
+  computeDrift,
+  computeReality,
+  formatStopped,
+  stopSession,
+  type StopOptions,
+} from "../src/commands/stop.js";
 import { getOpenSession, readSessions } from "../src/store.js";
 
 const execFileAsync = promisify(execFile);
 
 let root: string;
 let cwd: string;
-let options: { home: string; cwd: string };
+/** `adapters: []` keeps these tests off the machine's real transcripts. */
+let options: StopOptions & { home: string; cwd: string };
 
 /** Writes a file inside the repo, creating parent directories as needed. */
 async function write(relPath: string, content = "x"): Promise<void> {
@@ -30,7 +37,7 @@ beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), "session-stop-"));
   cwd = path.join(root, "work");
   await mkdir(cwd, { recursive: true });
-  options = { home: path.join(root, "store"), cwd };
+  options = { home: path.join(root, "store"), cwd, adapters: [] };
 
   await execFileAsync("git", ["init", "-q", cwd]);
   await execFileAsync("git", ["-C", cwd, "config", "user.email", "test@example.com"]);
@@ -124,7 +131,7 @@ describe("stopSession", () => {
     await expect(readSessions(options)).resolves.toEqual([stopped]);
   });
 
-  it("leaves cost at zeros and outcome open", async () => {
+  it("records zero cost when no adapter finds anything, and leaves outcome open", async () => {
     await startSession("look around", options);
     await write("api/orders.py", "changed");
 
@@ -132,6 +139,71 @@ describe("stopSession", () => {
 
     expect(stopped.cost).toEqual({ tokens: 0, runs: 0, emptyRuns: 0, model: "" });
     expect(stopped.outcome).toBe("open");
+  });
+
+  it("records the cost an adapter reports", async () => {
+    await startSession("spend some tokens", options);
+
+    const stopped = await stopSession({
+      ...options,
+      adapters: [
+        {
+          name: "stub",
+          isAvailable: async () => true,
+          capture: async () => ({ tokens: 84_200, runs: 3, emptyRuns: 2, model: "claude-opus-5" }),
+        },
+      ],
+    });
+
+    expect(stopped.cost).toEqual({
+      tokens: 84_200,
+      runs: 3,
+      emptyRuns: 2,
+      model: "claude-opus-5",
+    });
+  });
+
+  it("passes the session's own window to the adapter", async () => {
+    const started = await startSession("check the window", options);
+    let seen: { from: string; to: string; cwd?: string } | undefined;
+
+    const stopped = await stopSession({
+      ...options,
+      adapters: [
+        {
+          name: "spy",
+          isAvailable: async () => true,
+          capture: async (window) => {
+            seen = window;
+            return { tokens: 0, runs: 0, emptyRuns: 0, model: "" };
+          },
+        },
+      ],
+    });
+
+    expect(seen?.from).toBe(started.startedAt);
+    expect(seen?.to).toBe(stopped.endedAt);
+    expect(seen?.cwd).toBe(cwd);
+  });
+
+  it("still closes the session when capture fails", async () => {
+    await startSession("adapter blows up", options);
+
+    const stopped = await stopSession({
+      ...options,
+      adapters: [
+        {
+          name: "broken",
+          isAvailable: async () => true,
+          capture: async () => {
+            throw new Error("transcripts unreadable");
+          },
+        },
+      ],
+    });
+
+    expect(stopped.endedAt).not.toBeNull();
+    expect(stopped.cost.tokens).toBe(0);
   });
 
   it("preserves intent and scope from start", async () => {

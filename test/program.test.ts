@@ -5,12 +5,12 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
-import type { StoreOptions } from "../src/store.js";
+import type { StopOptions } from "../src/commands/stop.js";
 
 const execFileAsync = promisify(execFile);
 
 let root: string;
-let store: StoreOptions;
+let store: StopOptions;
 
 /**
  * A throwaway repo with one commit, so `start` has a HEAD to record and never
@@ -20,7 +20,8 @@ beforeEach(async () => {
   root = await mkdtemp(path.join(tmpdir(), "session-program-"));
   const cwd = path.join(root, "work");
   await mkdir(cwd, { recursive: true });
-  store = { home: path.join(root, "store"), cwd };
+  // `adapters: []` keeps these tests off the machine's real transcripts.
+  store = { home: path.join(root, "store"), cwd, adapters: [] };
 
   await execFileAsync("git", ["init", "-q", cwd]);
   await execFileAsync("git", ["-C", cwd, "config", "user.email", "test@example.com"]);

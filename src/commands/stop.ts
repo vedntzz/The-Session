@@ -1,5 +1,12 @@
+import { captureCost, type Adapter } from "../capture/index.js";
 import { changedFilesSince } from "../git.js";
 import { getOpenSession, updateSession, type Session, type StoreOptions } from "../store.js";
+
+/** What `session stop` needs, on top of where the store lives. */
+export interface StopOptions extends StoreOptions {
+  /** Transcript adapters to read. Defaults to every tool `session` knows. */
+  adapters?: readonly Adapter[];
+}
 
 /** Strips the `./` prefix and trailing slashes so entries compare uniformly. */
 function normalizeEntry(entry: string): string {
@@ -44,10 +51,9 @@ export function computeDrift(reality: readonly string[], scope: readonly string[
  * and stamps the end time.
  *
  * Drift is recorded, never blocked — a session that wandered still closes
- * normally. `cost` is left at zeros until the transcript adapter lands, and
- * `outcome` stays `open` until the work merges or is abandoned.
+ * normally. `outcome` stays `open` until the work merges or is abandoned.
  */
-export async function stopSession(options: StoreOptions = {}): Promise<Session> {
+export async function stopSession(options: StopOptions = {}): Promise<Session> {
   const open = await getOpenSession(options);
   if (!open) {
     throw new Error("No session is open. Run session start before session stop.");
@@ -67,13 +73,19 @@ export async function stopSession(options: StoreOptions = {}): Promise<Session> 
   }
 
   const reality = computeReality(changed, open.baseline);
+  const endedAt = new Date().toISOString();
+  const cost = await captureCost(
+    { from: open.startedAt, to: endedAt, cwd },
+    options.adapters ?? undefined,
+  );
 
   return updateSession(
     open.id,
     {
       reality,
       drift: computeDrift(reality, open.scope),
-      endedAt: new Date().toISOString(),
+      cost,
+      endedAt,
     },
     options,
   );
@@ -88,6 +100,13 @@ export function formatStopped(session: Session): string[] {
   const lines = [`  stopped  ${session.intent}`, `  changed  ${changed}`];
   if (session.drift.length > 0) {
     lines.push(`  outside  ${session.drift.join("  ")}`);
+  }
+  if (session.cost.runs > 0) {
+    const { tokens, runs, emptyRuns } = session.cost;
+    lines.push(
+      `  cost     ${tokens.toLocaleString("en-US")} tokens  ` +
+        `${runs} runs, ${emptyRuns} changed no files`,
+    );
   }
   return lines;
 }

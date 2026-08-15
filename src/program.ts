@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import { formatStarted, startSession } from "./commands/start.js";
-import { formatStopped, stopSession } from "./commands/stop.js";
-import type { StoreOptions } from "./store.js";
+import { formatStopped, stopSession, type StopOptions } from "./commands/stop.js";
 
 const NOT_IMPLEMENTED = "not implemented";
 
@@ -10,7 +9,7 @@ const NOT_IMPLEMENTED = "not implemented";
  * point so tests can drive it without spawning a process; `options` is the
  * seam that lets them point the store somewhere temporary.
  */
-export function buildProgram(options: StoreOptions = {}): Command {
+export function buildProgram(options: StopOptions = {}): Command {
   const program = new Command();
 
   program
