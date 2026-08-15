@@ -10,17 +10,60 @@ const execFileAsync = promisify(execFile);
 /** Bumped only if the on-disk record shape changes incompatibly. */
 const RECORD_VERSION = 1;
 
-export interface Session {
-  id: string;
-  /** ISO-8601 timestamp. */
-  start: string;
-  /** ISO-8601 timestamp. Absent means the session is still open. */
-  end?: string;
-  note?: string;
+/** What the session spent to get where it got. */
+export interface SessionCost {
+  tokens: number;
+  runs: number;
+  /** Runs that produced no change worth keeping. */
+  emptyRuns: number;
+  model: string;
 }
 
-/** Fields `updateSession` may set. Values can be overwritten but not unset. */
-export type SessionPatch = Partial<Omit<Session, "id">>;
+/**
+ * Where the session landed. Distinct from whether it is still running: a
+ * session that has stopped is still `open` until it merges or is abandoned.
+ */
+export type SessionOutcome = "open" | "merged" | "abandoned";
+
+export interface Session {
+  id: string;
+  /** Normalized repo identity, e.g. `remote:github.com/acme/tool`. */
+  repo: string;
+  /** What the session set out to do. Written once, never edited. */
+  intent: string;
+  /** The paths the developer declared. May be empty. */
+  scope: string[];
+  /** The paths that actually changed, observed from git. */
+  reality: string[];
+  /** `reality` minus `scope` — recorded, never blocked. */
+  drift: string[];
+  cost: SessionCost;
+  outcome: SessionOutcome;
+  /** ISO-8601 timestamp. */
+  startedAt: string;
+  /** ISO-8601 timestamp. `null` means the session is still running. */
+  endedAt: string | null;
+  /** HEAD when the session opened, so its diff can be recovered later. */
+  startCommit: string;
+}
+
+/** The `set` payload of a record. Creating records carry every field. */
+type RecordFields = Partial<Omit<Session, "id">>;
+
+/**
+ * Fields `updateSession` may set. `intent` and `repo` are absent by design:
+ * intent is written once at `start` so a declaration cannot be retrofitted to
+ * match what happened, and repo is derived from where the store lives.
+ */
+export type SessionPatch = Omit<RecordFields, "intent" | "repo">;
+
+/**
+ * What a caller supplies at `session start`. Everything a session cannot know
+ * yet — reality, drift, cost, where it ended up — is defaulted here and filled
+ * in by later patches. `repo` is derived from the store's cwd, never passed.
+ */
+export type NewSession = Partial<Omit<Session, "id" | "repo">> &
+  Pick<Session, "intent" | "startedAt" | "startCommit"> & { id?: string };
 
 export interface StoreOptions {
   /** Store root. Defaults to $SESSION_HOME, else ~/.session. */
@@ -39,7 +82,7 @@ interface LogRecord {
   id: string;
   /** When the record was written, distinct from the session's own times. */
   at: string;
-  set: SessionPatch;
+  set: RecordFields;
 }
 
 // --- repo identity -------------------------------------------------------
@@ -137,11 +180,11 @@ function parseRecord(raw: string, file: string, lineNo: number): LogRecord {
     v: typeof parsed["v"] === "number" ? parsed["v"] : RECORD_VERSION,
     id: parsed["id"],
     at: typeof parsed["at"] === "string" ? parsed["at"] : "",
-    set: parsed["set"] as SessionPatch,
+    set: parsed["set"] as RecordFields,
   };
 }
 
-async function writeRecord(id: string, set: SessionPatch, options: StoreOptions): Promise<void> {
+async function writeRecord(id: string, set: RecordFields, options: StoreOptions): Promise<void> {
   const file = await resolveStoreFile(options);
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
 
@@ -149,6 +192,28 @@ async function writeRecord(id: string, set: SessionPatch, options: StoreOptions)
   // A single write of one short line, opened O_APPEND: concurrent `session`
   // processes interleave whole lines rather than corrupting each other.
   await appendFile(file, `${JSON.stringify(record)}\n`, { encoding: "utf8", mode: 0o600 });
+}
+
+/**
+ * True once the folded fields amount to a whole session. Only a creating
+ * record carries all of them, so this is what distinguishes a session from a
+ * patch left dangling by a missing first record.
+ */
+function isComplete(value: Partial<Session>): value is Omit<Session, "id"> {
+  const required: readonly (keyof Omit<Session, "id">)[] = [
+    "repo",
+    "intent",
+    "scope",
+    "reality",
+    "drift",
+    "cost",
+    "outcome",
+    "startedAt",
+    "endedAt",
+    "startCommit",
+  ];
+  // `endedAt` is legitimately null while open, so presence is the test.
+  return required.every((key) => value[key] !== undefined);
 }
 
 function assertTimestamp(field: string, value: string): void {
@@ -164,19 +229,26 @@ function assertTimestamp(field: string, value: string): void {
  * id when the caller did not supply one.
  */
 export async function appendSession(
-  input: Omit<Session, "id"> & { id?: string },
+  input: NewSession,
   options: StoreOptions = {},
 ): Promise<Session> {
-  assertTimestamp("start", input.start);
-  if (input.end !== undefined) {
-    assertTimestamp("end", input.end);
+  assertTimestamp("startedAt", input.startedAt);
+  if (input.endedAt != null) {
+    assertTimestamp("endedAt", input.endedAt);
   }
 
   const session: Session = {
     id: input.id ?? randomUUID(),
-    start: input.start,
-    ...(input.end !== undefined ? { end: input.end } : {}),
-    ...(input.note !== undefined ? { note: input.note } : {}),
+    repo: await repoIdentity(options.cwd ?? process.cwd()),
+    intent: input.intent,
+    scope: input.scope ?? [],
+    reality: input.reality ?? [],
+    drift: input.drift ?? [],
+    cost: input.cost ?? { tokens: 0, runs: 0, emptyRuns: 0, model: "" },
+    outcome: input.outcome ?? "open",
+    startedAt: input.startedAt,
+    endedAt: input.endedAt ?? null,
+    startCommit: input.startCommit,
   };
 
   const { id, ...set } = session;
@@ -227,28 +299,30 @@ export async function readSessions(options: StoreOptions = {}): Promise<Session[
 
     const existing = sessions.get(record.id);
     const merged: Partial<Session> = { ...existing, ...record.set };
-    if (merged.start === undefined) {
+    if (!isComplete(merged)) {
       // A patch whose creating record is missing: nothing to anchor it to.
       continue;
     }
     if (!existing) {
       order.set(record.id, order.size);
     }
-    sessions.set(record.id, { ...merged, id: record.id, start: merged.start });
+    sessions.set(record.id, { ...merged, id: record.id });
   }
 
   return [...sessions.values()].sort((a, b) => {
-    const delta = Date.parse(a.start) - Date.parse(b.start);
+    const delta = Date.parse(a.startedAt) - Date.parse(b.startedAt);
     return delta !== 0 ? delta : (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
   });
 }
 
 /**
- * The session still running, i.e. the one without an end. If several are open
- * (parallel checkouts, a missed `stop`), the most recently started wins.
+ * The session still running, i.e. the one that has not stopped. Note this is
+ * not `outcome`: a stopped session stays `open` until it merges or is
+ * abandoned. If several are running (parallel checkouts, a missed `stop`),
+ * the most recently started wins.
  */
 export async function getOpenSession(options: StoreOptions = {}): Promise<Session | undefined> {
-  const open = (await readSessions(options)).filter((session) => session.end === undefined);
+  const open = (await readSessions(options)).filter((session) => session.endedAt === null);
   return open.at(-1);
 }
 
@@ -262,11 +336,14 @@ export async function updateSession(
   patch: SessionPatch,
   options: StoreOptions = {},
 ): Promise<Session> {
-  if (patch.start !== undefined) {
-    assertTimestamp("start", patch.start);
+  if ("intent" in patch) {
+    throw new Error("intent is written once at start and cannot be edited");
   }
-  if (patch.end !== undefined) {
-    assertTimestamp("end", patch.end);
+  if (patch.startedAt !== undefined) {
+    assertTimestamp("startedAt", patch.startedAt);
+  }
+  if (patch.endedAt != null) {
+    assertTimestamp("endedAt", patch.endedAt);
   }
 
   const current = (await readSessions(options)).find((session) => session.id === id);
