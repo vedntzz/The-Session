@@ -24,9 +24,12 @@
 ```
 src/
   cli.ts           command registration
-  commands/        start.ts stop.ts show.ts week.ts
+  commands/        start.ts stop.ts show.ts week.ts verify.ts key.ts
   capture/         hook.ts, adapters/claude-code.ts
   store.ts         JSONL read/append
+  chain.ts         canonical JSON, record and line hashes
+  keys.ts          Ed25519 keypair at ~/.session/keys/, sign and verify
+  verify.ts        the chain walk, pure
   git.ts           HEAD, diff, changed files
   render/          terminal.ts, html.ts
 ```
@@ -68,6 +71,45 @@ type SessionCost = {
   model: string                  // the model that did the most calls
 }
 ```
+
+## The line on disk
+
+A session is folded from patch records. Each record is one line, and every line
+carries its own tamper-evidence:
+
+```ts
+type LogRecord = {
+  v: number
+  id: string
+  at: string
+  set: Partial<Session>
+  prev: string            // SHA-256 of the whole previous line, GENESIS for the first
+  key: string             // fingerprint of the signing key — which key to ask for
+  hash: string            // SHA-256 of canonical({v,id,at,set,prev,key})
+  sig: string             // base64 Ed25519 over the bytes of hash
+}
+```
+
+Records written before this existed carry none of these. They are hashed into
+the chain by the first signed record after them, counted as `unsigned`, and
+never reported as damage. Records signed before `key` was added omit it, and
+`canonicalJson` drops undefined, so they still hash exactly as they did — do
+not "fix" that by defaulting `key` to a string.
+
+`key` is a claim, not a proof: it says which key the log wants to be checked
+against, which is what a holder of the log alone needs. It catches a log that
+disagrees with itself about its key, and a log that disagrees with a key the
+verifier already had. It cannot catch a wholesale rewrite under a new key.
+
+`prev` makes the append a read-then-write, so appends take a lock file
+(`<log>.lock`, created `wx`, stale after 10s). Reading is untouched:
+`readSessions` folds records exactly as before and checks nothing — `session
+verify` is the only thing that walks the chain.
+
+`session verify --log <path> --key <pubkey>` must keep working on a machine
+with no `~/.session` at all: with `--log`, nothing derives a store path, and
+this machine's own key is never reached for. Checking a stranger's log against
+your own key would report a mismatch that means nothing.
 
 ## Style
 

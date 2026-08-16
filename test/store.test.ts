@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -8,6 +8,7 @@ import {
   appendSession,
   getOpenSession,
   normalizeRemoteUrl,
+  readLog,
   readSessions,
   repoKey,
   resolveStoreFile,
@@ -17,6 +18,7 @@ import {
   type SessionPatch,
   type StoreOptions,
 } from "../src/store.js";
+import { checkChain } from "../src/verify.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -304,11 +306,12 @@ describe("repo key", () => {
     }
   });
 
-  it("writes exactly one file per repo", async () => {
+  it("writes exactly one log file per repo", async () => {
     await appendSession(started("one"), options);
     await appendSession(started("two", T.later), options);
 
-    await expect(readdir(home)).resolves.toHaveLength(1);
+    const logs = (await readdir(home)).filter((name) => name.endsWith(".jsonl"));
+    expect(logs).toHaveLength(1);
   });
 
   it("shares one store across a repo's subdirectories", async () => {
@@ -340,5 +343,45 @@ describe("repo key", () => {
     } finally {
       await rm(clone, { recursive: true, force: true });
     }
+  });
+});
+
+describe("appends under contention", () => {
+  it("keeps the chain sound when several processes write at once", async () => {
+    // A chained record is a read of the last line and then a write. Two of
+    // those interleaved would give two records the same `prev` — a fork
+    // indistinguishable from tampering — so the append takes a lock.
+    await Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        appendSession(started(`intent ${index}`, T.start), options),
+      ),
+    );
+
+    const { lines, complete } = await readLog(options);
+    const check = checkChain(lines, complete);
+
+    expect(check.total).toBe(6);
+    expect(check.verified).toBe(6);
+    expect(check.break).toBeUndefined();
+  });
+
+  it("leaves no lock behind", async () => {
+    await appendSession(started("one"), options);
+
+    const stray = (await readdir(home)).filter((name) => name.endsWith(".lock"));
+
+    expect(stray).toEqual([]);
+  });
+
+  it("takes over a lock left by a process that died", async () => {
+    const file = await resolveStoreFile(options);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(`${file}.lock`, "", "utf8");
+    const stale = new Date(Date.now() - 60_000);
+    await utimes(`${file}.lock`, stale, stale);
+
+    await expect(appendSession(started("after a crash"), options)).resolves.toMatchObject({
+      intent: "after a crash",
+    });
   });
 });

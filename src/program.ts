@@ -5,9 +5,11 @@ import {
   uninstallHook,
   type HookOptions,
 } from "./commands/hook.js";
+import { formatKey, showKey } from "./commands/key.js";
 import { showSession } from "./commands/show.js";
 import { formatStarted, startSession } from "./commands/start.js";
 import { formatStopped, stopIfOpen, stopSession, type StopOptions } from "./commands/stop.js";
+import { formatVerify, verifyFailed, verifyLog } from "./commands/verify.js";
 import {
   DEFAULT_DAYS,
   openInBrowser,
@@ -93,6 +95,35 @@ export function buildProgram(options: ProgramOptions = {}): Command {
       const file = await writeWeekPage(renderWeek(sessions, days), options);
       console.log(`  wrote    ${file}`);
       await openInBrowser(file, options);
+    });
+
+  program
+    .command("verify")
+    .description("Check a log's hash chain and signatures")
+    .option("--log <path>", "a log file to check instead of this repo's own")
+    .option("--key <path>", "the public key to check against: a key file, or the PEM itself")
+    .action(async (flags: { log?: string; key?: string }) => {
+      const result = await verifyLog({ ...options, log: flags.log, key: flags.key });
+      for (const line of formatVerify(result)) {
+        console.log(line);
+      }
+      if (verifyFailed(result)) {
+        // A broken log is a finding, not a crash: the report above is the
+        // point. The exit code is there so a script can gate on it.
+        process.exitCode = 1;
+      }
+    });
+
+  const key = program.command("key").description("The signing key this machine writes with");
+
+  key
+    .command("show")
+    .description("Print the public key, for anyone who wants to check the log")
+    .action(async () => {
+      const keypair = await showKey(options);
+      for (const line of formatKey(keypair, options)) {
+        console.log(line);
+      }
     });
 
   const hook = program.command("hook").description("Manage the editor hook that closes sessions");

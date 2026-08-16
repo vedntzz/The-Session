@@ -1,9 +1,11 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { GENESIS, lineHash, recordHash, type SignedBody } from "./chain.js";
+import { loadOrCreateKeypair, signHash } from "./keys.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -117,12 +119,23 @@ export interface StoreOptions {
  * record for an id creates it, later records overlay fields onto it. Nothing
  * is ever rewritten in place, so a crash can only ever lose a trailing line.
  */
-interface LogRecord {
+export interface LogRecord {
   v: number;
   id: string;
   /** When the record was written, distinct from the session's own times. */
   at: string;
   set: RecordFields;
+  /**
+   * SHA-256 of the previous line as it sits on disk, `GENESIS` for the first.
+   * Undefined on records written before the log was tamper-evident.
+   */
+  prev?: string;
+  /** Fingerprint of the key that signed it, so a verifier knows which to want. */
+  key?: string;
+  /** SHA-256 of this record's body — see `chain.ts`. */
+  hash?: string;
+  /** Base64 Ed25519 signature over `hash`. */
+  sig?: string;
 }
 
 // --- repo identity -------------------------------------------------------
@@ -190,7 +203,8 @@ export async function repoKey(cwd: string = process.cwd()): Promise<string> {
   return createHash("sha256").update(identity).digest("hex").slice(0, 16);
 }
 
-function storeHome(options: StoreOptions = {}): string {
+/** The store root: where logs, and the signing key beside them, live. */
+export function storeHome(options: StoreOptions = {}): string {
   return options.home ?? process.env["SESSION_HOME"] ?? path.join(homedir(), ".session");
 }
 
@@ -216,22 +230,173 @@ function parseRecord(raw: string, file: string, lineNo: number): LogRecord {
   if (!isRecord(parsed) || typeof parsed["id"] !== "string" || !isRecord(parsed["set"])) {
     throw new Error(`${file}:${lineNo}: malformed session record`);
   }
+  const text = (key: string): string | undefined =>
+    typeof parsed[key] === "string" ? (parsed[key] as string) : undefined;
+
   return {
     v: typeof parsed["v"] === "number" ? parsed["v"] : RECORD_VERSION,
     id: parsed["id"],
     at: typeof parsed["at"] === "string" ? parsed["at"] : "",
     set: parsed["set"] as RecordFields,
+    prev: text("prev"),
+    key: text("key"),
+    hash: text("hash"),
+    sig: text("sig"),
   };
+}
+
+// --- the raw log ---------------------------------------------------------
+
+/** One line of the file, kept as text because that is what the chain hashes. */
+export interface RawLine {
+  /** 1-based line number, counting blank lines, so messages can name it. */
+  no: number;
+  text: string;
+}
+
+export interface RawLog {
+  file: string;
+  /** Non-empty lines, in file order. */
+  lines: RawLine[];
+  /**
+   * False when the file does not end in a newline, which means the last append
+   * was cut short. Only ever the final line, since every write is one line.
+   */
+  complete: boolean;
+}
+
+function splitLog(file: string, text: string): RawLog {
+  const lines: RawLine[] = [];
+  for (const [index, line] of text.split("\n").entries()) {
+    if (line.trim() !== "") {
+      lines.push({ no: index + 1, text: line });
+    }
+  }
+  return { file, lines, complete: text === "" || text.endsWith("\n") };
+}
+
+/** Reads this repo's log. An absent file is an empty log, not an error. */
+export async function readLog(options: StoreOptions = {}): Promise<RawLog> {
+  const file = await resolveStoreFile(options);
+
+  try {
+    return splitLog(file, await readFile(file, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { file, lines: [], complete: true };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Reads a log file by name — one that arrived from somewhere else, rather than
+ * this repo's own. A missing file is an error here: the caller named it, so
+ * reporting an empty log intact would answer a question nobody asked.
+ */
+export async function readLogFile(file: string): Promise<RawLog> {
+  const resolved = path.resolve(file);
+
+  try {
+    return splitLog(resolved, await readFile(resolved, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`No log file at ${resolved}.`, { cause: error });
+    }
+    throw error;
+  }
+}
+
+// --- appending -----------------------------------------------------------
+
+/** How long a lock is honoured before it is assumed to belong to a dead process. */
+const LOCK_STALE_MS = 10_000;
+const LOCK_POLL_MS = 25;
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Serializes appends to one log file across processes.
+ *
+ * A bare O_APPEND write is atomic on its own, but a chained record is a read
+ * of the last line followed by a write, and two of those interleaved would
+ * give two records the same `prev` — a fork in the chain, indistinguishable
+ * from tampering. The lock is a file created with `wx`, which is atomic on
+ * every filesystem this runs on; one left behind by a killed process is taken
+ * over once it is older than `LOCK_STALE_MS`.
+ */
+async function withLock<T>(file: string, action: () => Promise<T>): Promise<T> {
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + LOCK_STALE_MS * 2;
+
+  for (;;) {
+    try {
+      const handle = await open(lock, "wx", 0o600);
+      await handle.close();
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+      const held = await stat(lock).catch(() => undefined);
+      if (held && Date.now() - held.mtimeMs > LOCK_STALE_MS) {
+        await rm(lock, { force: true });
+        continue;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `Timed out waiting for ${lock}. If no other session command is running, delete that file.`,
+        );
+      }
+      await sleep(LOCK_POLL_MS);
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    await rm(lock, { force: true });
+  }
+}
+
+/** The hash the next record must carry as its `prev`. */
+function nextPrev(log: RawLog): string {
+  const last = log.lines.at(-1);
+  return last ? lineHash(last.text) : GENESIS;
 }
 
 async function writeRecord(id: string, set: RecordFields, options: StoreOptions): Promise<void> {
   const file = await resolveStoreFile(options);
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
 
-  const record: LogRecord = { v: RECORD_VERSION, id, at: new Date().toISOString(), set };
-  // A single write of one short line, opened O_APPEND: concurrent `session`
-  // processes interleave whole lines rather than corrupting each other.
-  await appendFile(file, `${JSON.stringify(record)}\n`, { encoding: "utf8", mode: 0o600 });
+  // Generated here on first use, then reused. Reading the key before taking
+  // the lock keeps first-run key generation out of the critical section.
+  const keypair = await loadOrCreateKeypair(storeHome(options));
+
+  await withLock(file, async () => {
+    const log = await readLog(options);
+    const body: SignedBody = {
+      v: RECORD_VERSION,
+      id,
+      at: new Date().toISOString(),
+      set,
+      prev: nextPrev(log),
+      key: keypair.fingerprint,
+    };
+    const hash = recordHash(body);
+    const record: LogRecord = { ...body, set, hash, sig: signHash(hash, keypair.privateKey) };
+
+    // A previous write cut short leaves a line with no newline on it. Starting
+    // on a fresh line keeps that damage to the one line it happened on rather
+    // than gluing this record onto the end of it.
+    const lead = log.complete ? "" : "\n";
+    // One short line, opened O_APPEND, under the lock: nothing here can leave
+    // a record half-written that a reader could mistake for a whole one.
+    await appendFile(file, `${lead}${JSON.stringify(record)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+  });
 }
 
 /**
@@ -307,31 +472,16 @@ export async function appendSession(
  * write.
  */
 export async function readSessions(options: StoreOptions = {}): Promise<Session[]> {
-  const file = await resolveStoreFile(options);
+  const { file, lines, complete } = await readLog(options);
 
-  let text: string;
-  try {
-    text = await readFile(file, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
-
-  const complete = text.endsWith("\n");
-  const lines = text.split("\n");
   const sessions = new Map<string, Session>();
   const order = new Map<string, number>();
 
   for (const [index, line] of lines.entries()) {
-    if (line.trim() === "") {
-      continue;
-    }
     const isFinalLine = index === lines.length - 1;
     let record: LogRecord;
     try {
-      record = parseRecord(line, file, index + 1);
+      record = parseRecord(line.text, file, line.no);
     } catch (error) {
       if (isFinalLine && !complete) {
         break; // interrupted append; the rest of the log is intact

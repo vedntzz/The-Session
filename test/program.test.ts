@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -221,17 +221,104 @@ describe("session", () => {
     await expect(run("stop")).rejects.toThrow(/No session is open/);
   });
 
-  it("registers exactly the five subcommands", () => {
+  it("registers exactly the seven subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
-    expect(names).toEqual(["hook", "show", "start", "stop", "week"]);
+    expect(names).toEqual(["hook", "key", "show", "start", "stop", "verify", "week"]);
   });
 
   it("puts install under hook", () => {
     const hook = buildProgram().commands.find((command) => command.name() === "hook");
 
     expect(hook?.commands.map((command) => command.name())).toEqual(["install"]);
+  });
+
+  it("puts show under key", () => {
+    const key = buildProgram().commands.find((command) => command.name() === "key");
+
+    expect(key?.commands.map((command) => command.name())).toEqual(["show"]);
+  });
+
+  it("verify confirms a log this tool wrote itself", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await run("stop");
+
+    const lines = await run("verify");
+
+    expect(lines.at(-1)).toMatch(/^ {2}chain {3}intact — 2 records, hashes and signatures/);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("verify exits non-zero on a log that was edited", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    const log = path.join(store.home as string, ...(await readdir(store.home as string)).filter((n) => n.endsWith(".jsonl")));
+    const record = JSON.parse(await readFile(log, "utf8"));
+    record.set.intent = "something else entirely";
+    await writeFile(log, `${JSON.stringify(record)}\n`, "utf8");
+
+    try {
+      const lines = await run("verify");
+
+      expect(lines.some((line) => line.startsWith("  broken  line 1 "))).toBe(true);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = undefined;
+    }
+  });
+
+  it("verify --log --key checks a log handed over from another machine", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await run("stop");
+    // What the other person sends: the log file and the public key, nothing else.
+    const home = store.home as string;
+    const log = path.join(home, (await readdir(home)).find((n) => n.endsWith(".jsonl")) as string);
+    const key = path.join(home, "keys", "ed25519.pub");
+    const elsewhere = path.join(root, "elsewhere");
+    await mkdir(elsewhere, { recursive: true });
+    await writeFile(path.join(elsewhere, "theirs.jsonl"), await readFile(log, "utf8"), "utf8");
+    await writeFile(path.join(elsewhere, "theirs.pub"), await readFile(key, "utf8"), "utf8");
+
+    const lines = await run(
+      "verify",
+      "--log",
+      path.join(elsewhere, "theirs.jsonl"),
+      "--key",
+      path.join(elsewhere, "theirs.pub"),
+    );
+
+    expect(lines[0]).toContain("theirs.jsonl");
+    expect(lines[1]).toContain("as the log claims");
+    expect(lines.at(-1)).toMatch(/^ {2}chain {3}intact — 2 records, hashes and signatures/);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("verify --log alone says which key to ask for", async () => {
+    await run("start", "touch a.txt");
+    const home = store.home as string;
+    const log = path.join(home, (await readdir(home)).find((n) => n.endsWith(".jsonl")) as string);
+
+    const lines = await run("verify", "--log", log);
+
+    expect(lines[1]).toContain("Pass --key to check the signatures");
+    expect(lines[2]).toMatch(/^ {2}claims {2}ed25519:[0-9a-f]{32} signed it/);
+  });
+
+  it("key show prints a public key and never the private one", async () => {
+    const lines = await run("key", "show");
+
+    expect(lines[0]).toMatch(/^ {2}key {6}ed25519:[0-9a-f]{32}$/);
+    expect(lines.join("\n")).toContain("-----BEGIN PUBLIC KEY-----");
+    expect(lines.join("\n")).not.toContain("PRIVATE KEY-----\nM");
+  });
+
+  it("key show reports the same key session start signs with", async () => {
+    await run("start", "touch a.txt");
+
+    const shown = (await run("key", "show"))[0];
+    const verified = (await run("verify")).find((line) => line.startsWith("  key"));
+
+    expect(verified).toContain(shown?.trim().replace(/^key\s+/, "") ?? "");
   });
 
   it("stop --if-open closes an open session and reports it", async () => {
