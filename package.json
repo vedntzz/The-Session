@@ -1,5 +1,5 @@
 {
-  "name": "@vedntzz/session",
+  "name": "@vedantzz/session",
   "version": "0.1.0",
   "description": "A black box recorder for AI coding sessions: declare intent before the agent runs, record what actually changed and what it cost.",
   "keywords": [
@@ -12,7 +12,7 @@
     "productivity"
   ],
   "license": "MIT",
-  "author": "vedntzz",
+  "author": "vedantzz",
   "type": "module",
   "bin": {
     "session": "dist/cli.js"

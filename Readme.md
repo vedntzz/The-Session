@@ -7,7 +7,7 @@ When you code with an agent, everything that matters disappears the moment you c
 `session` records it.
 
 ```bash
-npm install -g @vedntzz/session
+npm install -g @vedantzz/session
 ```
 
 ```bash
