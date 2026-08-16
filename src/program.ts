@@ -1,7 +1,13 @@
 import { Command } from "commander";
+import {
+  formatHook,
+  installHook,
+  uninstallHook,
+  type HookOptions,
+} from "./commands/hook.js";
 import { showSession } from "./commands/show.js";
 import { formatStarted, startSession } from "./commands/start.js";
-import { formatStopped, stopSession, type StopOptions } from "./commands/stop.js";
+import { formatStopped, stopIfOpen, stopSession, type StopOptions } from "./commands/stop.js";
 import {
   DEFAULT_DAYS,
   openInBrowser,
@@ -14,7 +20,7 @@ import { renderWeek } from "./render/html.js";
 import { formatSession, formatWeek } from "./render/terminal.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
-export type ProgramOptions = StopOptions & WeekOptions;
+export type ProgramOptions = StopOptions & WeekOptions & HookOptions;
 
 /**
  * Builds the `session` command tree. Kept separate from the executable entry
@@ -44,8 +50,12 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program
     .command("stop")
     .description("End the active session")
-    .action(async () => {
-      const session = await stopSession(options);
+    .option("--if-open", "do nothing when no session is open, instead of failing")
+    .action(async (flags: { ifOpen?: boolean }) => {
+      const session = flags.ifOpen ? await stopIfOpen(options) : await stopSession(options);
+      if (!session) {
+        return; // nothing was open, and --if-open says that is fine
+      }
       for (const line of formatStopped(session)) {
         console.log(line);
       }
@@ -83,6 +93,19 @@ export function buildProgram(options: ProgramOptions = {}): Command {
       const file = await writeWeekPage(renderWeek(sessions, days), options);
       console.log(`  wrote    ${file}`);
       await openInBrowser(file, options);
+    });
+
+  const hook = program.command("hook").description("Manage the editor hook that closes sessions");
+
+  hook
+    .command("install")
+    .description("Register a Claude Code SessionEnd hook that closes an open session")
+    .option("--uninstall", "take the hook back out instead")
+    .action(async (flags: { uninstall?: boolean }) => {
+      const result = flags.uninstall ? await uninstallHook(options) : await installHook(options);
+      for (const line of formatHook(result)) {
+        console.log(line);
+      }
     });
 
   return program;

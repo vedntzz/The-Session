@@ -221,11 +221,79 @@ describe("session", () => {
     await expect(run("stop")).rejects.toThrow(/No session is open/);
   });
 
-  it("registers exactly the four subcommands", () => {
+  it("registers exactly the five subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
-    expect(names).toEqual(["show", "start", "stop", "week"]);
+    expect(names).toEqual(["hook", "show", "start", "stop", "week"]);
+  });
+
+  it("puts install under hook", () => {
+    const hook = buildProgram().commands.find((command) => command.name() === "hook");
+
+    expect(hook?.commands.map((command) => command.name())).toEqual(["install"]);
+  });
+
+  it("stop --if-open closes an open session and reports it", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+
+    await expect(run("stop", "--if-open")).resolves.toEqual([
+      "  stopped  touch a.txt",
+      "  changed  a.txt",
+    ]);
+  });
+
+  it("stop --if-open says nothing and exits 0 when no session is open", async () => {
+    // This is the hook's ordinary case: a Claude Code session nobody declared.
+    await expect(run("stop", "--if-open")).resolves.toEqual([]);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("stop without --if-open still refuses when nothing is open", async () => {
+    await expect(run("stop")).rejects.toThrow(/No session is open/);
+  });
+
+  it("hook install registers the hook and says what it wrote and where", async () => {
+    const settings = path.join(root, "settings.json");
+    await writeFile(settings, JSON.stringify({ model: "opus" }), "utf8");
+    store.settings = settings;
+
+    const lines = await run("hook", "install");
+
+    expect(lines).toEqual([
+      `  wrote    ${settings}`,
+      "  hook     SessionEnd → session stop --if-open",
+    ]);
+    await expect(readFile(settings, "utf8")).resolves.toContain('"SessionEnd"');
+  });
+
+  it("hook install --uninstall takes it back out", async () => {
+    const settings = path.join(root, "settings.json");
+    await writeFile(settings, JSON.stringify({ model: "opus" }), "utf8");
+    store.settings = settings;
+    await run("hook", "install");
+
+    const lines = await run("hook", "install", "--uninstall");
+
+    expect(lines[0]).toBe(`  removed  ${settings}`);
+    await expect(readFile(settings, "utf8")).resolves.toBe('{\n  "model": "opus"\n}\n');
+  });
+
+  it("hook install fails clearly when there is no settings file", async () => {
+    store.settings = path.join(root, "nowhere", "settings.json");
+
+    await expect(run("hook", "install")).rejects.toThrow(/No Claude Code settings file at/);
+  });
+
+  it("the hook it registers is a command this CLI answers to", async () => {
+    // The hook is only worth writing if `session stop --if-open` parses.
+    const program = buildProgram(store).exitOverride();
+    program.configureOutput({ writeErr: () => {} });
+
+    await expect(
+      program.parseAsync(["stop", "--if-open"], { from: "user" }),
+    ).resolves.toBeDefined();
   });
 
   it("rejects an unknown subcommand", async () => {

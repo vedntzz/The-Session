@@ -46,6 +46,7 @@ Without it there is one entry in the ledger — what the machine produced — an
 | `session week` | One row per session over the last 7 days, and what they came to. |
 | `session week --days <n>` | The same, over a window you choose. |
 | `session week --open` | The same week as an HTML page, in your browser. |
+| `session hook install` | Close the session automatically when Claude Code ends one. `--uninstall` removes it. |
 
 ## The record
 

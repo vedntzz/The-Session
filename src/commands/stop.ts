@@ -98,6 +98,20 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
 }
 
 /**
+ * `stop` for the editor hook: closes the open session, or does nothing at all.
+ *
+ * The hook fires when any Claude Code session ends, most of which were not
+ * declared. A missing session is the ordinary case there, not a mistake worth
+ * an error in someone's editor.
+ */
+export async function stopIfOpen(options: StopOptions = {}): Promise<Session | undefined> {
+  if (!(await getOpenSession(options))) {
+    return undefined;
+  }
+  return stopSession(options);
+}
+
+/**
  * The lines `session stop` prints. The `outside` line appears only when the
  * session drifted, so a clean session stays quiet about it.
  */
