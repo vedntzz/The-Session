@@ -1,3 +1,4 @@
+// Reads the repo: whether there is one, what HEAD is, and which paths changed.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 

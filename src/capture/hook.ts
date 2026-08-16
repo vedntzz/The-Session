@@ -11,6 +11,27 @@ export const HOOK_EVENT = "SessionEnd";
  */
 export const HOOK_COMMAND = "session stop --if-open";
 
+/**
+ * Seconds allowed for the command. `SessionEnd` handlers share a 1.5-second
+ * budget by default, which `session stop` can outrun: it shells out to git and
+ * then reads the whole transcript to count tokens. Past the budget the handler
+ * is cancelled and the session stays open forever — the one failure that loses
+ * a record rather than merely delaying it. A per-hook `timeout` raises the
+ * shared budget to match, up to 60.
+ */
+export const HOOK_TIMEOUT = 10;
+
+/**
+ * A matcher group. `SessionEnd` does support a `matcher` — it filters on why
+ * the session ended (`clear`, `logout`, `prompt_input_exit`, and so on) — but
+ * the field is optional and an omitted matcher means every occurrence. Every
+ * ending is one we want to record, so the key is deliberately absent rather
+ * than written as `"*"`.
+ */
+function ourGroup(): Record<string, unknown> {
+  return { hooks: [{ type: "command", command: HOOK_COMMAND, timeout: HOOK_TIMEOUT }] };
+}
+
 /** A parsed settings file. Keys `session` knows nothing about are carried through. */
 export type Settings = Record<string, unknown>;
 
@@ -63,14 +84,30 @@ function claimGroups(value: unknown): unknown[] | undefined {
   return value;
 }
 
-/** True when the hook is already registered. */
-export function hasHook(settings: Settings): boolean {
-  return groupsOf(settings).some((group) => {
+/** Every registered entry running our command, whatever else it says. */
+function ourEntries(settings: Settings): Record<string, unknown>[] {
+  const found: Record<string, unknown>[] = [];
+  for (const group of groupsOf(settings)) {
     if (!isObject(group) || !Array.isArray(group["hooks"])) {
-      return false;
+      continue;
     }
-    return group["hooks"].some(isOurEntry);
-  });
+    for (const entry of group["hooks"]) {
+      if (isOurEntry(entry)) {
+        found.push(entry as Record<string, unknown>);
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * True when the hook is registered and says what it should. An entry left by
+ * an older `session` runs the right command on too short a budget, so it reads
+ * as not registered: installing over it is a repair, not a no-op.
+ */
+export function hasHook(settings: Settings): boolean {
+  const entries = ourEntries(settings);
+  return entries.length > 0 && entries.every((entry) => entry["timeout"] === HOOK_TIMEOUT);
 }
 
 /**
@@ -79,14 +116,21 @@ export function hasHook(settings: Settings): boolean {
  */
 export function withHook(settings: Settings): Settings {
   const next = structuredClone(settings);
-  if (hasHook(next)) {
+
+  // An entry already running the command is corrected where it stands, so an
+  // upgrade never leaves two hooks racing to close the same session.
+  const existing = ourEntries(next);
+  if (existing.length > 0) {
+    for (const entry of existing) {
+      entry["timeout"] = HOOK_TIMEOUT;
+    }
     return next;
   }
 
   const hooks = claim(next["hooks"], "hooks") ?? {};
   const groups = claimGroups(hooks[HOOK_EVENT]) ?? [];
 
-  groups.push({ hooks: [{ type: "command", command: HOOK_COMMAND }] });
+  groups.push(ourGroup());
   hooks[HOOK_EVENT] = groups;
   next["hooks"] = hooks;
   return next;

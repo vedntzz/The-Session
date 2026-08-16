@@ -6,6 +6,7 @@ import {
   hasHook,
   HOOK_COMMAND,
   HOOK_EVENT,
+  HOOK_TIMEOUT,
   withHook,
   withoutHook,
   type Settings,
@@ -19,7 +20,11 @@ import {
 } from "../src/commands/hook.js";
 
 /** The group `withHook` writes, as it appears in a settings file. */
-const OURS = { hooks: [{ type: "command", command: HOOK_COMMAND }] };
+const OURS = {
+  hooks: [{ type: "command", command: HOOK_COMMAND, timeout: HOOK_TIMEOUT }],
+};
+/** The group a `session` from before the timeout wrote. */
+const STALE = { hooks: [{ type: "command", command: HOOK_COMMAND }] };
 /** Somebody else's SessionEnd hook, which must survive both operations. */
 const THEIRS = { hooks: [{ type: "command", command: "say goodbye" }] };
 
@@ -31,6 +36,29 @@ describe("the hook it registers", () => {
   it("closes an open session and stays quiet when there is none", () => {
     // The hook fires for every Claude Code session, declared or not.
     expect(HOOK_COMMAND).toBe("session stop --if-open");
+  });
+
+  it("asks for longer than the 1.5 seconds SessionEnd hooks get by default", () => {
+    // git plus the whole transcript does not reliably fit in the default
+    // budget, and a cancelled hook leaves the session open forever.
+    expect(HOOK_TIMEOUT).toBeGreaterThan(1.5);
+    // Claude Code raises the shared budget to match, but only up to 60.
+    expect(HOOK_TIMEOUT).toBeLessThanOrEqual(60);
+  });
+
+  it("registers no matcher, so every ending is recorded", () => {
+    // SessionEnd matches on why the session ended; omitting the key means all
+    // of them. A `/clear` is as much an ending as closing the window.
+    const [group] = (withHook({})["hooks"] as Record<string, unknown>)[HOOK_EVENT] as Record<
+      string,
+      unknown
+    >[];
+
+    expect("matcher" in group).toBe(false);
+  });
+
+  it("nests the handler inside a matcher group, as the settings schema wants", () => {
+    expect(withHook({})).toEqual({ hooks: { [HOOK_EVENT]: [OURS] } });
   });
 });
 
@@ -52,6 +80,10 @@ describe("hasHook", () => {
     expect(hasHook({ hooks: { SessionStart: [OURS] } })).toBe(false);
   });
 
+  it("is false for an entry left by a session that wrote no timeout", () => {
+    expect(hasHook({ hooks: { [HOOK_EVENT]: [STALE] } })).toBe(false);
+  });
+
   it("reads a malformed hooks section as no hook, rather than throwing", () => {
     expect(hasHook({ hooks: "nonsense" })).toBe(false);
     expect(hasHook({ hooks: { [HOOK_EVENT]: "nonsense" } })).toBe(false);
@@ -60,9 +92,20 @@ describe("hasHook", () => {
 
 describe("withHook", () => {
   it("registers the hook in settings that had none", () => {
-    expect(withHook({})).toEqual({
-      hooks: { [HOOK_EVENT]: [{ hooks: [{ type: "command", command: HOOK_COMMAND }] }] },
+    expect(withHook({})).toEqual({ hooks: { [HOOK_EVENT]: [OURS] } });
+  });
+
+  it("repairs an entry that was registered without a timeout", () => {
+    expect(withHook({ hooks: { [HOOK_EVENT]: [STALE] } })).toEqual({
+      hooks: { [HOOK_EVENT]: [OURS] },
     });
+  });
+
+  it("repairs that entry in place rather than adding a second one", () => {
+    const next = withHook({ hooks: { [HOOK_EVENT]: [THEIRS, STALE] } });
+
+    // Two hooks both closing the session would double-count the work.
+    expect(next).toEqual({ hooks: { [HOOK_EVENT]: [THEIRS, OURS] } });
   });
 
   it("registers it once, however many times it is asked", () => {
@@ -206,6 +249,15 @@ describe("installHook", () => {
     const text = await readFile(file, "utf8");
     expect(text.endsWith("}\n")).toBe(true);
     expect(text).toContain('\n  "hooks": {');
+  });
+
+  it("upgrades a hook an older session installed, and says it changed", async () => {
+    await write({ hooks: { [HOOK_EVENT]: [STALE] } });
+
+    const result = await installHook({ settings: file });
+
+    expect(result.changed).toBe(true);
+    await expect(read()).resolves.toEqual({ hooks: { [HOOK_EVENT]: [OURS] } });
   });
 
   it("says it changed nothing when the hook is already registered", async () => {
