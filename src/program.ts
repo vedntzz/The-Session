@@ -32,7 +32,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
 
   program
     .name("session")
-    .description("Track working sessions from the command line")
+    .description("Record what an AI coding session declared, what it changed, and what it cost")
     .version("0.1.0");
 
   program

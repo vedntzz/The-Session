@@ -301,4 +301,14 @@ describe("session", () => {
     program.configureOutput({ writeErr: () => {} });
     await expect(program.parseAsync(["nope"], { from: "user" })).rejects.toThrow();
   });
+
+  it("reports the version the package was published as", async () => {
+    // `--version` is written into the command tree by hand, so nothing but
+    // this test stops a release from shipping a CLI that misreports itself.
+    const manifest = JSON.parse(
+      await readFile(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { version: string };
+
+    expect(buildProgram().version()).toBe(manifest.version);
+  });
 });

@@ -1,7 +1,18 @@
 {
-  "name": "session",
+  "name": "@vedntzz/session",
   "version": "0.1.0",
-  "description": "Track working sessions from the command line",
+  "description": "A black box recorder for AI coding sessions: declare intent before the agent runs, record what actually changed and what it cost.",
+  "keywords": [
+    "ai",
+    "agent",
+    "claude-code",
+    "coding-agent",
+    "cli",
+    "tokens",
+    "productivity"
+  ],
+  "license": "MIT",
+  "author": "vedntzz",
   "type": "module",
   "bin": {
     "session": "dist/cli.js"
@@ -9,10 +20,14 @@
   "main": "dist/program.js",
   "types": "dist/program.d.ts",
   "files": [
-    "dist"
+    "dist/**/*.js",
+    "dist/**/*.d.ts"
   ],
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -21,7 +36,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepack": "npm run clean && npm run build"
   },
   "dependencies": {
     "commander": "^14.0.0",

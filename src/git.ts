@@ -108,4 +108,3 @@ export async function changedFilesSince(
   const paths = new Set([...splitNulList(tracked), ...splitNulList(untracked)]);
   return [...paths].sort();
 }
-// drift

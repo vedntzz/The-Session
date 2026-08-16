@@ -49,12 +49,13 @@ describe("the hook it registers", () => {
   it("registers no matcher, so every ending is recorded", () => {
     // SessionEnd matches on why the session ended; omitting the key means all
     // of them. A `/clear` is as much an ending as closing the window.
-    const [group] = (withHook({})["hooks"] as Record<string, unknown>)[HOOK_EVENT] as Record<
+    const groups = (withHook({})["hooks"] as Record<string, unknown>)[HOOK_EVENT] as Record<
       string,
       unknown
     >[];
 
-    expect("matcher" in group).toBe(false);
+    expect(groups).toHaveLength(1);
+    expect("matcher" in (groups[0] as Record<string, unknown>)).toBe(false);
   });
 
   it("nests the handler inside a matcher group, as the settings schema wants", () => {

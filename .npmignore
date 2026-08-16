@@ -1,0 +1,33 @@
+# What ships is decided by the `files` allowlist in package.json, which names
+# `dist/**/*.js` and `dist/**/*.d.ts` — an allowlist npm applies before this
+# file is consulted, and one this file cannot widen.
+#
+# So this exists for two narrower jobs:
+#
+# 1. It stops `.gitignore` being read as the ignore list. npm falls back to it
+#    when this file is absent, and `.gitignore` lists `dist` — the one
+#    directory that has to ship.
+# 2. It is the second gate on anything added to `files` later: a broadened
+#    allowlist still will not sweep up tests, fixtures or notes.
+#
+# Source maps are excluded by the allowlist rather than here. `src` is not
+# published, so a shipped map points at files that are not in the tarball:
+# worse than no map, and two thirds of the unpacked size.
+
+# Tests and fixtures.
+test/
+tests/
+**/*.test.ts
+**/*.test.js
+**/__fixtures__/
+**/fixtures/
+
+# Sources and build tooling. Only the compiled output ships.
+src/
+tsconfig*.json
+vitest.config.ts
+.claude/
+
+# Project notes that are not the README.
+Claude.md
+CLAUDE.md
