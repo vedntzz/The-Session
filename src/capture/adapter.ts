@@ -1,4 +1,4 @@
-import { zeroCost, type SessionCost } from "../store.js";
+import { zeroCost, type SessionCost, type TokenCounts } from "../store.js";
 
 /** The slice of wall-clock time a session occupied. */
 export interface CaptureWindow {
@@ -36,11 +36,21 @@ export function mergeCosts(costs: readonly SessionCost[]): SessionCost {
   const callsByModel = new Map<string, number>();
   const total = zeroCost();
 
+  const empty = total.emptyTurnTokens as TokenCounts;
+
   for (const cost of costs) {
     total.inputTokens += cost.inputTokens;
     total.cacheReadTokens += cost.cacheReadTokens;
     total.cacheCreationTokens += cost.cacheCreationTokens;
     total.outputTokens += cost.outputTokens;
+    // An adapter too old to report the split contributes nothing to it, rather
+    // than having a share of its total invented on its behalf.
+    if (cost.emptyTurnTokens) {
+      empty.inputTokens += cost.emptyTurnTokens.inputTokens;
+      empty.cacheReadTokens += cost.emptyTurnTokens.cacheReadTokens;
+      empty.cacheCreationTokens += cost.emptyTurnTokens.cacheCreationTokens;
+      empty.outputTokens += cost.emptyTurnTokens.outputTokens;
+    }
     total.turns += cost.turns;
     total.emptyTurns += cost.emptyTurns;
     total.apiCalls += cost.apiCalls;

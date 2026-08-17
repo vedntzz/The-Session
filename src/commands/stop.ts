@@ -1,5 +1,5 @@
 import { captureCost, type Adapter } from "../capture/index.js";
-import { changedFilesSince } from "../git.js";
+import { changedFilesSince, endStateOf } from "../git.js";
 import {
   getOpenSession,
   totalTokens,
@@ -90,6 +90,10 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
     {
       reality,
       drift: computeDrift(reality, open.scope),
+      // What the session left at each path. Recorded now because it cannot be
+      // recovered later: this is what `settle` goes looking for in the default
+      // branch, and by then the working tree has moved on.
+      endState: await endStateOf(reality, cwd),
       cost,
       endedAt,
     },

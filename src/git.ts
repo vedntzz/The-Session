@@ -1,6 +1,10 @@
-// Reads the repo: whether there is one, what HEAD is, and which paths changed.
+// Reads the repo: whether there is one, what HEAD is, which paths changed, and
+// where the work on them ended up.
 import { execFile } from "node:child_process";
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import { promisify } from "node:util";
+import type { RepoFacts } from "./outcome.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -36,7 +40,7 @@ async function tryGit(cwd: string, args: string[]): Promise<string | undefined> 
  * here, which is what makes the results root-relative no matter which
  * subdirectory the caller is in.
  */
-async function repoRoot(cwd: string): Promise<string> {
+export async function repoRoot(cwd: string): Promise<string> {
   const root = await tryGit(cwd, ["rev-parse", "--show-toplevel"]);
   if (root === undefined) {
     throw new Error(`not a git repository: ${cwd}`);
@@ -47,6 +51,25 @@ async function repoRoot(cwd: string): Promise<string> {
 /** Splits NUL-terminated git output, which is safe for any legal filename. */
 function splitNulList(stdout: string): string[] {
   return stdout.split("\0").filter((entry) => entry !== "");
+}
+
+/**
+ * Runs git with `input` on stdin. `cat-file --batch-check` answers a whole
+ * list of questions in one process, which is the difference between one
+ * subprocess per path and one per path per commit.
+ */
+async function runGitWithInput(cwd: string, args: string[], input: string): Promise<string> {
+  const child = execFile("git", args, { cwd, maxBuffer: MAX_OUTPUT_BYTES, encoding: "utf8" });
+  child.stdin?.end(input);
+
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    child.stdout?.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", () => resolve(stdout));
+  });
 }
 
 /** True if `cwd` is inside a git work tree. Never throws, even without git. */
@@ -107,4 +130,190 @@ export async function changedFilesSince(
 
   const paths = new Set([...splitNulList(tracked), ...splitNulList(untracked)]);
   return [...paths].sort();
+}
+
+// --- where the work went --------------------------------------------------
+
+/**
+ * Where to look for the default branch, after `origin/HEAD` has been asked.
+ *
+ * The remote's copy of each name comes first: in a clone, `origin/main` is
+ * what the team has agreed on, and the local `main` is one person's checkout
+ * of it, possibly days behind.
+ */
+const DEFAULT_BRANCH_FALLBACKS = ["origin/main", "main", "origin/master", "master"] as const;
+
+export interface DefaultBranch {
+  /** What to call it in a report, e.g. `origin/main`. */
+  name: string;
+  /** Its tip commit. */
+  tip: string;
+}
+
+/**
+ * The branch work is expected to end up on.
+ *
+ * `origin/HEAD` is the honest answer where it is set, since it is the remote's
+ * own statement of its default. It frequently is not set in a fresh clone, so
+ * the well-known names are tried after it.
+ */
+export async function defaultBranch(cwd: string = process.cwd()): Promise<DefaultBranch | undefined> {
+  const root = await repoRoot(cwd);
+  const declared = await tryGit(root, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
+
+  const candidates = [declared?.trim(), ...DEFAULT_BRANCH_FALLBACKS].filter(
+    (name): name is string => name !== undefined && name !== "",
+  );
+
+  for (const name of candidates) {
+    const tip = await tryGit(root, ["rev-parse", "--verify", "--quiet", `${name}^{commit}`]);
+    if (tip !== undefined && tip.trim() !== "") {
+      return { name, tip: tip.trim() };
+    }
+  }
+  return undefined;
+}
+
+/** Keeps a command line under any plausible limit. */
+const ARG_CHUNK = 200;
+
+function chunk<T>(values: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
+/**
+ * Blob ids for a batch of `<rev>:<path>` questions, in the order asked.
+ * `cat-file --batch-check` answers a missing path with `missing` rather than
+ * failing, which is what makes one call able to ask about paths that may not
+ * be there.
+ */
+async function blobIds(root: string, revPaths: readonly string[]): Promise<(string | undefined)[]> {
+  if (revPaths.length === 0) {
+    return [];
+  }
+  const stdout = await runGitWithInput(
+    root,
+    ["cat-file", "--batch-check"],
+    `${revPaths.join("\n")}\n`,
+  );
+
+  return stdout
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => {
+      const [id, type] = line.split(" ");
+      return type === "blob" ? id : undefined;
+    });
+}
+
+/** Every blob a path has held across the default branch's history. */
+async function historyOf(root: string, branch: string, path: string): Promise<Set<string>> {
+  // `--` and a literal path, so a file named like a revision cannot be read
+  // as one. Renames are not followed: the question is what sits at this path.
+  const log = await tryGit(root, ["log", "--format=%H", branch, "--", path]);
+  const commits = (log ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+
+  const blobs = new Set<string>();
+  for (const batch of chunk(commits, ARG_CHUNK)) {
+    for (const id of await blobIds(root, batch.map((commit) => `${commit}:${path}`))) {
+      if (id !== undefined) {
+        blobs.add(id);
+      }
+    }
+  }
+  return blobs;
+}
+
+/** Blob ids of the paths as they sit in the working tree right now. */
+async function workingBlobs(
+  root: string,
+  paths: readonly string[],
+): Promise<Map<string, string | null>> {
+  const working = new Map<string, string | null>();
+  const present: string[] = [];
+
+  for (const path of paths) {
+    // A path that is not a readable file has no blob — deleted, or replaced by
+    // a directory. Either way there is nothing of the session's left there.
+    const stats = await stat(join(root, path)).catch(() => undefined);
+    if (stats?.isFile()) {
+      present.push(path);
+    } else {
+      working.set(path, null);
+    }
+  }
+
+  for (const batch of chunk(present, ARG_CHUNK)) {
+    // Hashed through git so that whatever filters the path is subject to are
+    // the same ones applied to the blobs it is about to be compared with.
+    const stdout = await runGit(root, ["hash-object", "--", ...batch]);
+    const ids = stdout.split("\n").filter((line) => line.trim() !== "");
+    batch.forEach((path, index) => working.set(path, ids[index]?.trim() ?? null));
+  }
+  return working;
+}
+
+/**
+ * Everything the repository has to say about a set of paths, gathered once.
+ *
+ * Undefined when there is no default branch to judge against — a repository
+ * with no `main`, no `master` and no `origin/HEAD` is one where "did this
+ * merge" has no answer, and inventing one would be worse than declining.
+ */
+export async function gatherRepoFacts(
+  paths: readonly string[],
+  cwd: string = process.cwd(),
+): Promise<RepoFacts | undefined> {
+  if (!(await isRepo(cwd))) {
+    return undefined;
+  }
+  const root = await repoRoot(cwd);
+  const branch = await defaultBranch(root);
+  if (!branch) {
+    return undefined;
+  }
+
+  const wanted = [...new Set(paths)].sort();
+  const history = new Map<string, ReadonlySet<string>>();
+  for (const path of wanted) {
+    history.set(path, await historyOf(root, branch.name, path));
+  }
+
+  const absentAtTip = new Set<string>();
+  for (const batch of chunk(wanted, ARG_CHUNK)) {
+    const ids = await blobIds(root, batch.map((path) => `${branch.tip}:${path}`));
+    batch.forEach((path, index) => {
+      if (ids[index] === undefined) {
+        absentAtTip.add(path);
+      }
+    });
+  }
+
+  return {
+    branch: branch.name,
+    tip: branch.tip,
+    history,
+    absentAtTip,
+    working: await workingBlobs(root, wanted),
+  };
+}
+
+/**
+ * The blob ids of `paths` as they are right now — what `stop` records so that
+ * `settle` has something to go looking for later.
+ */
+export async function endStateOf(
+  paths: readonly string[],
+  cwd: string = process.cwd(),
+): Promise<Record<string, string | null>> {
+  const root = await repoRoot(cwd);
+  const blobs = await workingBlobs(root, [...new Set(paths)].sort());
+  return Object.fromEntries(blobs);
 }

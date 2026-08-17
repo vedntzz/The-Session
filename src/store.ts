@@ -5,7 +5,9 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { GENESIS, lineHash, recordHash, type SignedBody } from "./chain.js";
+import { hasAttribution, type Attribution } from "./config.js";
 import { loadOrCreateKeypair, signHash } from "./keys.js";
+import type { Observation } from "./outcome.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -13,11 +15,11 @@ const execFileAsync = promisify(execFile);
 const RECORD_VERSION = 1;
 
 /**
- * What the session spent to get where it got. Token counters stay separate
- * because the four kinds bill at different rates; collapsing them to one
- * number throws away the information a price calculation needs.
+ * The four token counters, kept separate because the four kinds bill at
+ * different rates. Collapsing them to one number throws away the information a
+ * price calculation needs, so nothing in the record ever does.
  */
-export interface SessionCost {
+export interface TokenCounts {
   /** Fresh input, billed at the full input rate. */
   inputTokens: number;
   /** Input served from cache, billed at a discount. */
@@ -25,6 +27,10 @@ export interface SessionCost {
   /** Input written into cache, billed at a premium. */
   cacheCreationTokens: number;
   outputTokens: number;
+}
+
+/** What the session spent to get where it got. */
+export interface SessionCost extends TokenCounts {
   /** Developer turns: one per prompt, covering everything it set off. */
   turns: number;
   /** Turns that wrote no files — a whole prompt that produced nothing. */
@@ -34,25 +40,42 @@ export interface SessionCost {
   /** Calls that wrote no files: they cost tokens and changed nothing. */
   callsWithoutEdits: number;
   model: string;
+  /**
+   * The same four counters, restricted to the turns that wrote no files.
+   *
+   * Counted at capture, where which turn a call belonged to is still known, so
+   * that what the waste cost is a measurement. The alternative — taking the
+   * session's total and multiplying by the share of turns that were empty —
+   * would be a number nobody observed: empty turns are not average turns, and
+   * the expensive ones are exactly the ones worth seeing.
+   *
+   * Absent on sessions captured before this existed. Nothing infers it.
+   */
+  emptyTurnTokens?: TokenCounts;
 }
 
 /** Every token the session moved. For display only — never for pricing. */
-export function totalTokens(cost: SessionCost): number {
-  return cost.inputTokens + cost.cacheReadTokens + cost.cacheCreationTokens + cost.outputTokens;
+export function totalTokens(tokens: TokenCounts): number {
+  return (
+    tokens.inputTokens + tokens.cacheReadTokens + tokens.cacheCreationTokens + tokens.outputTokens
+  );
+}
+
+/** Four counters at nothing. */
+export function zeroTokens(): TokenCounts {
+  return { inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, outputTokens: 0 };
 }
 
 /** A cost record with nothing counted yet. */
 export function zeroCost(): SessionCost {
   return {
-    inputTokens: 0,
-    cacheReadTokens: 0,
-    cacheCreationTokens: 0,
-    outputTokens: 0,
+    ...zeroTokens(),
     turns: 0,
     emptyTurns: 0,
     apiCalls: 0,
     callsWithoutEdits: 0,
     model: "",
+    emptyTurnTokens: zeroTokens(),
   };
 }
 
@@ -85,19 +108,46 @@ export interface Session {
   startedAt: string;
   /** ISO-8601 timestamp. `null` means the session is still running. */
   endedAt: string | null;
+  /**
+   * The blob id of each `reality` path as the session left it, captured at
+   * `stop`. `null` means the session deleted the file.
+   *
+   * This is what makes an outcome decidable later. Whether the work merged is
+   * a question about content — a squash merge keeps none of the original
+   * commits — and without a record of what the session actually left there is
+   * nothing to go looking for. A fact about what happened, like `reality`, not
+   * a conclusion drawn from it. Absent on sessions stopped before it existed.
+   */
+  endState?: Record<string, string | null>;
+  /**
+   * Where the session was observed to have ended up, oldest first. Written by
+   * `session settle` and `session mark`; never the basis for display, which is
+   * computed afresh. See `outcome.ts`.
+   */
+  observations?: Observation[];
   /** HEAD when the session opened, so its diff can be recovered later. */
   startCommit: string;
+  /**
+   * Who the work was for, copied out of the repo's `.session.json` when the
+   * session opened. Absent when the repo declares none.
+   *
+   * A copy, not a reference: a session records what the repo said at the time
+   * it ran. Re-reading the file at display time would let a change of client
+   * today rewrite who last quarter was billed to.
+   */
+  attribution?: Attribution;
 }
 
 /** The `set` payload of a record. Creating records carry every field. */
 type RecordFields = Partial<Omit<Session, "id">>;
 
 /**
- * Fields `updateSession` may set. `intent` and `repo` are absent by design:
- * intent is written once at `start` so a declaration cannot be retrofitted to
- * match what happened, and repo is derived from where the store lives.
+ * Fields `updateSession` may set. Three are absent by design: intent is
+ * written once at `start` so a declaration cannot be retrofitted to match what
+ * happened, repo is derived from where the store lives, and attribution is
+ * captured at start so that who was billed cannot be decided after the fact.
  */
-export type SessionPatch = Omit<RecordFields, "intent" | "repo">;
+export type SessionPatch = Omit<RecordFields, "intent" | "repo" | "attribution">;
 
 /**
  * What a caller supplies at `session start`. Everything a session cannot know
@@ -456,6 +506,11 @@ export async function appendSession(
     startedAt: input.startedAt,
     endedAt: input.endedAt ?? null,
     startCommit: input.startCommit,
+    // Only when there is one: an absent field and a field holding nothing say
+    // the same thing, and the shorter line is the one worth writing.
+    ...(input.attribution && hasAttribution(input.attribution)
+      ? { attribution: input.attribution }
+      : {}),
   };
 
   const { id, ...set } = session;
@@ -530,6 +585,9 @@ export async function updateSession(
 ): Promise<Session> {
   if ("intent" in patch) {
     throw new Error("intent is written once at start and cannot be edited");
+  }
+  if ("attribution" in patch) {
+    throw new Error("attribution is captured at start and cannot be edited");
   }
   if (patch.startedAt !== undefined) {
     assertTimestamp("startedAt", patch.startedAt);

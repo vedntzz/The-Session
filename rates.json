@@ -1,0 +1,23 @@
+{
+  "currency": "USD",
+  "per": "million tokens",
+  "note": "List prices, per million tokens. A model is matched exactly, or by the longest key that is a prefix of it at a dash — so claude-sonnet-4-5 prices claude-sonnet-4-5-20250929. Prices change and this file will go stale: override or extend it at ~/.session/rates.json, which is merged over this one entry by entry. A model in neither is reported as unpriced rather than guessed at.",
+  "models": {
+    "claude-opus-4-5": { "input": 5, "cacheRead": 0.5, "cacheCreation": 6.25, "output": 25 },
+    "claude-opus-4-1": { "input": 15, "cacheRead": 1.5, "cacheCreation": 18.75, "output": 75 },
+    "claude-opus-4": { "input": 15, "cacheRead": 1.5, "cacheCreation": 18.75, "output": 75 },
+    "claude-3-opus": { "input": 15, "cacheRead": 1.5, "cacheCreation": 18.75, "output": 75 },
+    "claude-sonnet-4-5": { "input": 3, "cacheRead": 0.3, "cacheCreation": 3.75, "output": 15 },
+    "claude-sonnet-4": { "input": 3, "cacheRead": 0.3, "cacheCreation": 3.75, "output": 15 },
+    "claude-3-7-sonnet": { "input": 3, "cacheRead": 0.3, "cacheCreation": 3.75, "output": 15 },
+    "claude-3-5-sonnet": { "input": 3, "cacheRead": 0.3, "cacheCreation": 3.75, "output": 15 },
+    "claude-haiku-4-5": { "input": 1, "cacheRead": 0.1, "cacheCreation": 1.25, "output": 5 },
+    "claude-3-5-haiku": { "input": 0.8, "cacheRead": 0.08, "cacheCreation": 1, "output": 4 },
+    "claude-3-haiku": { "input": 0.25, "cacheRead": 0.03, "cacheCreation": 0.3, "output": 1.25 },
+    "gpt-4.1": { "input": 2, "cacheRead": 0.5, "cacheCreation": 0, "output": 8 },
+    "gpt-4.1-mini": { "input": 0.4, "cacheRead": 0.1, "cacheCreation": 0, "output": 1.6 },
+    "gpt-4.1-nano": { "input": 0.1, "cacheRead": 0.025, "cacheCreation": 0, "output": 0.4 },
+    "gpt-4o": { "input": 2.5, "cacheRead": 1.25, "cacheCreation": 0, "output": 10 },
+    "gpt-4o-mini": { "input": 0.15, "cacheRead": 0.075, "cacheCreation": 0, "output": 0.6 }
+  }
+}

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -221,11 +221,28 @@ describe("session", () => {
     await expect(run("stop")).rejects.toThrow(/No session is open/);
   });
 
-  it("registers exactly the seven subcommands", () => {
+  it("registers exactly the ten subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
-    expect(names).toEqual(["hook", "key", "show", "start", "stop", "verify", "week"]);
+    expect(names).toEqual([
+      "config",
+      "hook",
+      "key",
+      "mark",
+      "settle",
+      "show",
+      "start",
+      "stop",
+      "verify",
+      "week",
+    ]);
+  });
+
+  it("puts set and show under config", () => {
+    const config = buildProgram().commands.find((command) => command.name() === "config");
+
+    expect(config?.commands.map((command) => command.name())).toEqual(["set", "show"]);
   });
 
   it("puts install under hook", () => {
@@ -265,6 +282,77 @@ describe("session", () => {
     } finally {
       process.exitCode = undefined;
     }
+  });
+
+  it("config set writes .session.json at the repo root, not under the store", async () => {
+    const lines = await run("config", "set", "client", "Acme");
+
+    const file = path.join(store.cwd as string, ".session.json");
+    // realpath: git reports the resolved root, and on macOS /var is a symlink.
+    expect(lines[0]).toBe(`  wrote        ${path.join(await realpath(store.cwd as string), ".session.json")}`);
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ client: "Acme" });
+    await expect(readdir(store.home as string)).rejects.toThrow(/ENOENT/);
+  });
+
+  it("config show prints what the repo declares", async () => {
+    await run("config", "set", "client", "Acme");
+    await run("config", "set", "project", "orders-api");
+
+    const lines = await run("config", "show");
+
+    expect(lines[1]).toBe("  client       Acme");
+    expect(lines[2]).toBe("  project      orders-api");
+  });
+
+  it("config set refuses a key that is not one of the four", async () => {
+    await expect(run("config", "set", "clietn", "Acme")).rejects.toThrow(/not something a session/);
+  });
+
+  it("start records what config set declared, and says so", async () => {
+    await run("config", "set", "client", "Acme");
+
+    const lines = await run("start", "add rate limiting");
+
+    expect(lines[2]).toBe("  for      Acme");
+    const [session] = await readSessions(store);
+    expect(session?.attribution).toEqual({ client: "Acme" });
+  });
+
+  it("week --client narrows the table and says it narrowed", async () => {
+    await run("config", "set", "client", "Acme");
+    await run("start", "for acme");
+    await run("stop");
+    await run("config", "set", "client", "Globex");
+    await run("start", "for globex");
+    await run("stop");
+
+    const lines = await run("week", "--client", "Acme");
+
+    expect(lines[1]).toBe("  only client Acme");
+    expect(lines.join("\n")).toContain("for acme");
+    expect(lines.join("\n")).not.toContain("for globex");
+  });
+
+  it("week --project narrows too, and an empty result says which filter", async () => {
+    await run("config", "set", "project", "orders-api");
+    await run("start", "for orders");
+    await run("stop");
+
+    await expect(run("week", "--project", "billing")).resolves.toEqual([
+      "",
+      "  No sessions in the last 7 days for project billing",
+    ]);
+  });
+
+  it("week --open carries the filter onto the page", async () => {
+    await run("config", "set", "client", "Acme");
+    await run("start", "for acme");
+    await run("stop");
+
+    await run("week", "--open", "--client", "Acme");
+
+    const page = await readFile(opened[0] as string, "utf8");
+    expect(page).toContain("The last 7 days, client Acme");
   });
 
   it("verify --log --key checks a log handed over from another machine", async () => {
@@ -397,5 +485,125 @@ describe("session", () => {
     ) as { version: string };
 
     expect(buildProgram().version()).toBe(manifest.version);
+  });
+});
+
+describe("session, priced", () => {
+  /**
+   * A stub adapter, so these tests never read the machine's own transcripts.
+   * `claude-opus-4-1` is in the bundled table at $15 per million input tokens.
+   */
+  function spending(model: string, inputTokens: number): ProgramOptions["adapters"] {
+    return [
+      {
+        name: "stub",
+        isAvailable: async () => true,
+        capture: async () => ({
+          inputTokens,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          outputTokens: 0,
+          turns: 4,
+          emptyTurns: 1,
+          apiCalls: 9,
+          callsWithoutEdits: 3,
+          model,
+          emptyTurnTokens: {
+            inputTokens: inputTokens / 4,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            outputTokens: 0,
+          },
+        }),
+      },
+    ];
+  }
+
+  async function spent(model = "claude-opus-4-1", inputTokens = 1_000_000): Promise<void> {
+    await run("start", "spend some money");
+    store = { ...store, adapters: spending(model, inputTokens) };
+    await run("stop");
+    store = { ...store, adapters: [] };
+  }
+
+  it("show leads with the dollar figure and keeps tokens back", async () => {
+    await spent();
+    const lines = await run("show");
+
+    expect(lines.find((line) => line.includes("cost"))).toContain("$15.00");
+    expect(lines.find((line) => line.includes("no edits"))).toContain("$3.75");
+    expect(lines.some((line) => line.includes("tokens"))).toBe(false);
+  });
+
+  it("show --tokens spells the counters out as well", async () => {
+    await spent();
+    const lines = await run("show", "--tokens");
+
+    expect(lines.find((line) => line.includes("tokens"))).toContain("1,000,000 in");
+    expect(lines.find((line) => line.includes("cost"))).toContain("$15.00");
+  });
+
+  it("week leads with cost, and adds tokens only when asked", async () => {
+    await spent();
+
+    const plain = await run("week");
+    expect(plain[1]).toContain("cost");
+    expect(plain[1]).not.toContain("tokens");
+    expect(plain[2]).toContain("$15.00");
+
+    const detailed = await run("week", "--tokens");
+    expect(detailed[1]).toContain("tokens");
+    expect(detailed[2]).toContain("1,000,000");
+  });
+
+  it("week says what the window cost and how much never merged", async () => {
+    await spent();
+    const lines = await run("week");
+
+    // Nothing has merged, so the whole of it is still owed an outcome.
+    expect(lines).toContain("  $15.00 spent, $15.00 of it on changes that never merged");
+  });
+
+  it("week reports an unpriced model rather than pricing it at a guess", async () => {
+    await spent("some-model-nobody-has-priced");
+    const lines = await run("week");
+
+    expect(lines.some((line) => line.includes("$"))).toBe(false);
+    expect(lines.at(-2)).toContain("1 session unpriced: some-model-nobody-has-priced");
+  });
+
+  it("prices an unknown model once rates.json in the store names it", async () => {
+    await spent("some-model-nobody-has-priced");
+    await mkdir(store.home as string, { recursive: true });
+    await writeFile(
+      path.join(store.home as string, "rates.json"),
+      JSON.stringify({
+        models: {
+          "some-model-nobody-has-priced": {
+            input: 2,
+            cacheRead: 0,
+            cacheCreation: 0,
+            output: 0,
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    // Nothing was rewritten: the same record, read against a table that now
+    // has a price in it.
+    expect((await run("week"))[2]).toContain("$2.00");
+  });
+
+  it("keeps the bundled rates when the store adds one model", async () => {
+    await spent();
+    await mkdir(store.home as string, { recursive: true });
+    await writeFile(
+      path.join(store.home as string, "rates.json"),
+      JSON.stringify({ models: { "mine-1": { input: 1, cacheRead: 0, cacheCreation: 0, output: 0 } } }),
+      "utf8",
+    );
+
+    expect((await run("week"))[2]).toContain("$15.00");
   });
 });

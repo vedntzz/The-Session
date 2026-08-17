@@ -21,7 +21,8 @@
   "types": "dist/program.d.ts",
   "files": [
     "dist/**/*.js",
-    "dist/**/*.d.ts"
+    "dist/**/*.d.ts",
+    "rates.json"
   ],
   "engines": {
     "node": ">=20"

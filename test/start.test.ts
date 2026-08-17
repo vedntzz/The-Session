@@ -5,7 +5,8 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatStarted, startSession } from "../src/commands/start.js";
-import { getOpenSession, readSessions, updateSession } from "../src/store.js";
+import { stopSession } from "../src/commands/stop.js";
+import { getOpenSession, readSessions, updateSession, type SessionPatch } from "../src/store.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -165,5 +166,89 @@ describe("formatStarted", () => {
     const session = await startSession("look around", options);
 
     expect(formatStarted(session)[1]).toBe("  scope    none declared");
+  });
+});
+
+describe("attribution captured at start", () => {
+  beforeEach(async () => {
+    await commit("first.txt");
+  });
+
+  async function declare(attribution: Record<string, unknown>): Promise<void> {
+    await writeFile(path.join(cwd, ".session.json"), JSON.stringify(attribution), "utf8");
+  }
+
+  it("copies what the repo declares into the record", async () => {
+    await declare({ client: "Acme", project: "orders-api", sow: "SOW-2026-014", billingCode: "A-1" });
+
+    const session = await startSession("add rate limiting", options);
+
+    expect(session.attribution).toEqual({
+      client: "Acme",
+      project: "orders-api",
+      sow: "SOW-2026-014",
+      billingCode: "A-1",
+    });
+  });
+
+  it("records nothing when the repo declares nothing", async () => {
+    const session = await startSession("add rate limiting", options);
+
+    expect(session.attribution).toBeUndefined();
+  });
+
+  it("survives the round trip through the log", async () => {
+    await declare({ client: "Acme" });
+    await startSession("add rate limiting", options);
+
+    const [stored] = await readSessions(options);
+
+    expect(stored?.attribution).toEqual({ client: "Acme" });
+  });
+
+  it("keeps what it was started with when the config changes afterwards", async () => {
+    // The point of copying rather than referring: last quarter's sessions
+    // stay billed to last quarter's client.
+    await declare({ client: "Acme" });
+    const first = await startSession("billed to Acme", options);
+    await stopSession(options);
+
+    await declare({ client: "Globex" });
+    const second = await startSession("billed to Globex", options);
+
+    expect(first.attribution).toEqual({ client: "Acme" });
+    expect(second.attribution).toEqual({ client: "Globex" });
+    const stored = await readSessions(options);
+    expect(stored.map((session) => session.attribution?.client)).toEqual(["Acme", "Globex"]);
+  });
+
+  it("cannot be edited afterwards, any more than intent can", async () => {
+    await declare({ client: "Acme" });
+    const session = await startSession("add rate limiting", options);
+
+    await expect(
+      updateSession(session.id, { attribution: { client: "Globex" } } as SessionPatch, options),
+    ).rejects.toThrow(/captured at start/);
+  });
+
+  it("refuses to start on a config the team cannot have meant", async () => {
+    await writeFile(path.join(cwd, ".session.json"), '{"client":42}', "utf8");
+
+    await expect(startSession("add rate limiting", options)).rejects.toThrow(
+      /client must be a string/,
+    );
+  });
+
+  it("confirms on the start line what the session will be billed to", async () => {
+    await declare({ client: "Acme", project: "orders-api" });
+
+    const lines = formatStarted(await startSession("add rate limiting", options));
+
+    expect(lines).toHaveLength(3);
+    expect(lines[2]).toBe("  for      Acme  orders-api");
+  });
+
+  it("says nothing extra when the repo declares nothing", async () => {
+    expect(formatStarted(await startSession("add rate limiting", options))).toHaveLength(2);
   });
 });

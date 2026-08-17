@@ -4,12 +4,15 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_DAYS,
+  isEmptyFilter,
+  matchesFilter,
   openInBrowser,
   parseDays,
   weekSessions,
   writeWeekPage,
 } from "../src/commands/week.js";
-import { appendSession, updateSession, type StoreOptions } from "../src/store.js";
+import type { Attribution } from "../src/config.js";
+import { appendSession, updateSession, type Session, type StoreOptions } from "../src/store.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -190,5 +193,100 @@ describe("openInBrowser", () => {
         },
       }),
     ).rejects.toThrow(/no browser here/);
+  });
+});
+
+describe("--client and --project", () => {
+  /** Records a session for a given client and project, one day ago. */
+  async function recordFor(intent: string, attribution: Attribution): Promise<void> {
+    const startedAt = new Date(Date.now() - DAY_MS).toISOString();
+    await appendSession({ intent, startedAt, startCommit: "abc1234", attribution }, options);
+  }
+
+  beforeEach(async () => {
+    await recordFor("acme orders", { client: "Acme", project: "orders-api" });
+    await recordFor("acme billing", { client: "Acme", project: "billing" });
+    await recordFor("globex work", { client: "Globex", project: "orders-api" });
+    await record("nobody's work", 1);
+  });
+
+  it("narrows to one client", async () => {
+    const sessions = await weekSessions(7, options, { client: "Acme" });
+
+    expect(sessions.map((session) => session.intent)).toEqual(["acme orders", "acme billing"]);
+  });
+
+  it("narrows to one project across clients", async () => {
+    const sessions = await weekSessions(7, options, { project: "orders-api" });
+
+    expect(sessions.map((session) => session.intent)).toEqual(["acme orders", "globex work"]);
+  });
+
+  it("applies both together", async () => {
+    const sessions = await weekSessions(7, options, { client: "Acme", project: "orders-api" });
+
+    expect(sessions.map((session) => session.intent)).toEqual(["acme orders"]);
+  });
+
+  it("ignores case and stray spaces, which are typed by two different people", async () => {
+    const sessions = await weekSessions(7, options, { client: "  acme  " });
+
+    expect(sessions).toHaveLength(2);
+  });
+
+  it("does not match on a prefix, which would fold two clients into one invoice", async () => {
+    await recordFor("acme corp work", { client: "Acme Corporation" });
+
+    const sessions = await weekSessions(7, options, { client: "Acme" });
+
+    expect(sessions.map((session) => session.intent)).toEqual(["acme orders", "acme billing"]);
+  });
+
+  it("leaves out sessions that say nothing about who they were for", async () => {
+    const sessions = await weekSessions(7, options, { client: "Acme" });
+
+    expect(sessions.map((session) => session.intent)).not.toContain("nobody's work");
+  });
+
+  it("returns everything when nothing is filtered on", async () => {
+    await expect(weekSessions(7, options, {})).resolves.toHaveLength(4);
+    await expect(weekSessions(7, options)).resolves.toHaveLength(4);
+  });
+
+  it("is empty, not an error, when nobody matches", async () => {
+    await expect(weekSessions(7, options, { client: "Initech" })).resolves.toEqual([]);
+  });
+
+  it("still respects the window", async () => {
+    await appendSession(
+      {
+        intent: "old acme work",
+        startedAt: new Date(Date.now() - 30 * DAY_MS).toISOString(),
+        startCommit: "abc1234",
+        attribution: { client: "Acme" },
+      },
+      options,
+    );
+
+    await expect(weekSessions(7, options, { client: "Acme" })).resolves.toHaveLength(2);
+    await expect(weekSessions(60, options, { client: "Acme" })).resolves.toHaveLength(3);
+  });
+});
+
+describe("matchesFilter", () => {
+  const session = { attribution: { client: "Acme", project: "orders-api" } } as Session;
+
+  it("passes everything when there is no filter", () => {
+    expect(matchesFilter({} as Session, {})).toBe(true);
+  });
+
+  it("needs every named field to match, not just one", () => {
+    expect(matchesFilter(session, { client: "Acme", project: "orders-api" })).toBe(true);
+    expect(matchesFilter(session, { client: "Acme", project: "billing" })).toBe(false);
+  });
+
+  it("knows when nothing is being filtered on", () => {
+    expect(isEmptyFilter({})).toBe(true);
+    expect(isEmptyFilter({ client: "Acme" })).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { zeroCost, type SessionCost } from "../../store.js";
+import { zeroCost, type SessionCost, type TokenCounts } from "../../store.js";
 import { dominant, NO_COST, type Adapter, type CaptureWindow } from "../adapter.js";
 
 /** Claude Code keeps one JSONL transcript per session, grouped by project. */
@@ -288,22 +288,37 @@ export function createClaudeCodeAdapter(options: ClaudeCodeOptions = {}): Adapte
 
       const callsByModel = new Map<string, number>();
       // A turn counts once it has a call in the window, and edits anywhere in
-      // it make the whole turn productive.
+      // it make the whole turn productive. Settled before anything is added up,
+      // because whether a call belongs to a wasted turn depends on calls that
+      // may come after it.
       const turnEdited = new Map<number, boolean>();
-      const cost = zeroCost();
+      const calls = [...fold.calls.values()];
+      for (const call of calls) {
+        turnEdited.set(call.turn, (turnEdited.get(call.turn) ?? false) || call.edited);
+      }
 
-      for (const call of fold.calls.values()) {
+      const cost = zeroCost();
+      const empty = cost.emptyTurnTokens as TokenCounts;
+
+      for (const call of calls) {
         cost.inputTokens += call.inputTokens;
         cost.cacheReadTokens += call.cacheReadTokens;
         cost.cacheCreationTokens += call.cacheCreationTokens;
         cost.outputTokens += call.outputTokens;
+        if (turnEdited.get(call.turn) === false) {
+          // Every token this call moved was spent inside a turn that ended with
+          // nothing written. That is what the waste figure is made of.
+          empty.inputTokens += call.inputTokens;
+          empty.cacheReadTokens += call.cacheReadTokens;
+          empty.cacheCreationTokens += call.cacheCreationTokens;
+          empty.outputTokens += call.outputTokens;
+        }
         if (!call.edited) {
           cost.callsWithoutEdits += 1;
         }
         if (call.model !== "") {
           callsByModel.set(call.model, (callsByModel.get(call.model) ?? 0) + 1);
         }
-        turnEdited.set(call.turn, (turnEdited.get(call.turn) ?? false) || call.edited);
       }
 
       cost.apiCalls = fold.calls.size;

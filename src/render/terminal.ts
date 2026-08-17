@@ -1,5 +1,8 @@
 import pc from "picocolors";
-import { totalTokens, type Session } from "../store.js";
+import type { SessionFilter } from "../commands/week.js";
+import { attributionEntries } from "../config.js";
+import { formatUsd, priceSession, spendOf, type Price, type RateTable } from "../pricing.js";
+import { totalTokens, type Session, type SessionCost } from "../store.js";
 
 const INDENT = "  ";
 /** Width of the label column, sized to the longest label the layout uses. */
@@ -82,13 +85,66 @@ function padLeft(text: string, to: number): string {
 }
 
 /**
+ * What a view knows beyond the sessions themselves. Both fields are absent in
+ * the tests that only care about layout, and a view with no rates prices
+ * nothing and says so — which is the same path a genuinely unknown model takes.
+ */
+export interface View {
+  /** The rates in force. See `pricing.ts`. */
+  rates?: RateTable;
+  /** Whether `--tokens` asked for the raw counters as well. */
+  tokens?: boolean;
+}
+
+const NO_RATES: RateTable = new Map();
+
+/** Where to send a reader whose model has no price on it. */
+const RATES_HINT = "~/.session/rates.json";
+
+/** The money, or the tokens and the reason there is no money. */
+function costCell(cost: SessionCost, price: Price): string {
+  if (price.priced) {
+    return formatUsd(price.usd);
+  }
+  const model = cost.model === "" ? "model" : cost.model;
+  return `${figure(totalTokens(cost))} tokens, ${model} unpriced`;
+}
+
+/** What the turns that changed no files came to. */
+function wasteCell(cost: SessionCost, price: Price): string {
+  if (price.priced && price.emptyUsd !== undefined) {
+    return formatUsd(price.emptyUsd);
+  }
+  if (cost.emptyTurnTokens) {
+    return `${figure(totalTokens(cost.emptyTurnTokens))} tokens`;
+  }
+  // Captured before the split was recorded. A share of the total worked out
+  // from the turn count would look like a measurement and would not be one.
+  return "not recorded";
+}
+
+/** The four counters, spelled out. Only ever shown when `--tokens` asks. */
+function breakdown(cost: SessionCost): string {
+  return [
+    `${figure(cost.inputTokens)} in`,
+    `${figure(cost.cacheReadTokens)} cache read`,
+    `${figure(cost.cacheCreationTokens)} cache write`,
+    `${figure(cost.outputTokens)} out`,
+  ].join(" · ");
+}
+
+/**
  * The session as `session show` prints it.
  *
  * `changed` and `outside` partition what actually changed: the paths that
  * landed inside the declared scope, then the ones that did not. Reading both
  * gives back `reality` exactly, with no path listed twice.
  */
-export function formatSession(session: Session, palette: Palette = terminalPalette): string[] {
+export function formatSession(
+  session: Session,
+  palette: Palette = terminalPalette,
+  view: View = {},
+): string[] {
   const lines: string[] = [""];
 
   const heading = `${INDENT}${session.intent}`;
@@ -122,16 +178,36 @@ export function formatSession(session: Session, palette: Palette = terminalPalet
 
   lines.push("");
 
+  // Money first, counts in the gutter beside it: what the session cost is the
+  // question, and the counters are how it got there.
   const { turns, emptyTurns, apiCalls, callsWithoutEdits } = session.cost;
   if (turns > 0 || apiCalls > 0) {
-    const spent = `${INDENT}${plural(turns, "turn", "turns")}, ${emptyTurns} without edits`;
-    const tokens = `${figure(totalTokens(session.cost))} tokens`;
-    lines.push(`${spent}${gap(spent)}${tokens}`);
+    const price = priceSession(session.cost, view.rates ?? NO_RATES);
+
+    const spent = `${INDENT}${label("cost")}${costCell(session.cost, price)}`;
     lines.push(
-      `${INDENT}${plural(apiCalls, "api call", "api calls")}, ` +
-        `${callsWithoutEdits} without edits`,
+      `${INDENT}${palette.dim(label("cost"))}${costCell(session.cost, price)}` +
+        `${gap(spent)}${palette.dim(`${plural(turns, "turn", "turns")}, ${emptyTurns} without edits`)}`,
     );
+
+    const wasted = `${INDENT}${label("no edits")}${wasteCell(session.cost, price)}`;
+    lines.push(
+      `${INDENT}${palette.dim(label("no edits"))}${wasteCell(session.cost, price)}` +
+        `${gap(wasted)}` +
+        palette.dim(`${plural(apiCalls, "api call", "api calls")}, ${callsWithoutEdits} without edits`),
+    );
+
+    if (view.tokens) {
+      lines.push(`${INDENT}${palette.dim(label("tokens"))}${palette.dim(breakdown(session.cost))}`);
+    }
   }
+  // Who it was for, one field per line rather than run together: `sow` and
+  // `billingCode` are strings of characters nobody can tell apart on sight,
+  // and an unlabelled pair of them would be unreadable.
+  for (const [key, value] of attributionEntries(session.attribution)) {
+    lines.push(`${INDENT}${palette.dim(label(key))}${palette.dim(value)}`);
+  }
+
   lines.push(`${INDENT}${palette.dim(label("outcome"))}${session.outcome}`);
 
   return lines;
@@ -152,6 +228,7 @@ const ELLIPSIS = "…";
 interface WeekCells {
   when: string;
   intent: string;
+  cost: string;
   turns: string;
   tokens: string;
   empty: string;
@@ -162,6 +239,7 @@ interface WeekCells {
 interface Widths {
   when: number;
   intent: number;
+  cost: number;
   turns: number;
   tokens: number;
   empty: number;
@@ -170,11 +248,15 @@ interface Widths {
 const HEADINGS: WeekCells = {
   when: "started",
   intent: "intent",
+  cost: "cost",
   turns: "turns",
   tokens: "tokens",
   empty: "empty",
   outcome: "outcome",
 };
+
+/** Stands in for a session whose model carries no price. */
+const NO_PRICE = "—";
 
 /**
  * Date and local time, so a row is placeable in the week without a header.
@@ -201,10 +283,12 @@ function widest(values: readonly string[]): number {
   return values.reduce((soFar, value) => Math.max(soFar, width(value)), 0);
 }
 
-function cellsFor(session: Session): WeekCells {
+function cellsFor(session: Session, rates: RateTable): WeekCells {
+  const price = priceSession(session.cost, rates);
   return {
     when: stamp(session.startedAt),
     intent: truncate(session.intent, INTENT_WIDTH),
+    cost: price.priced ? formatUsd(price.usd) : NO_PRICE,
     turns: figure(session.cost.turns),
     tokens: figure(totalTokens(session.cost)),
     empty: figure(session.cost.emptyTurns),
@@ -214,35 +298,38 @@ function cellsFor(session: Session): WeekCells {
 
 /**
  * Lays out one row. Figures are right-aligned so their digits line up and a
- * column can be scanned for the expensive one; text is left-aligned.
+ * column can be scanned for the expensive one; text is left-aligned. Cost
+ * leads them, because it is the column the eye should land on first.
  */
-function tableRow(left: string, cells: WeekCells, widths: Widths): string {
-  const figures = [
-    padLeft(cells.turns, widths.turns),
-    padLeft(cells.tokens, widths.tokens),
-    padLeft(cells.empty, widths.empty),
-  ].join(COLUMN_GAP);
+function tableRow(left: string, cells: WeekCells, widths: Widths, tokens: boolean): string {
+  const columns = [padLeft(cells.cost, widths.cost), padLeft(cells.turns, widths.turns)];
+  if (tokens) {
+    columns.push(padLeft(cells.tokens, widths.tokens));
+  }
+  columns.push(padLeft(cells.empty, widths.empty));
+
   // The outcome column is last and never padded: trailing spaces would show up
   // as an overlong rule on a struck-through row.
   const tail = cells.outcome === "" ? "" : `${COLUMN_GAP}${cells.outcome}`;
-  return `${INDENT}${left}${COLUMN_GAP}${figures}${tail}`;
+  return `${INDENT}${left}${COLUMN_GAP}${columns.join(COLUMN_GAP)}${tail}`;
 }
 
-function sessionRow(cells: WeekCells, widths: Widths): string {
+function sessionRow(cells: WeekCells, widths: Widths, tokens: boolean): string {
   const left = `${padRight(cells.when, widths.when)}${COLUMN_GAP}${padRight(cells.intent, widths.intent)}`;
-  return tableRow(left, cells, widths);
+  return tableRow(left, cells, widths, tokens);
 }
 
 /** The totals row, whose label runs across the time and intent columns. */
-function totalsRow(cells: WeekCells, widths: Widths): string {
+function totalsRow(cells: WeekCells, widths: Widths, tokens: boolean): string {
   const span = widths.when + COLUMN_GAP.length + widths.intent;
-  return tableRow(padRight(cells.when, span), cells, widths);
+  return tableRow(padRight(cells.when, span), cells, widths, tokens);
 }
 
 function measure(rows: readonly WeekCells[], totals: WeekCells): Widths {
   return {
     when: WHEN_WIDTH,
     intent: widest([HEADINGS.intent, ...rows.map((row) => row.intent)]),
+    cost: widest([HEADINGS.cost, totals.cost, ...rows.map((row) => row.cost)]),
     turns: widest([HEADINGS.turns, totals.turns, ...rows.map((row) => row.turns)]),
     tokens: widest([HEADINGS.tokens, totals.tokens, ...rows.map((row) => row.tokens)]),
     empty: widest([HEADINGS.empty, totals.empty, ...rows.map((row) => row.empty)]),
@@ -251,6 +338,18 @@ function measure(rows: readonly WeekCells[], totals: WeekCells): Widths {
 
 function sum(sessions: readonly Session[], of: (session: Session) => number): number {
   return sessions.reduce((running, session) => running + of(session), 0);
+}
+
+/** The filter in words, or undefined when the week was not narrowed at all. */
+export function describeFilter(filter: SessionFilter): string | undefined {
+  const parts: string[] = [];
+  if (filter.client !== undefined) {
+    parts.push(`client ${filter.client}`);
+  }
+  if (filter.project !== undefined) {
+    parts.push(`project ${filter.project}`);
+  }
+  return parts.length > 0 ? parts.join(", ") : undefined;
 }
 
 /**
@@ -265,17 +364,29 @@ export function formatWeek(
   sessions: readonly Session[],
   days: number,
   palette: Palette = terminalPalette,
+  filter: SessionFilter = {},
+  view: View = {},
 ): string[] {
+  // A filtered table with nothing saying so is a table that lies by omission:
+  // the totals are a subset, and nothing on the page admits it.
+  const narrowed = describeFilter(filter);
+
   if (sessions.length === 0) {
-    return ["", `${INDENT}No sessions in the last ${plural(days, "day", "days")}`];
+    const window = `No sessions in the last ${plural(days, "day", "days")}`;
+    return ["", `${INDENT}${window}${narrowed ? ` for ${narrowed}` : ""}`];
   }
 
-  const rows = sessions.map(cellsFor);
+  const rates = view.rates ?? NO_RATES;
+  const showTokens = view.tokens === true;
+
+  const rows = sessions.map((session) => cellsFor(session, rates));
   const turns = sum(sessions, (session) => session.cost.turns);
   const empty = sum(sessions, (session) => session.cost.emptyTurns);
+  const spend = spendOf(sessions, rates);
   const totals: WeekCells = {
     when: plural(sessions.length, "session", "sessions"),
     intent: "",
+    cost: spend.usd > 0 ? formatUsd(spend.usd) : NO_PRICE,
     turns: figure(turns),
     tokens: figure(sum(sessions, (session) => totalTokens(session.cost))),
     empty: figure(empty),
@@ -283,14 +394,37 @@ export function formatWeek(
   };
 
   const widths = measure(rows, totals);
-  const lines = ["", palette.dim(sessionRow(HEADINGS, widths))];
+  const lines = [""];
+  if (narrowed) {
+    lines.push(palette.dim(`${INDENT}only ${narrowed}`));
+  }
+  lines.push(palette.dim(sessionRow(HEADINGS, widths, showTokens)));
 
   for (const [index, session] of sessions.entries()) {
-    const row = sessionRow(rows[index] as WeekCells, widths);
+    const row = sessionRow(rows[index] as WeekCells, widths, showTokens);
     lines.push(session.outcome === "abandoned" ? palette.struck(row) : row);
   }
 
-  lines.push("", totalsRow(totals, widths));
+  lines.push("", totalsRow(totals, widths, showTokens));
+
+  // The sentence the table is for. Everything that did not merge is money
+  // still owed an outcome, which is a different question from the turn counts
+  // below it — a productive session that nobody shipped wasted all of itself.
+  if (spend.usd > 0) {
+    lines.push(
+      `${INDENT}${formatUsd(spend.usd)} spent, ${formatUsd(spend.unmerged)} of it on ` +
+        "changes that never merged",
+    );
+  }
+  if (spend.unpriced > 0) {
+    // Said out loud, because the total above is a total of the rest.
+    lines.push(
+      palette.dim(
+        `${INDENT}${plural(spend.unpriced, "session", "sessions")} unpriced: ` +
+          `${spend.unpricedModels.join(", ")} — add rates to ${RATES_HINT}`,
+      ),
+    );
+  }
   if (turns > 0) {
     lines.push(
       palette.dim(`${INDENT}${figure(empty)} of ${plural(turns, "turn", "turns")} changed no files`),

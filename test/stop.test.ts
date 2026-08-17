@@ -12,7 +12,7 @@ import {
   stopSession,
   type StopOptions,
 } from "../src/commands/stop.js";
-import { getOpenSession, readSessions, zeroCost } from "../src/store.js";
+import { getOpenSession, readSessions, zeroCost, zeroTokens } from "../src/store.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -175,6 +175,40 @@ describe("stopSession", () => {
       apiCalls: 41,
       callsWithoutEdits: 30,
       model: "claude-opus-5",
+      // The stub reports no split, so the empty-turn counters stay at nothing
+      // rather than taking a share of the total it did report.
+      emptyTurnTokens: zeroTokens(),
+    });
+  });
+
+  it("records what an adapter says the wasted turns cost", async () => {
+    await startSession("spend some tokens", options);
+
+    const stopped = await stopSession({
+      ...options,
+      adapters: [
+        {
+          name: "stub",
+          isAvailable: async () => true,
+          capture: async () => ({
+            ...zeroCost(),
+            inputTokens: 1_000,
+            outputTokens: 500,
+            turns: 3,
+            emptyTurns: 1,
+            apiCalls: 4,
+            model: "claude-opus-5",
+            emptyTurnTokens: { ...zeroTokens(), inputTokens: 400, outputTokens: 100 },
+          }),
+        },
+      ],
+    });
+
+    expect(stopped.cost.emptyTurnTokens).toEqual({
+      inputTokens: 400,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      outputTokens: 100,
     });
   });
 

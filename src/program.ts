@@ -5,7 +5,9 @@ import {
   uninstallHook,
   type HookOptions,
 } from "./commands/hook.js";
+import { formatConfig, setConfig, showConfig } from "./commands/config.js";
 import { formatKey, showKey } from "./commands/key.js";
+import { formatMark, formatSettle, markSession, settleSessions } from "./commands/settle.js";
 import { showSession } from "./commands/show.js";
 import { formatStarted, startSession } from "./commands/start.js";
 import { formatStopped, stopIfOpen, stopSession, type StopOptions } from "./commands/stop.js";
@@ -16,10 +18,14 @@ import {
   parseDays,
   weekSessions,
   writeWeekPage,
+  type SessionFilter,
   type WeekOptions,
 } from "./commands/week.js";
+import { parseOutcome } from "./outcome.js";
+import { loadRates } from "./pricing.js";
 import { renderWeek } from "./render/html.js";
-import { formatSession, formatWeek } from "./render/terminal.js";
+import { formatSession, formatWeek, terminalPalette } from "./render/terminal.js";
+import { storeHome } from "./store.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
 export type ProgramOptions = StopOptions & WeekOptions & HookOptions;
@@ -67,9 +73,11 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .command("show")
     .description("Show the last closed session")
     .argument("[id]", "a session id, or an unambiguous prefix of one")
-    .action(async (id?: string) => {
+    .option("--tokens", "show the raw token counters as well as the cost")
+    .action(async (id: string | undefined, flags: { tokens?: boolean }) => {
       const session = await showSession(id, options);
-      for (const line of formatSession(session)) {
+      const view = { rates: await loadRates(storeHome(options)), tokens: flags.tokens };
+      for (const line of formatSession(session, terminalPalette, view)) {
         console.log(line);
       }
     });
@@ -78,24 +86,43 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .command("week")
     .description("Summarize recent sessions, one row each")
     .option("--days <n>", "how many days back to look", String(DEFAULT_DAYS))
+    .option("--client <name>", "only sessions recorded for this client")
+    .option("--project <name>", "only sessions recorded for this project")
+    .option("--outcome <state>", "only sessions that are open, merged, or abandoned")
+    .option("--tokens", "show the raw token counts as well as the cost")
     .option("--open", "write the week as an HTML page and open it")
-    .action(async (flags: { days?: string; open?: boolean }) => {
-      const days = parseDays(flags.days);
-      const sessions = await weekSessions(days, options);
+    .action(
+      async (flags: {
+        days?: string;
+        client?: string;
+        project?: string;
+        outcome?: string;
+        tokens?: boolean;
+        open?: boolean;
+      }) => {
+        const days = parseDays(flags.days);
+        const filter: SessionFilter = {
+          client: flags.client,
+          project: flags.project,
+          outcome: flags.outcome === undefined ? undefined : parseOutcome(flags.outcome),
+        };
+        const sessions = await weekSessions(days, options, filter);
+        const view = { rates: await loadRates(storeHome(options)), tokens: flags.tokens };
 
-      if (!flags.open) {
-        for (const line of formatWeek(sessions, days)) {
-          console.log(line);
+        if (!flags.open) {
+          for (const line of formatWeek(sessions, days, terminalPalette, filter, view)) {
+            console.log(line);
+          }
+          return;
         }
-        return;
-      }
 
-      // The path is printed before the browser is asked for, so a desktop that
-      // cannot open it still leaves the developer holding the page.
-      const file = await writeWeekPage(renderWeek(sessions, days), options);
-      console.log(`  wrote    ${file}`);
-      await openInBrowser(file, options);
-    });
+        // The path is printed before the browser is asked for, so a desktop
+        // that cannot open it still leaves the developer holding the page.
+        const file = await writeWeekPage(renderWeek(sessions, days, filter, view), options);
+        console.log(`  wrote    ${file}`);
+        await openInBrowser(file, options);
+      },
+    );
 
   program
     .command("verify")
@@ -111,6 +138,51 @@ export function buildProgram(options: ProgramOptions = {}): Command {
         // A broken log is a finding, not a crash: the report above is the
         // point. The exit code is there so a script can gate on it.
         process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("settle")
+    .description("Record where every finished session ended up, as a signed observation")
+    .action(async () => {
+      for (const line of formatSettle(await settleSessions(options))) {
+        console.log(line);
+      }
+    });
+
+  program
+    .command("mark")
+    .description("Say where a session ended up, overriding what the repo suggests")
+    .argument("<id>", "a session id, or an unambiguous prefix of one")
+    .argument("<outcome>", "merged or abandoned")
+    .action(async (id: string, outcome: string) => {
+      const settled = await markSession(id, parseOutcome(outcome), options);
+      for (const line of formatMark(settled)) {
+        console.log(line);
+      }
+    });
+
+  const config = program
+    .command("config")
+    .description("Attribution for this repo, in .session.json — checked in, shared by the team");
+
+  config
+    .command("set")
+    .description("Set an attribution field, recorded by every session from now on")
+    .argument("<key>", "client, project, sow, or billingCode")
+    .argument("<value>", "what to record; an empty value clears the field")
+    .action(async (key: string, value: string) => {
+      for (const line of formatConfig(await setConfig(key, value, options.cwd))) {
+        console.log(line);
+      }
+    });
+
+  config
+    .command("show")
+    .description("Print the attribution this repo declares")
+    .action(async () => {
+      for (const line of formatConfig(await showConfig(options.cwd))) {
+        console.log(line);
       }
     });
 

@@ -3,7 +3,14 @@ import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { readSessions, repoKey, type Session, type StoreOptions } from "../store.js";
+import { withOutcomes } from "../observe.js";
+import {
+  readSessions,
+  repoKey,
+  type Session,
+  type SessionOutcome,
+  type StoreOptions,
+} from "../store.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -36,6 +43,54 @@ export function parseDays(value?: string): number {
   return days;
 }
 
+/** Narrows the week to the work done for one client, one project, or one end. */
+export interface SessionFilter {
+  client?: string;
+  project?: string;
+  /** Where the work went, as computed now — not as the record happens to say. */
+  outcome?: SessionOutcome;
+}
+
+/** True when nothing is being filtered on. */
+export function isEmptyFilter(filter: SessionFilter): boolean {
+  return (
+    filter.client === undefined && filter.project === undefined && filter.outcome === undefined
+  );
+}
+
+/**
+ * Compares one attribution field.
+ *
+ * Case-insensitively, and ignoring surrounding space: the value was typed into
+ * a shared file by one person and typed again on the command line by another,
+ * and `--client acme` failing to find `Acme` would be a bug report every time.
+ * Exact otherwise — a substring match would quietly fold two clients whose
+ * names share a prefix into one invoice.
+ */
+function sameValue(recorded: string | undefined, wanted: string): boolean {
+  return recorded !== undefined && recorded.trim().toLowerCase() === wanted.trim().toLowerCase();
+}
+
+/**
+ * Whether a session belongs in a filtered week. A session with no attribution
+ * matches no filter: it does not say who it was for, and guessing on its
+ * behalf is how the wrong client gets billed.
+ */
+export function matchesFilter(session: Session, filter: SessionFilter): boolean {
+  if (filter.client !== undefined && !sameValue(session.attribution?.client, filter.client)) {
+    return false;
+  }
+  if (filter.project !== undefined && !sameValue(session.attribution?.project, filter.project)) {
+    return false;
+  }
+  // Compared against `session.outcome`, which by the time the filter runs has
+  // been replaced by the computed answer — see `withOutcomes`.
+  if (filter.outcome !== undefined && session.outcome !== filter.outcome) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * The sessions that started inside the window, oldest first — a rolling one,
  * not calendar days, so the week means the same thing whenever it is run.
@@ -46,10 +101,17 @@ export function parseDays(value?: string): number {
 export async function weekSessions(
   days: number = DEFAULT_DAYS,
   options: StoreOptions = {},
+  filter: SessionFilter = {},
 ): Promise<Session[]> {
   const sessions = await readSessions(options);
   const cutoff = Date.now() - days * DAY_MS;
-  return sessions.filter((session) => Date.parse(session.startedAt) >= cutoff);
+
+  // The window first, so the repository is only asked about the sessions that
+  // could appear. Outcomes next, because filtering on one means filtering on
+  // what is true now. Then the rest of the filter, over the resolved rows.
+  const inWindow = sessions.filter((session) => Date.parse(session.startedAt) >= cutoff);
+  const resolved = await withOutcomes(inWindow, options.cwd ?? process.cwd());
+  return resolved.filter((session) => matchesFilter(session, filter));
 }
 
 /**

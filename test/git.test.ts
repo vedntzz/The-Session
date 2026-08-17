@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { changedFilesSince, currentCommit, isRepo } from "../src/git.js";
+import {
+  changedFilesSince,
+  currentCommit,
+  defaultBranch,
+  endStateOf,
+  gatherRepoFacts,
+  isRepo,
+} from "../src/git.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -203,5 +210,165 @@ describe("changedFilesSince", () => {
     } finally {
       await rm(plain, { recursive: true, force: true });
     }
+  });
+});
+
+describe("defaultBranch", () => {
+  it("finds main", async () => {
+    await write("a.txt", "a");
+    const head = await commit("first");
+
+    await expect(defaultBranch(repo)).resolves.toEqual({ name: "main", tip: head });
+  });
+
+  it("finds master when there is no main", async () => {
+    await write("a.txt", "a");
+    await commit("first");
+    await git("branch", "-m", "main", "master");
+
+    await expect(defaultBranch(repo)).resolves.toMatchObject({ name: "master" });
+  });
+
+  it("prefers what origin says its default is", async () => {
+    await write("a.txt", "a");
+    await commit("first");
+    await git("branch", "release");
+    // A remote pointing at this same repo, with origin/HEAD naming `release`.
+    await git("remote", "add", "origin", repo);
+    await git("fetch", "-q", "origin");
+    await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/release");
+
+    await expect(defaultBranch(repo)).resolves.toMatchObject({ name: "origin/release" });
+  });
+
+  it("prefers the remote's main over a local one that has fallen behind", async () => {
+    await write("a.txt", "a");
+    await commit("first");
+    await git("remote", "add", "origin", repo);
+    await git("fetch", "-q", "origin");
+
+    await expect(defaultBranch(repo)).resolves.toMatchObject({ name: "origin/main" });
+  });
+
+  it("is undefined in a repo with no default branch at all", async () => {
+    await write("a.txt", "a");
+    await commit("first");
+    await git("branch", "-m", "main", "wip");
+
+    await expect(defaultBranch(repo)).resolves.toBeUndefined();
+  });
+
+  it("finds it from a subdirectory", async () => {
+    await write("packages/core/a.txt", "a");
+    await commit("first");
+
+    await expect(defaultBranch(path.join(repo, "packages", "core"))).resolves.toMatchObject({
+      name: "main",
+    });
+  });
+});
+
+describe("endStateOf", () => {
+  it("hashes the files as they are now", async () => {
+    await write("a.txt", "hello");
+    await commit("first");
+
+    const state = await endStateOf(["a.txt"], repo);
+
+    expect(state["a.txt"]).toBe(await git("hash-object", "a.txt"));
+  });
+
+  it("records a deleted file as null", async () => {
+    await write("a.txt", "hello");
+    await commit("first");
+    await rm(path.join(repo, "a.txt"));
+
+    await expect(endStateOf(["a.txt"], repo)).resolves.toEqual({ "a.txt": null });
+  });
+
+  it("records an untracked file, which is still something the session left", async () => {
+    await write("a.txt", "a");
+    await commit("first");
+    await write("new.txt", "brand new");
+
+    const state = await endStateOf(["new.txt"], repo);
+
+    expect(state["new.txt"]).toMatch(/^[0-9a-f]{40}$/);
+  });
+});
+
+describe("gatherRepoFacts", () => {
+  it("finds a blob anywhere in the branch's history, not only at the tip", async () => {
+    await write("a.txt", "first version");
+    await commit("first");
+    const buried = await git("hash-object", "a.txt");
+    await write("a.txt", "second version");
+    await commit("second");
+
+    const facts = await gatherRepoFacts(["a.txt"], repo);
+
+    expect(facts?.history.get("a.txt")?.has(buried)).toBe(true);
+  });
+
+  it("does not claim a blob that was never in the branch", async () => {
+    await write("a.txt", "committed");
+    await commit("first");
+    await write("a.txt", "only ever in the working tree");
+
+    const facts = await gatherRepoFacts(["a.txt"], repo);
+    const loose = await git("hash-object", "a.txt");
+
+    expect(facts?.history.get("a.txt")?.has(loose)).toBe(false);
+    expect(facts?.working.get("a.txt")).toBe(loose);
+  });
+
+  it("notes paths that are not at the tip, which is how a deletion lands", async () => {
+    await write("a.txt", "a");
+    await write("gone.txt", "gone");
+    await commit("first");
+    await rm(path.join(repo, "gone.txt"));
+    await commit("delete it");
+
+    const facts = await gatherRepoFacts(["a.txt", "gone.txt"], repo);
+
+    expect(facts?.absentAtTip.has("gone.txt")).toBe(true);
+    expect(facts?.absentAtTip.has("a.txt")).toBe(false);
+  });
+
+  it("reports null for a path with nothing in the working tree", async () => {
+    await write("a.txt", "a");
+    await commit("first");
+
+    const facts = await gatherRepoFacts(["never.txt"], repo);
+
+    expect(facts?.working.get("never.txt")).toBeNull();
+    expect(facts?.history.get("never.txt")?.size).toBe(0);
+  });
+
+  it("is undefined outside a repository", async () => {
+    const loose = await mkdtemp(path.join(tmpdir(), "session-loose-"));
+    try {
+      await expect(gatherRepoFacts(["a.txt"], loose)).resolves.toBeUndefined();
+    } finally {
+      await rm(loose, { recursive: true, force: true });
+    }
+  });
+
+  it("is undefined when there is no branch to judge against", async () => {
+    await write("a.txt", "a");
+    await commit("first");
+    await git("branch", "-m", "main", "wip");
+
+    await expect(gatherRepoFacts(["a.txt"], repo)).resolves.toBeUndefined();
+  });
+
+  it("names the branch and its tip, which is what an observation records", async () => {
+    await write("a.txt", "a");
+    const head = await commit("first");
+
+    await expect(gatherRepoFacts(["a.txt"], repo)).resolves.toMatchObject({
+      branch: "main",
+      tip: head,
+    });
   });
 });

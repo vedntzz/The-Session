@@ -1,11 +1,14 @@
+import type { SessionFilter } from "../commands/week.js";
+import { formatUsd, priceSession, spendOf, type RateTable } from "../pricing.js";
 import { totalTokens, type Session } from "../store.js";
-import { stamp } from "./terminal.js";
+import { describeFilter, stamp, type View } from "./terminal.js";
 
 /**
- * The page's whole palette. Two of these carry meaning — `primary` marks the
- * intent, `waste` marks what was spent for nothing — and the other three are
- * structure. Nothing else on the page is coloured, so a glance down the page
- * finds the intents and the waste and nothing competes with them.
+ * The page's whole palette. Two of these carry meaning — `primary` marks what
+ * a row is and what it cost, `waste` marks what was spent for nothing — and
+ * the other three are structure. Nothing else on the page is coloured, so a
+ * glance down it finds the intents, the money and the waste, and nothing
+ * competes with them.
  */
 const TOKENS = {
   ground: "#0A0B0C",
@@ -47,11 +50,28 @@ export function escapeHtml(text: string): string {
  * same height; below that a row would be too short to read, and an unreadable
  * row states its cost at the price of stating anything else.
  */
-export function rowHeight(tokens: number, heaviest: number): number {
+export function rowHeight(weight: number, heaviest: number): number {
   if (heaviest <= 0) {
     return MIN_ROW;
   }
-  return Math.max(MIN_ROW, Math.round((tokens / heaviest) * MAX_ROW));
+  return Math.max(MIN_ROW, Math.round((weight / heaviest) * MAX_ROW));
+}
+
+/**
+ * What a row's height is measured in: dollars when every session in the window
+ * has a price, tokens otherwise.
+ *
+ * Money is the truer axis — it is what the height is trying to say — but it
+ * only works when the whole window is on it. One unpriced session among priced
+ * ones would stand at the floor and read as cheap rather than as unknown, so
+ * the window falls back to the axis every session can be put on.
+ */
+function weigh(sessions: readonly Session[], rates: RateTable): number[] {
+  const prices = sessions.map((session) => priceSession(session.cost, rates));
+  if (prices.every((price) => price.priced)) {
+    return prices.map((price) => (price.priced ? price.usd : 0));
+  }
+  return sessions.map((session) => totalTokens(session.cost));
 }
 
 /**
@@ -107,11 +127,14 @@ h1 {
 .row {
   position: relative;
   display: grid;
-  grid-template-columns: 6.5rem minmax(8rem, 1fr) 4.5rem 8.5rem 10.5rem 6.5rem 5.5rem;
+  grid-template-columns: 6.5rem minmax(8rem, 1fr) 5rem 4.5rem 8.5rem 6.5rem 5.5rem;
   align-items: start;
   gap: 1.25rem;
   padding: 0.8rem 0.5rem 0 1.25rem;
   border-bottom: 1px solid var(--surface);
+}
+.with-tokens .row {
+  grid-template-columns: 6.5rem minmax(8rem, 1fr) 5rem 4.5rem 8.5rem 10.5rem 6.5rem 5.5rem;
 }
 .row::before {
   content: "";
@@ -131,8 +154,10 @@ h1 {
   white-space: nowrap;
 }
 .figure { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cost { color: var(--primary); }
 .tokens { font-weight: 300; }
 .nocost { grid-column: span 3; }
+.with-tokens .nocost { grid-column: span 4; }
 .outcome { text-align: right; }
 .quiet { color: var(--muted); }
 .abandoned .intent { color: var(--muted); text-decoration: line-through; }
@@ -154,17 +179,23 @@ function styleSheet(wasteful: boolean): string {
 }
 
 /** The cost cells, or one dash when there was no cost to capture. */
-function costCells(session: Session): string {
+function costCells(session: Session, rates: RateTable, tokens: boolean): string {
   if (uncosted(session)) {
     return `<span class="figure nocost quiet">—</span>`;
   }
 
   const { turns, emptyTurns } = session.cost;
+  const price = priceSession(session.cost, rates);
+  const raw = tokens
+    ? `<span class="figure tokens">${escapeHtml(figure(totalTokens(session.cost)))} tokens</span>`
+    : "";
+
   return (
+    `<span class="figure cost">${escapeHtml(price.priced ? formatUsd(price.usd) : "—")}</span>` +
     `<span class="figure turns">${escapeHtml(plural(turns, "turn", "turns"))}</span>` +
     `<span class="figure empty ${hue(emptyTurns)}">` +
     `${escapeHtml(figure(emptyTurns))} without edits</span>` +
-    `<span class="figure tokens">${escapeHtml(figure(totalTokens(session.cost)))} tokens</span>`
+    raw
   );
 }
 
@@ -180,14 +211,20 @@ function driftCell(session: Session): string {
   return `<span class="figure drift ${hue(count)}"${paths}>${escapeHtml(figure(count))} outside</span>`;
 }
 
-function renderRow(session: Session, heaviest: number): string {
+function renderRow(
+  session: Session,
+  weight: number,
+  heaviest: number,
+  rates: RateTable,
+  tokens: boolean,
+): string {
   const classes = session.outcome === "abandoned" ? "row abandoned" : "row";
 
   return (
-    `<li class="${classes}" style="height:${rowHeight(totalTokens(session.cost), heaviest)}px">` +
+    `<li class="${classes}" style="height:${rowHeight(weight, heaviest)}px">` +
     `<span class="when">${escapeHtml(stamp(session.startedAt))}</span>` +
     `<span class="intent">${escapeHtml(session.intent)}</span>` +
-    costCells(session) +
+    costCells(session, rates, tokens) +
     driftCell(session) +
     `<span class="outcome">${escapeHtml(session.outcome)}</span>` +
     `</li>`
@@ -198,10 +235,13 @@ function sum(sessions: readonly Session[], of: (session: Session) => number): nu
   return sessions.reduce((running, session) => running + of(session), 0);
 }
 
-function renderBody(sessions: readonly Session[], window: string): string {
+function renderBody(sessions: readonly Session[], window: string, view: View): string {
   if (sessions.length === 0) {
     return `<p class="nothing">No sessions in the last ${escapeHtml(window)}</p>`;
   }
+
+  const rates = view.rates ?? new Map();
+  const showTokens = view.tokens === true;
 
   const turns = sum(sessions, (session) => session.cost.turns);
   const empty = sum(sessions, (session) => session.cost.emptyTurns);
@@ -209,12 +249,16 @@ function renderBody(sessions: readonly Session[], window: string): string {
   // Summed per session, so the rows add up to the total. A file that drifted
   // in two sessions drifted twice.
   const drift = sum(sessions, (session) => session.drift.length);
-  const heaviest = Math.max(...sessions.map((session) => totalTokens(session.cost)));
+  const spend = spendOf(sessions, rates);
+
+  const weights = weigh(sessions, rates);
+  const heaviest = Math.max(...weights);
 
   const counted = [
     plural(sessions.length, "session", "sessions"),
+    ...(spend.usd > 0 ? [formatUsd(spend.usd)] : []),
     plural(turns, "turn", "turns"),
-    `${figure(tokens)} tokens`,
+    ...(showTokens ? [`${figure(tokens)} tokens`] : []),
   ]
     .map(escapeHtml)
     .join(" · ");
@@ -222,16 +266,28 @@ function renderBody(sessions: readonly Session[], window: string): string {
     `<p class="summary">${counted} · ` +
     `<span class="${hue(drift)}">${escapeHtml(figure(drift))} outside</span></p>`;
 
-  const waste =
-    turns > 0
-      ? `<footer><p><span class="${hue(empty)}">${escapeHtml(figure(empty))}</span> of ` +
-        `${escapeHtml(plural(turns, "turn", "turns"))} changed no files</p></footer>`
+  // Not in the waste hue. Red is for money that is definitely gone, and most
+  // of this figure is work that has simply not landed yet.
+  const spent =
+    spend.usd > 0
+      ? `<p>${escapeHtml(formatUsd(spend.usd))} spent, ` +
+        `${escapeHtml(formatUsd(spend.unmerged))} of it on changes that never merged</p>`
       : "";
+  const wasted =
+    turns > 0
+      ? `<p><span class="${hue(empty)}">${escapeHtml(figure(empty))}</span> of ` +
+        `${escapeHtml(plural(turns, "turn", "turns"))} changed no files</p>`
+      : "";
+  const footer = spent || wasted ? `<footer>${spent}${wasted}</footer>` : "";
 
   return (
     summary +
-    `<ol class="week">${sessions.map((session) => renderRow(session, heaviest)).join("")}</ol>` +
-    waste
+    `<ol class="week${showTokens ? " with-tokens" : ""}">` +
+    sessions
+      .map((session, index) => renderRow(session, weights[index] ?? 0, heaviest, rates, showTokens))
+      .join("") +
+    `</ol>` +
+    footer
   );
 }
 
@@ -248,10 +304,19 @@ function isWasteful(sessions: readonly Session[]): boolean {
  * happens to be opened by a browser, and it stays readable with the network
  * unplugged.
  */
-export function renderWeek(sessions: readonly Session[], days: number): string {
+export function renderWeek(
+  sessions: readonly Session[],
+  days: number,
+  filter: SessionFilter = {},
+  view: View = {},
+): string {
   const window = plural(days, "day", "days");
-  const heading = `The last ${window}`;
-  const title = `session — the last ${window}`;
+  // The same reason the terminal says so: a filtered page whose heading does
+  // not admit it is a page whose totals mean something other than they look.
+  const narrowed = describeFilter(filter);
+  const suffix = narrowed ? `, ${narrowed}` : "";
+  const heading = `The last ${window}${suffix}`;
+  const title = `session — the last ${window}${suffix}`;
 
   return [
     "<!doctype html>",
@@ -265,7 +330,7 @@ export function renderWeek(sessions: readonly Session[], days: number): string {
     "<body>",
     "<main>",
     `<h1>${escapeHtml(heading)}</h1>`,
-    renderBody(sessions, window),
+    renderBody(sessions, `${window}${suffix}`, view),
     "</main>",
     "</body>",
     "</html>",

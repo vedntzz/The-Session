@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { dominant, mergeCosts, NO_COST } from "../src/capture/adapter.js";
 import { createClaudeCodeAdapter } from "../src/capture/adapters/claude-code.js";
 import { captureCost } from "../src/capture/index.js";
-import { totalTokens, zeroCost } from "../src/store.js";
+import { totalTokens, zeroCost, zeroTokens } from "../src/store.js";
 
 let root: string;
 let projects: string;
@@ -335,6 +335,50 @@ describe("turn segmentation", () => {
     // The per-call view of the same transcript is much coarser.
     expect(cost.apiCalls).toBe(5);
     expect(cost.callsWithoutEdits).toBe(4);
+  });
+
+  it("counts what the empty turns cost, not what share of the turns they were", async () => {
+    await transcript("a", [
+      // One cheap productive turn.
+      prompt(at(1)),
+      assistant({ requestId: "req_1", timestamp: at(2), tool: "Edit", tokens: { input: 100 } }),
+      // One expensive turn that wrote nothing: half the turns, most of the money.
+      prompt(at(3)),
+      assistant({
+        requestId: "req_2",
+        timestamp: at(4),
+        tool: "Read",
+        tokens: { input: 900, cacheRead: 50_000, cacheWrite: 2_000, output: 300 },
+      }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+
+    expect(cost.emptyTurns).toBe(1);
+    expect(cost.emptyTurnTokens).toEqual({
+      inputTokens: 900,
+      cacheReadTokens: 50_000,
+      cacheCreationTokens: 2_000,
+      outputTokens: 300,
+    });
+    // Half the turns were empty; 98% of the tokens went on them.
+    expect(totalTokens(cost.emptyTurnTokens ?? zeroTokens())).toBeGreaterThan(
+      totalTokens(cost) * 0.9,
+    );
+  });
+
+  it("credits the whole of a productive turn, including the calls that wrote nothing", async () => {
+    await transcript("a", [
+      prompt(at(1)),
+      assistant({ requestId: "req_1", timestamp: at(2), tool: "Read", tokens: { input: 500 } }),
+      assistant({ requestId: "req_2", timestamp: at(3), tool: "Edit", tokens: { input: 100 } }),
+    ]);
+
+    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
+
+    // The reading was part of getting the edit written. It is not waste.
+    expect(cost.callsWithoutEdits).toBe(1);
+    expect(cost.emptyTurnTokens).toEqual(zeroTokens());
   });
 
   it("segments in timestamp order even when lines are out of order", async () => {

@@ -734,3 +734,32 @@ describe("formatVerify, on a log from elsewhere", () => {
     expect(lines[2]).toBe(`  claims  ${fingerprint} signed it — the key to ask for`);
   });
 });
+
+describe("attribution is covered by the signature", () => {
+  it("catches a record rebilled to another client", async () => {
+    await appendSession(
+      { ...started("add rate limiting"), attribution: { client: "Acme" } },
+      options,
+    );
+    const lines = await logLines();
+    const record = JSON.parse(lines[0]!);
+    record.set.attribution.client = "Globex";
+    await writeLines([JSON.stringify(record)]);
+
+    await expect(verifyLog(options)).resolves.toMatchObject({
+      check: { break: { line: 1, kind: "hash" } },
+    });
+  });
+
+  it("catches attribution added to a record that never had any", async () => {
+    await appendSession(started("add rate limiting"), options);
+    const lines = await logLines();
+    const record = JSON.parse(lines[0]!);
+    record.set.attribution = { client: "Acme", billingCode: "INVENTED" };
+    await writeLines([JSON.stringify(record)]);
+
+    await expect(verifyLog(options)).resolves.toMatchObject({
+      check: { break: { line: 1, kind: "hash" } },
+    });
+  });
+});

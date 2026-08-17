@@ -24,9 +24,15 @@
 ```
 src/
   cli.ts           command registration
-  commands/        start.ts stop.ts show.ts week.ts verify.ts key.ts
+  commands/        start.ts stop.ts show.ts week.ts verify.ts key.ts config.ts
+                   settle.ts
   capture/         hook.ts, adapters/claude-code.ts
   store.ts         JSONL read/append
+  config.ts        .session.json at the repo root — attribution, checked in
+  outcome.ts       merged/abandoned/open from repo facts, pure
+  observe.ts       gathers those facts and applies them to sessions
+  pricing.ts       tokens to dollars; loads rates.json, pure above that
+rates.json         bundled prices, per model, per million tokens
   chain.ts         canonical JSON, record and line hashes
   keys.ts          Ed25519 keypair at ~/.session/keys/, sign and verify
   verify.ts        the chain walk, pure
@@ -50,16 +56,37 @@ type Session = {
   startedAt: string
   endedAt: string | null
   startCommit: string
+  attribution?: Attribution   // client/project/sow/billingCode, copied from
+                              // .session.json at start. A copy, not a
+                              // reference, and not patchable — who was billed
+                              // is decided before the work, like intent.
+  endState?: Record<string, string | null>
+                              // blob id of each reality path as the session
+                              // left it, captured at stop; null = deleted.
+                              // A fact, like reality. Without it there is
+                              // nothing to go looking for later.
+  observations?: Observation[]  // where it was seen to end up. Never the
+                              // basis for display — see below.
 }
 
-type SessionCost = {
+type Observation = {
+  outcome: SessionOutcome
+  observedAt: string          // when it was looked at
+  commit: string              // the default branch's tip that day
+  branch: string              // what it was judged against
+  source: 'computed' | 'manual'
+}
+
+type TokenCounts = {
   // Four counters, never one sum: each bills at a different rate, so a total
   // cannot be converted back into money.
   inputTokens: number
   cacheReadTokens: number
   cacheCreationTokens: number
   outputTokens: number
+}
 
+type SessionCost = TokenCounts & {
   // Turns are prompts; calls are what each prompt set off. Both are kept:
   // turns are the honest unit for "how much of this produced nothing",
   // calls are what the transcript measures directly.
@@ -69,8 +96,60 @@ type SessionCost = {
   callsWithoutEdits: number
 
   model: string                  // the model that did the most calls
+
+  emptyTurnTokens?: TokenCounts  // the same four counters, restricted to the
+                                 // turns that wrote no files. Counted at
+                                 // capture, where which turn a call belonged
+                                 // to is still known. Absent on sessions
+                                 // captured before it existed; nothing infers
+                                 // it. See below.
 }
 ```
+
+## Outcome
+
+`outcome` on a stored record is not what any view shows. `show` and `week` run
+`withOutcomes`, which replaces the field in memory with what the repository says
+right now; the field on disk is only ever what `settle` or `mark` last wrote,
+for the benefit of whoever reads the raw JSONL. Don't "simplify" this by reading
+the stored field — a session merges long after it stopped, and nothing tells
+the tool when.
+
+Merged is decided on **content**, never on commit shas. A squash merge keeps
+none of the branch's commits and a rebase rewrites all of them, so
+`branch --contains` reports nearly every merged session as abandoned. The test
+is whether the blob the session left is at that path anywhere in the default
+branch's history. That is what `endState` is for.
+
+A manual `mark` outranks the computation permanently — it can see renames,
+reverts and other repos, and the computation cannot. A `computed` observation
+never outranks a fresh computation.
+
+Note this stays inside invariant 3: it is all git plumbing and hashes. No
+model is asked whether the work "really" shipped.
+
+## Cost in money
+
+`pricing.ts` is the only file that knows a price. Everything above `loadRates`
+is pure: `priceTokens`, `rateFor`, `priceSession`, `spendOf`, `formatUsd`.
+
+Prices are **data**, not code — `rates.json` beside the package, merged entry by
+entry with `~/.session/rates.json` if there is one. A model in neither is
+reported unpriced, with its tokens and its name. Never price an unknown model at
+the nearest model's rate: the figure goes on invoices, and an admitted gap beats
+a plausible wrong number. Match exactly, or by the longest key that is a prefix
+**at a dash** — transcripts report dated ids, and without the dash
+`claude-opus-4` would price `claude-opus-45`.
+
+`emptyTurnTokens` is measured, not apportioned. The adapter knows which turn
+each call belonged to, so it adds the empty turns' tokens up directly; taking
+the session total times `emptyTurns / turns` would look like a measurement and
+would not be one. Empty turns are not average turns — the expensive one is the
+whole point. Don't "simplify" this into a ratio, and don't backfill it onto
+records that predate it.
+
+Note this stays inside invariant 3 too: it is multiplication by a number in a
+file. Nothing is asked to judge whether the money was well spent.
 
 ## The line on disk
 
@@ -121,7 +200,17 @@ your own key would report a mismatch that means nothing.
 
 ## Don't
 
-- Don't add config files or a `session config` command in v1.
+- Don't let `session config` grow past attribution. It exists for one reason:
+  who the work was for is a fact about the repo and the team, so it lives in a
+  checked-in `.session.json` where everyone spells the client the same way.
+  (This replaces a flat "no config files in v1"; the ban held until attribution
+  needed a home that a team could share.)
+- Don't let `~/.session/rates.json` become a settings file. It holds prices and
+  nothing else: what a model costs is a fact about a bill, and the bundled
+  numbers go stale the moment a vendor moves them, so somebody has to be able to
+  correct them without waiting for a release. Anything about how *you* like the
+  tool to behave is not this and still belongs nowhere. There is no user-level
+  config, no `--format`, no default flags file.
 - Don't build a spec language. Scope is a list of path prefixes, matched at directory boundaries.
 - Don't add telemetry of any kind.
 - Don't add a knowledge graph, a web server, or a dashboard. Those are week-two questions.

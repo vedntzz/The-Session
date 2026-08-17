@@ -1,3 +1,4 @@
+import { attributionValues, hasAttribution, readConfig } from "../config.js";
 import { changedFilesSince, currentCommit, isRepo } from "../git.js";
 import { appendSession, getOpenSession, type Session, type StoreOptions } from "../store.js";
 
@@ -51,6 +52,11 @@ export async function startSession(intent: string, options: StartOptions = {}): 
   // is what lets `stop` subtract it back out.
   const baseline = await changedFilesSince(startCommit, cwd);
 
+  // Read once, here, and copied into the record. A session says who it was for
+  // at the time it ran, so editing `.session.json` today cannot change who
+  // last quarter was billed to.
+  const attribution = await readConfig(cwd);
+
   return appendSession(
     {
       intent: declared,
@@ -58,16 +64,27 @@ export async function startSession(intent: string, options: StartOptions = {}): 
       startCommit,
       scope: normalizeScope(options.scope),
       baseline,
+      ...(hasAttribution(attribution) ? { attribution } : {}),
     },
     options,
   );
 }
 
-/** The two lines `session start` prints on success. */
-export function formatStarted(session: Session): [string, string] {
+/**
+ * The lines `session start` prints on success. The third appears only when the
+ * repo declares attribution — silent confirmation that `.session.json` was
+ * found and what it said, since nothing else would tell the developer.
+ */
+export function formatStarted(session: Session): string[] {
   const scope = session.scope.length > 0 ? session.scope.join("  ") : "none declared";
-  return [
+  const lines = [
     `  started  ${session.intent}  (head ${session.startCommit.slice(0, 7)})`,
     `  scope    ${scope}`,
   ];
+
+  const declared = attributionValues(session.attribution);
+  if (declared.length > 0) {
+    lines.push(`  for      ${declared.join("  ")}`);
+  }
+  return lines;
 }
