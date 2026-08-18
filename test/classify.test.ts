@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   CLASS_RULES,
+  INTENT_RULES,
   SESSION_CLASSES,
   classOf,
   classOfPath,
+  classifyIntent,
   classifyPaths,
   parseClass,
 } from "../src/classify.js";
@@ -39,9 +41,47 @@ describe("the rule table", () => {
   );
 
   it("uses only classes that exist", () => {
-    for (const rule of CLASS_RULES) {
+    for (const rule of [...CLASS_RULES, ...INTENT_RULES]) {
       expect(SESSION_CLASSES).toContain(rule.class);
     }
+  });
+});
+
+describe("the intent table", () => {
+  // The same check the path table gets: every example the table claims has to
+  // come out as the class it is filed under.
+  it.each(INTENT_RULES.map((rule) => [rule.example, rule.class] as const))(
+    "reads %o as %s",
+    (example, expected) => {
+      expect(classifyIntent(example)).toBe(expected);
+    },
+  );
+});
+
+describe("classifyIntent", () => {
+  it("falls back to other when nothing in the sentence says what it is", () => {
+    expect(classifyIntent("make the thing faster")).toBe("other");
+    expect(classifyIntent("")).toBe("other");
+  });
+
+  it("ignores case, since an intent is a sentence somebody typed", () => {
+    expect(classifyIntent("Add a Column to the Orders table")).toBe("schema");
+  });
+
+  it("matches whole words only", () => {
+    // "portable" ends in "table" and "rapid" starts with "api".
+    expect(classifyIntent("make the config portable")).toBe("config");
+    expect(classifyIntent("rapid prototype of the thing")).toBe("other");
+  });
+
+  it("takes the plural as readily as the singular", () => {
+    expect(classifyIntent("add two endpoints")).toBe("api");
+    expect(classifyIntent("write the migrations")).toBe("schema");
+  });
+
+  it("reads a test as a test whatever it is a test of", () => {
+    // Both words are in the table; tests come first, as in the path rules.
+    expect(classifyIntent("add tests for the /orders endpoint")).toBe("test");
   });
 });
 

@@ -28,12 +28,15 @@ export const SESSION_CLASSES = [
 
 export type SessionClass = (typeof SESSION_CLASSES)[number];
 
-/** One line of the table: a class, what a path has to look like, and a case in point. */
+/** One line of a table: a class, what the text has to look like, and a case in point. */
 export interface ClassRule {
   class: SessionClass;
-  /** Tested against the lowercased path — `Dockerfile` needs no special case. */
+  /**
+   * Tested against the lowercased subject — a path for `CLASS_RULES`, the
+   * intent for `INTENT_RULES`. `Dockerfile` needs no special case.
+   */
   match: RegExp;
-  /** A path this rule is here for. Asserted in the tests, so it cannot go stale. */
+  /** Something this rule is here for. Asserted in the tests, so it cannot go stale. */
   example: string;
 }
 
@@ -77,6 +80,31 @@ export const CLASS_RULES: readonly ClassRule[] = [
   { class: "config", match: /(^|\/)\.[^/]+$/,                                                      example: ".gitignore" },
 ];
 
+/**
+ * The same table again, over the words of an intent rather than the paths of a
+ * result — for `session estimate`, which is asked before there are any paths.
+ *
+ * A weaker signal, and knowingly so: "clean up the orders table code" reads as
+ * schema work and may touch no schema at all. Nothing that has already run is
+ * ever classified this way — a session that stopped has `reality`, and paths
+ * beat words. This is only for the question asked in advance, which is why
+ * `estimate` takes `--scope` and prefers it when it is given.
+ *
+ * Same shape, same order as `CLASS_RULES`, same rule: first match wins, and
+ * anything unmatched is `other`. Keywords are whole words, so "portable" is
+ * not a table and "rapid" is not an api.
+ */
+export const INTENT_RULES: readonly ClassRule[] = [
+  // class            an intent counts as this when it says                  e.g.
+  { class: "test",   match: /\b(tests?|testing|specs?|coverage)\b/,           example: "add coverage for the limiter" },
+  { class: "build",  match: /\b(ci|pipeline|docker|deploys?|release|build)\b/, example: "fix the flaky ci pipeline" },
+  { class: "docs",   match: /\b(docs?|documentation|readme|changelog)\b/,     example: "write the readme" },
+  { class: "schema", match: /\b(tables?|migrations?|columns?|schemas?)\b/,    example: "add a column to the orders table" },
+  { class: "api",    match: /\b(endpoints?|routes?|routing|apis?|handlers?)\b/, example: "rate limit the /orders endpoint" },
+  { class: "ui",     match: /\b(buttons?|pages?|styles?|styling|components?)\b/, example: "restyle the header component" },
+  { class: "config", match: /\b(configs?|configuration|settings)\b/,          example: "move the timeouts into config" },
+];
+
 /** What a path is called when no rule claims it. Not a rule: it matches nothing. */
 const UNMATCHED: SessionClass = "other";
 
@@ -94,6 +122,18 @@ export function classOfPath(file: string): SessionClass {
     return UNMATCHED;
   }
   return CLASS_RULES.find((rule) => rule.match.test(path))?.class ?? UNMATCHED;
+}
+
+/**
+ * Which class an intent reads as, before anything has been changed.
+ *
+ * Whole words over the lowercased text. A guess about work that has not
+ * happened yet, and it says so: `estimate` prints where the class came from,
+ * so a wrong one is visible rather than buried in the figures.
+ */
+export function classifyIntent(text: string): SessionClass {
+  const words = text.toLowerCase();
+  return INTENT_RULES.find((rule) => rule.match.test(words))?.class ?? UNMATCHED;
 }
 
 /** Table order, for breaking a tie the same way every time. */

@@ -25,12 +25,12 @@
 src/
   cli.ts           command registration
   commands/        start.ts stop.ts show.ts week.ts verify.ts key.ts config.ts
-                   settle.ts
+                   settle.ts estimate.ts
   capture/         hook.ts, adapters/claude-code.ts
   store.ts         JSONL read/append
   config.ts        .session.json at the repo root — attribution, checked in
   outcome.ts       merged/abandoned/open from repo facts, pure
-  classify.ts      schema/api/ui/test/config/docs/build/other from paths, pure
+  classify.ts      two rule tables — one over paths, one over intent text, pure
   observe.ts       gathers those facts and applies them to sessions
   pricing.ts       tokens to dollars; loads rates.json, pure above that
 rates.json         bundled prices, per model, per million tokens
@@ -152,8 +152,34 @@ depends on the stored field: the rules are pure and `reality` is on the record,
 so a session recorded before the field existed is classified from its paths and
 gets the same answer.
 
+`INTENT_RULES` is the same table over the words of an intent, for `estimate`,
+which is asked before there are any paths. It is the weaker signal and is only
+ever used on a question, never on a session that ran — anything that has
+stopped has `reality`, and paths beat words. Nothing merges the two: a class
+comes from one table or the other, and the command says which.
+
 Inside invariant 3: regular expressions over path strings. Nothing is asked what
 the code does.
+
+## Estimate
+
+`session estimate "<intent>"` answers it with past sessions of the same class:
+count, median, p90, how often they merged the first time anyone looked, and the
+paths that kept turning up as drift. The class comes from `--class` if it is
+given, else `--scope` through the path rules, else the intent through the
+keyword rules — and the output names which, so a wrong class is visible rather
+than buried in the figures.
+
+Nothing is projected. Every figure is a restatement of sessions that already
+ran, which is also why the sample is printed above the figures and why fewer
+than five sessions reports the count and nothing else — a median of two looks
+like knowledge and is not.
+
+The percentile is nearest-rank: p90 is an amount some session was actually
+billed, not one interpolated between two of them. "First time" means the first
+terminal observation on the record, or the outcome computed now for a session
+nobody has settled — a session abandoned and revived a month later merged, but
+it did not merge the first time.
 
 ## Cost in money
 

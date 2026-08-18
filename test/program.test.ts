@@ -221,12 +221,48 @@ describe("session", () => {
     await expect(run("stop")).rejects.toThrow(/No session is open/);
   });
 
-  it("registers exactly the ten subcommands", () => {
+  it("estimate reads the class off the intent and says so", async () => {
+    const lines = await run("estimate", "rate limit the /orders endpoint");
+
+    expect(lines[1]).toBe("  estimate  rate limit the /orders endpoint");
+    expect(lines[2]).toBe("  class     api         from the intent");
+    expect(lines[3]).toBe("  like it   0 sessions");
+  });
+
+  it("estimate prefers --scope over the words of the intent", async () => {
+    const lines = await run("estimate", "clean up the orders table code", "--scope", "src/ui/");
+
+    expect(lines[2]).toBe("  class     ui          from --scope");
+  });
+
+  it("estimate says nothing numeric until there are enough sessions", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    // a.txt is docs by the path rules, which is why --class says so here.
+    const lines = await run("estimate", "touch it again", "--class", "docs");
+
+    expect(lines[3]).toBe("  like it   1 session");
+    expect(lines[4]).toContain("fewer than 5 sessions");
+    expect(lines.join("\n")).not.toContain("median");
+  });
+
+  it("estimate refuses a --since it cannot read", async () => {
+    await expect(run("estimate", "x", "--since", "last tuesday")).rejects.toThrow(/--since takes/);
+  });
+
+  it("estimate refuses a class that is not one", async () => {
+    await expect(run("estimate", "x", "--class", "frontend")).rejects.toThrow(/not a class/);
+  });
+
+  it("registers exactly the eleven subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
     expect(names).toEqual([
       "config",
+      "estimate",
       "hook",
       "key",
       "mark",

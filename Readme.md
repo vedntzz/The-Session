@@ -49,6 +49,10 @@ Without it there is one entry in the ledger — what the machine produced — an
 | `session week --tokens` | Put the token column back beside the money. |
 | `session week --client <name>` | Only the sessions recorded for that client. `--project` likewise. |
 | `session week --outcome merged` | Only the sessions that ended up there. Also `abandoned`, `open`. |
+| `session week --class` | Add a column saying what each session was working on. |
+| `session week --class ui` | Only the sessions that were. Also `schema`, `api`, `test`, `config`, `docs`, `build`, `other`. |
+| `session estimate "<intent>"` | What sessions like this one have cost before. |
+| `session estimate "<intent>" --scope src/api/` | The same, classified on the paths you expect rather than the words. |
 | `session settle` | Write down where every finished session ended up, as a signed observation. |
 | `session mark <id> merged` | Say where one went, when the repo cannot know. Also `abandoned`. |
 | `session week --open` | The same week as an HTML page, in your browser. |
@@ -134,6 +138,51 @@ $ session week
 ```
 
 The tokens are still there under `--tokens`, and the total says how much of itself it could not account for. A guessed rate that ends up on an invoice is worse than an admitted gap.
+
+## What will this one cost?
+
+Every session is filed under what it was working on — `schema`, `api`, `ui`, `test`, `config`, `docs`, `build`, `other` — from the paths it changed. The rules are a table of path patterns at the top of `src/classify.ts`, in order, first match wins. No model is asked; if your repo is laid out differently, the fix is a line in that table.
+
+```
+$ session week --class
+
+  started      intent                class   cost  turns  empty  outcome
+  08-16 03:01  rate limit /orders    api    $6.19     14      3  merged
+  08-16 09:40  restyle the header    ui     $1.55      4      4  open
+```
+
+Which makes the question you actually have before starting answerable from your own history:
+
+```
+$ session estimate "rate limit the /orders endpoint"
+
+  estimate  rate limit the /orders endpoint
+  class     api         from the intent
+  like it   9 sessions
+
+  median    $7.43
+  p90       $14.85
+  merged    6 of 8 first time (75%), 1 still open
+  drift     src/store.ts      5 of 9
+            rates.json        2 of 9
+  unpriced  1 session ran on a model with no rate; the money above is the other 8
+```
+
+The class is read off the words unless you say better: `--scope src/api/` classifies on the paths you expect, which is the more reliable signal, and `--class api` settles it outright. Narrow the history with `--since 30d` or `--since 2026-05-20`.
+
+Nothing here is a projection. It is nine sessions that already ran, restated — which is why fewer than five of them prints the count and no figures at all:
+
+```
+$ session estimate "restyle the header component"
+
+  estimate  restyle the header component
+  class     ui          from the intent
+  like it   3 sessions
+  too few   nothing is estimated from fewer than 5 sessions
+            widen --since, or say --class if these were the wrong ones
+```
+
+A median of two is a number that looks like knowledge. The drift column is the part worth reading twice: those are the files your api sessions keep wandering into, and they are the ones to put in `--scope` this time.
 
 ## Did it ship?
 

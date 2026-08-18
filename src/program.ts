@@ -7,6 +7,7 @@ import {
   type HookOptions,
 } from "./commands/hook.js";
 import { formatConfig, setConfig, showConfig } from "./commands/config.js";
+import { estimateFor, formatEstimate, parseSince } from "./commands/estimate.js";
 import { formatKey, showKey } from "./commands/key.js";
 import { formatMark, formatSettle, markSession, settleSessions } from "./commands/settle.js";
 import { showSession } from "./commands/show.js";
@@ -134,6 +135,28 @@ export function buildProgram(options: ProgramOptions = {}): Command {
         const file = await writeWeekPage(renderWeek(sessions, days, filter, view), options);
         console.log(`  wrote    ${file}`);
         await openInBrowser(file, options);
+      },
+    );
+
+  program
+    .command("estimate")
+    .description("What sessions like this one have cost, from the ones already recorded")
+    .argument("<intent>", "what you are setting out to do")
+    .option("--scope <paths...>", "paths you expect to change — a better signal than the words")
+    .option("--class <name>", "the class to estimate from, when the words and paths get it wrong")
+    .option("--since <when>", "only sessions since a date (2026-05-20) or a span of days (30d)")
+    .action(
+      async (intent: string, flags: { scope?: string[]; class?: string; since?: string }) => {
+        const request = {
+          intent,
+          scope: flags.scope,
+          class: flags.class === undefined ? undefined : parseClass(flags.class),
+          since: flags.since === undefined ? undefined : parseSince(flags.since),
+        };
+        const rates = await loadRates(storeHome(options));
+        for (const line of formatEstimate(await estimateFor(request, rates, options))) {
+          console.log(line);
+        }
       },
     );
 
