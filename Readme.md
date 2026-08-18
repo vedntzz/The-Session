@@ -52,10 +52,11 @@ Without it there is one entry in the ledger — what the machine produced — an
 | `session week --class` | Add a column saying what each session was working on. |
 | `session week --class ui` | Only the sessions that were. Also `schema`, `api`, `test`, `config`, `docs`, `build`, `other`. |
 | `session estimate "<intent>"` | What sessions like this one have cost before. |
-| `session estimate "<intent>" --scope src/api/` | The same, classified on the paths you expect rather than the words. |
+| `session estimate "<intent>" --scope src/api/` | The same, classified on the paths you expect rather than the words. `--class api` settles it outright. |
+| `session week --open` | The same week as an HTML page, in your browser. |
+| `session estimate "<intent>" --since 30d` | Only the history since then. Also a date: `--since 2026-05-20`. |
 | `session settle` | Write down where every finished session ended up, as a signed observation. |
 | `session mark <id> merged` | Say where one went, when the repo cannot know. Also `abandoned`. |
-| `session week --open` | The same week as an HTML page, in your browser. |
 | `session config set client "Acme"` | Record who this repo's work is for. Also `project`, `sow`, `billingCode`. |
 | `session config show` | What this repo declares. |
 | `session hook install` | Close the session automatically when Claude Code ends one. `--uninstall` removes it. |
@@ -65,7 +66,7 @@ Without it there is one entry in the ledger — what the machine produced — an
 
 ## The record
 
-Six fields. Everything else is a query over them.
+Eight fields. Everything else is a query over them.
 
 - **intent** — what you said you were doing, in your own words. Written once, never editable.
 - **scope** — the files you expected to change. Path prefixes, matched at directory boundaries: `api/middleware/` covers everything beneath it, `api/order` never covers `api/orders.py`.
@@ -73,6 +74,7 @@ Six fields. Everything else is a query over them.
 - **reality** — the files that actually changed, less the baseline.
 - **cost** — four token counters, kept apart because cache reads, cache writes, input and output all bill differently; plus how much of the work produced nothing, and what those tokens came to in dollars.
 - **outcome** — merged, abandoned, or open. Worked out from the repository every time it is shown, not taken on trust from the record.
+- **class** — what the session was working on: schema, api, ui, test, config, docs, build, other. Read off the paths it changed, by a table of rules you can edit.
 - **attribution** — who the work was for: client, project, sow, billingCode. Optional, and captured at start from the repo rather than typed per session.
 
 Cost counts two ways, because they answer different questions. **Turns** are your prompts: one per thing you asked for. **API calls** are what each prompt set off — the reads, the greps, the edits. A turn that ends without touching a file is waste you can act on; a call that ends without touching a file is usually just the agent looking something up.
@@ -139,51 +141,6 @@ $ session week
 
 The tokens are still there under `--tokens`, and the total says how much of itself it could not account for. A guessed rate that ends up on an invoice is worse than an admitted gap.
 
-## What will this one cost?
-
-Every session is filed under what it was working on — `schema`, `api`, `ui`, `test`, `config`, `docs`, `build`, `other` — from the paths it changed. The rules are a table of path patterns at the top of `src/classify.ts`, in order, first match wins. No model is asked; if your repo is laid out differently, the fix is a line in that table.
-
-```
-$ session week --class
-
-  started      intent                class   cost  turns  empty  outcome
-  08-16 03:01  rate limit /orders    api    $6.19     14      3  merged
-  08-16 09:40  restyle the header    ui     $1.55      4      4  open
-```
-
-Which makes the question you actually have before starting answerable from your own history:
-
-```
-$ session estimate "rate limit the /orders endpoint"
-
-  estimate  rate limit the /orders endpoint
-  class     api         from the intent
-  like it   9 sessions
-
-  median    $7.43
-  p90       $14.85
-  merged    6 of 8 first time (75%), 1 still open
-  drift     src/store.ts      5 of 9
-            rates.json        2 of 9
-  unpriced  1 session ran on a model with no rate; the money above is the other 8
-```
-
-The class is read off the words unless you say better: `--scope src/api/` classifies on the paths you expect, which is the more reliable signal, and `--class api` settles it outright. Narrow the history with `--since 30d` or `--since 2026-05-20`.
-
-Nothing here is a projection. It is nine sessions that already ran, restated — which is why fewer than five of them prints the count and no figures at all:
-
-```
-$ session estimate "restyle the header component"
-
-  estimate  restyle the header component
-  class     ui          from the intent
-  like it   3 sessions
-  too few   nothing is estimated from fewer than 5 sessions
-            widen --since, or say --class if these were the wrong ones
-```
-
-A median of two is a number that looks like knowledge. The drift column is the part worth reading twice: those are the files your api sessions keep wandering into, and they are the ones to put in `--scope` this time.
-
 ## Did it ship?
 
 The last question about a session is the one nobody writes down: did any of it survive. `session show` and `session week` answer it by looking, every time they run.
@@ -236,6 +193,53 @@ session mark 487aa3ad merged
 ```
 
 That is written as a manual observation, and it wins — over the computation, and over any later `settle`. A person can see things the algorithm cannot.
+
+## What will this one cost?
+
+Every session is filed under what it was working on — `schema`, `api`, `ui`, `test`, `config`, `docs`, `build`, `other` — from the paths it changed. The rules are a table of path patterns at the top of `src/classify.ts`, in order, first match wins. No model is asked; if your repo is laid out differently, the fix is a line in that table.
+
+```
+$ session week --class
+
+  started      intent                class   cost  turns  empty  outcome
+  08-16 03:01  rate limit /orders    api    $6.19     14      3  merged
+  08-16 09:40  restyle the header    ui     $1.55      4      4  open
+```
+
+Which makes the question you actually have before starting answerable from your own history:
+
+```
+$ session estimate "rate limit the /orders endpoint"
+
+  estimate  rate limit the /orders endpoint
+  class     api         from the intent
+  like it   9 sessions
+
+  median    $7.43
+  p90       $14.85
+  merged    6 of 8 first time (75%), 1 still open
+  drift     src/store.ts      5 of 9
+            rates.json        2 of 9
+  unpriced  1 session ran on a model with no rate; the money above is the other 8
+```
+
+*First time* is the first time anyone looked: the first observation `settle` wrote, or the answer computed now for a session nobody has settled yet. A session that was abandoned, picked up again and landed a month later merged — but it did not merge the first time, and a rate that pretended otherwise would flatter every class in the table.
+
+The class is read off the words unless you say better: `--scope src/api/` classifies on the paths you expect, which is the more reliable signal, and `--class api` settles it outright. Narrow the history with `--since 30d` or `--since 2026-05-20`.
+
+Nothing here is a projection. It is nine sessions that already ran, restated — which is why fewer than five of them prints the count and no figures at all:
+
+```
+$ session estimate "restyle the header component"
+
+  estimate  restyle the header component
+  class     ui          from the intent
+  like it   3 sessions
+  too few   nothing is estimated from fewer than 5 sessions
+            widen --since, or say --class if these were the wrong ones
+```
+
+A median of two is a number that looks like knowledge. The drift column is the part worth reading twice: those are the files your api sessions keep wandering into, and they are the ones to put in `--scope` this time.
 
 ## Who the work was for
 
@@ -317,21 +321,13 @@ The fingerprint is a claim, not a proof. Someone who rewrites a log wholesale wi
 
 ## Agile for AI
 
-Five practices. The tool is the argument for them; you can adopt them without it.
-
-**1. Declare before you generate.** One sentence, before the agent runs. Not a ticket, not a spec — what you are trying to do.
-
-**2. Scope is declared, drift is recorded — not blocked.** Agents wander for good reasons. The failure isn't wandering, it's wandering unnoticed.
-
-**3. Count what produced nothing.** A turn that changes no files still costs money. Waste is a first-class number or it is invisible.
-
-**4. The session is the unit of work.** Not the ticket, not the sprint, not the line of code. The session is what you can actually reason about.
-
-**5. The record outlives the session.** Anything not written down at `stop` is gone. Understanding is the artifact; the code is a side effect.
+Five practices, written up in **[PRACTICES.md](PRACTICES.md)**: declare before you generate, record drift rather than blocking it, count what produced nothing, treat the session as the unit of work, and keep a record that outlives it. The tool is the argument for them; you can adopt them without it.
 
 ## Status
 
-v0.1. Capture works with Claude Code today. Cursor and Codex adapters are next.
+v0.2. Capture works with Claude Code today; Cursor and Codex adapters are next.
+
+New in this release: **dollars** everywhere tokens used to be, with prices as data you can correct; **outcome detection** that decides merged on content rather than commit shas, and `settle` to write the answer down; a **tamper-evident log** you can hand someone with `session verify --log … --key …`; and **`session estimate`**, which answers "what will this cost" from the sessions you already recorded.
 
 Issues and pull requests welcome — especially from anyone who has tried practice 1 for a week and can tell me whether it holds.
 

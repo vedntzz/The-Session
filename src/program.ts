@@ -43,7 +43,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program
     .name("session")
     .description("Record what an AI coding session declared, what it changed, and what it cost")
-    .version("0.1.0");
+    .version("0.2.0");
 
   program
     .command("start")

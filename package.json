@@ -1,6 +1,6 @@
 {
   "name": "@vedantzz/session",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A black box recorder for AI coding sessions: declare intent before the agent runs, record what actually changed and what it cost.",
   "keywords": [
     "ai",
@@ -22,8 +22,17 @@
   "files": [
     "dist/**/*.js",
     "dist/**/*.d.ts",
-    "rates.json"
+    "rates.json",
+    "PRACTICES.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vedntzz/The-Session.git"
+  },
+  "homepage": "https://github.com/vedntzz/The-Session#readme",
+  "bugs": {
+    "url": "https://github.com/vedntzz/The-Session/issues"
+  },
   "engines": {
     "node": ">=20"
   },
