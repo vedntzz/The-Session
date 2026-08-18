@@ -256,7 +256,21 @@ describe("session", () => {
     await expect(run("estimate", "x", "--class", "frontend")).rejects.toThrow(/not a class/);
   });
 
-  it("registers exactly the eleven subcommands", () => {
+  it("push refuses when the repo has no origin to publish to", async () => {
+    await run("start", "the thing");
+    await run("stop");
+
+    await expect(run("push")).rejects.toThrow(/No origin remote/);
+  });
+
+  it("peers says what to run when nothing has been shared yet", async () => {
+    await expect(run("peers")).resolves.toEqual([
+      "  peers    none yet",
+      "           session push publishes yours; session pull brings everyone else's",
+    ]);
+  });
+
+  it("registers exactly the fourteen subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
@@ -266,6 +280,9 @@ describe("session", () => {
       "hook",
       "key",
       "mark",
+      "peers",
+      "pull",
+      "push",
       "settle",
       "show",
       "start",
@@ -301,6 +318,38 @@ describe("session", () => {
 
     expect(lines.at(-1)).toMatch(/^ {2}chain {3}intact — 2 records, hashes and signatures/);
     expect(process.exitCode).toBeUndefined();
+  });
+
+  it("verify exits non-zero on a repo with nothing recorded in it", async () => {
+    try {
+      const lines = await run("verify");
+
+      expect(lines.at(-1)).toBe(
+        "  chain   no records — nothing was verified. Run session start to record one.",
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = undefined;
+    }
+  });
+
+  it("verify --peers exits non-zero when no chain has been pulled here", async () => {
+    try {
+      const lines = await run("verify", "--peers");
+
+      expect(lines[0]).toBe(
+        "  chains  none — nothing has been pulled into this repo, so nothing was checked",
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = undefined;
+    }
+  });
+
+  it("verify refuses --peers and --log together: they name different things", async () => {
+    await expect(run("verify", "--peers", "--log", "somewhere.jsonl")).rejects.toThrow(
+      /--peers checks the chains pulled into this repo/,
+    );
   });
 
   it("verify exits non-zero on a log that was edited", async () => {

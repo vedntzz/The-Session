@@ -62,7 +62,11 @@ Without it there is one entry in the ledger — what the machine produced — an
 | `session hook install` | Close the session automatically when Claude Code ends one. `--uninstall` removes it. |
 | `session verify` | Walk the log's hash chain and check every signature. Exits non-zero if anything was edited. |
 | `session verify --log <path> --key <pubkey>` | The same, for a log someone sent you. Reads nothing from `~/.session`. |
+| `session verify --peers` | Walk every chain pulled into this repo, key by key. Exits non-zero if any is broken — or if there is nothing to check. |
 | `session key show` | Print the public key, for anyone who wants to check your log themselves. |
+| `session push` | Publish your records to origin, on a ref of their own. Refuses a log that does not verify. |
+| `session pull` | Fetch everyone else's records. Nothing is merged into yours. |
+| `session peers` | The keys whose records are on this machine, with counts and dates. |
 
 ## The record
 
@@ -280,17 +284,32 @@ A record you can quietly edit afterwards is not a record. So each line carries t
 $ session verify
 
   log     41 records  /Users/you/.session/1f6c497ab2eb1fd5.jsonl
-  key     ed25519:af1c0907bd6402462cbe736232d0ac7a
+  key     ed25519:af1c0907bd6402462cbe736232d0ac7a, as the log claims
   chain   intact — 41 records, hashes and signatures check out
 ```
+
+Edit one line of that file and the same command says so, and exits non-zero:
 
 ```
 $ session verify
 
+  log     41 records  /Users/you/.session/1f6c497ab2eb1fd5.jsonl
+  key     ed25519:af1c0907bd6402462cbe736232d0ac7a, as the log claims
   broken  line 12 does not match the hash it carries — its contents were edited
   record  6a8c1c0f  2026-08-15T14:39:11.204Z
   chain   11 records verified before the break
 ```
+
+A log with nothing in it is not a pass either:
+
+```
+$ session verify
+
+  log     0 records  /Users/you/.session/1f6c497ab2eb1fd5.jsonl
+  chain   no records — nothing was verified. Run session start to record one.
+```
+
+That exits non-zero too. Nothing about an empty log contradicts itself, so a chain walk over it finds no fault — but it establishes nothing, and a tool whose whole job is evidence must not answer "verified" to a file it read nothing out of. The exit code is worth having only if a zero means somebody checked something.
 
 The keypair is generated on this machine the first time you record anything, and lives at `~/.session/keys/` with the private half at mode 0600. It is never transmitted — there is nowhere to transmit it to. `session key show` prints the public half.
 
@@ -311,13 +330,90 @@ Nothing under `~/.session` is opened, or created, along the way. With `--log` an
 ```
   key     not checked. Pass --key to check the signatures.
   claims  ed25519:af1c0907bd6402462cbe736232d0ac7a signed it — the key to ask for
+  chain   intact — 41 records, hashes check out
 ```
+
+Note what that last line does not say. Without a key the hashes are checked and the signatures are not, and it reports exactly the half it did.
 
 That fingerprint is inside each record's hash, so it cannot be swapped out without breaking the record. Two things follow. If you were told a fingerprint in advance, you can see whether you were handed a log signed by something else. And a key that changes partway through a log — the mark of records appended from somewhere else — is caught even by a reader holding no key at all.
 
 ### What it does not do
 
 The fingerprint is a claim, not a proof. Someone who rewrites a log wholesale with their own key produces one that is internally consistent and claims their key throughout; only a fingerprint you learned independently tells you it is the wrong log. Nor can anything here catch a log with the tail cut off, or one whose signing key was sitting on the machine that did the editing. No single file on one disk can, and pretending otherwise would be worse than saying so.
+
+## Sharing them with the team
+
+Records are a signed, hash-chained file. What they lack is a way to reach anyone else — and the one piece of shared infrastructure a team already has, already authenticates against and already backs up is a git remote. So that is where they go, on refs of their own:
+
+```
+$ session push
+
+  verified 4 records, chain intact
+  ref      refs/session/ed25519-32e30104f89848db2616e740fe3a58d9
+  pushed   4 records to origin
+```
+
+```
+$ session pull
+
+  ed25519:32e30104f89848db2616e740fe3a58d9  4 records  unchanged
+  ed25519:6f17d3892712d684ff91e0dcfdaef135  2 records  new
+  pulled   2 keys from origin
+```
+
+```
+$ session peers
+
+  ed25519:32e30104f89848db2616e740fe3a58d9  4 records  last 2026-08-18  (this machine)
+  ed25519:6f17d3892712d684ff91e0dcfdaef135  2 records  last 2026-08-18
+  peers    2 keys on this machine
+```
+
+### Checking what the team published
+
+`session verify` walks one log — yours. Once a `pull` has brought other people's chains into the repo, it says so rather than letting a clean bill of health on one log read as a clean bill of health on everything sitting here:
+
+```
+  chain   intact — 41 records, hashes and signatures check out
+  peers   1 other chain in this repo went unchecked — session verify --peers walks it
+```
+
+`--peers` walks every one of them, and reports each key separately:
+
+```
+$ session verify --peers
+
+  ed25519:32e30104f89848db2616e740fe3a58d9  intact — 4 records, hashes and signatures check out  (this machine)
+  ed25519:6f17d3892712d684ff91e0dcfdaef135  intact — 2 records, hashes check out
+  chains  2 keys, every chain checked
+```
+
+Separately, not summed: each chain is one key's statement about its own work, and "4 of 5 keys check out" is not a fact about anything. A break in one of them says nothing about the others, and the command exits non-zero on any of them — or on finding no chains at all.
+
+Note the second row. Your own signatures are checked, because your key is here; a peer's are not, because theirs is not, and the row says which happened rather than blurring the two. Hand `--peers` their public key and their signatures get checked too. A key is only ever used on the chain that claims it: checking one key's signatures against another key's log would report a mismatch that says nothing about either.
+
+`(this machine)` means the key in `~/.session/keys` on this machine signed that chain, and nothing else. Not a ref that looks like yours, and not records that read like yours — a ref name is a claim by whoever pushed it. On a machine that has never signed anything, no chain is labelled, which is the truth: nothing there could have written one.
+
+**One ref per signing key.** `refs/session/<fingerprint>` is written only by the machine holding that key. Two developers never write the same ref, so there is nothing to merge and no conflict to resolve — not resolved, made impossible.
+
+**Pull does not merge.** It fetches everyone's refs and stops there. A chain is one key's statement about its own work; folding two of them together would produce a file neither key could stand behind. Other people's records sit beside yours, read-only, and this machine keeps appending to exactly one log — its own.
+
+**Push refuses a log that does not verify.** The chain is walked before anything leaves the machine, and a break stops the push with the line number on it. Publishing a record you cannot stand behind is worse than publishing nothing.
+
+**Your git is untouched.** Nothing lands under `refs/heads`, `refs/remotes` or `refs/tags`, so `git log`, `git status` and `git branch -a` look exactly as they did. (`git log --all` does show them — it means *every* ref, and shows `refs/notes` and `refs/stash` the same way.) The records themselves are ordinary git objects, so anyone with the repo can read one without this tool:
+
+```
+$ git log --oneline refs/session/ed25519-32e30104f89848db2616e740fe3a58d9
+
+  4aec7d4 session log — 4 records
+  d8dd1f1 session log — 2 records
+
+$ git cat-file -p refs/session/ed25519-32e30104f89848db2616e740fe3a58d9:session.jsonl
+```
+
+That history is the point of committing rather than dropping a blob: what was published and when is itself a record, and a rewrite shows up as a tip that no longer descends from the old one instead of quietly replacing it.
+
+No server, no account, no database — the same as before. Records move by git talking to git, only when you type `push` or `pull`.
 
 ## Agile for AI
 

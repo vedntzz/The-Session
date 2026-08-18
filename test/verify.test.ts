@@ -83,12 +83,6 @@ describe("an untouched log", () => {
     });
   });
 
-  it("is intact when there is no log at all", async () => {
-    const result = await verifyLog(options);
-
-    expect(result.check).toMatchObject({ total: 0, verified: 0 });
-  });
-
   it("names the key it checked against", async () => {
     await threeRecords();
     const keypair = await loadOrCreateKeypair(home);
@@ -97,6 +91,67 @@ describe("an untouched log", () => {
 
     expect(result.key?.fingerprint).toBe(keypair.fingerprint);
     expect(result.keyGiven).toBe(false);
+  });
+});
+
+/**
+ * Nothing here contradicts itself, and that is exactly the problem: a chain
+ * walk over no records establishes nothing, so reporting it as a pass would
+ * put a tick beside a file nobody has recorded anything in. An evidence tool
+ * that answers "verified" to that is worse than one that says nothing.
+ */
+describe("a log with no records in it", () => {
+  it("reports no records rather than an intact chain, and fails", async () => {
+    const result = await verifyLog(options);
+
+    expect(result.check).toMatchObject({ total: 0, verified: 0 });
+    expect(result.check.break).toBeUndefined();
+    expect(verifyFailed(result)).toBe(true);
+  });
+
+  it("says the same of a log file that exists and is empty", async () => {
+    await writeLines([]);
+
+    const result = await verifyLog(options);
+
+    expect(result.check.total).toBe(0);
+    expect(verifyFailed(result)).toBe(true);
+  });
+
+  it("says so plainly, and does not claim a key checked anything", async () => {
+    await loadOrCreateKeypair(home);
+
+    const lines = formatVerify(await verifyLog(options));
+
+    expect(lines[0]).toMatch(/^ {2}log {5}0 records {2}\//);
+    expect(lines[1]).toBe(
+      "  chain   no records — nothing was verified. Run session start to record one.",
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines.join("\n")).not.toContain("intact");
+  });
+
+  it("fails on a log whose only line was cut short mid-write", async () => {
+    await writeLines(['{"v":1,"id":"half'], false);
+
+    const result = await verifyLog(options);
+
+    expect(result.check.total).toBe(0);
+    expect(result.check.truncatedTail).toBe(true);
+    expect(verifyFailed(result)).toBe(true);
+    expect(formatVerify(result).at(-1)).toBe(
+      "  tail    the only line in the file was cut short mid-write",
+    );
+  });
+
+  it("keeps its counsel about a log from elsewhere: session start is not that log", async () => {
+    const elsewhere = path.join(root, "handed-over.jsonl");
+    await writeFile(elsewhere, "", "utf8");
+
+    const result = await verifyLog({ log: elsewhere });
+
+    expect(verifyFailed(result)).toBe(true);
+    expect(formatVerify(result)[1]).toBe("  chain   no records — nothing was verified.");
   });
 });
 

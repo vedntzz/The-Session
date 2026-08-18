@@ -67,6 +67,20 @@ export function isIntact(check: ChainCheck): boolean {
   return check.break === undefined;
 }
 
+/**
+ * True when the walk had nothing to walk.
+ *
+ * Kept apart from `isIntact` because the two answer different questions, and
+ * conflating them is how an evidence tool comes to pass vacuously: a log with
+ * no records contradicts itself nowhere, so it is intact in the only sense
+ * `isIntact` means, and reporting that as a clean bill of health would tell
+ * somebody their records check out when there are no records. What a verifier
+ * has to be able to say is "I checked nothing".
+ */
+export function isEmpty(check: ChainCheck): boolean {
+  return check.total === 0;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

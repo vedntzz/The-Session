@@ -7,7 +7,15 @@
 ## Invariants — do not violate these
 
 1. **`intent` is immutable.** Written once at `session start`, never edited afterward. A declaration you can revise after seeing the result is a rationalisation, not a declaration. No `--edit-intent` flag, ever.
-2. **No server, no database, no account.** Data lives in JSONL on the user's disk. If a change requires network access, it's wrong.
+2. **No server, no database, no account.** Data lives in JSONL on the user's
+   disk. Nothing this project runs is ever reachable over a network, and there
+   is nothing to sign up for.
+   (This replaces a flat "if a change requires network access, it's wrong". The
+   ban held until records had to reach a teammate. `sync.ts` sends them over a
+   git remote the team already has, only when somebody types `push` or `pull`,
+   and every byte moves by git talking to git. No service of ours is involved,
+   which is what the invariant was protecting. Anything that would need one is
+   still wrong.)
 3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant".
 4. **Turns that produced nothing are first-class.** Turns and API calls that changed no files are counted and displayed, never dropped.
 5. **Cross-tool.** Nothing may assume Claude Code specifically. Adapters go behind an interface; the core reads a normalised shape.
@@ -38,6 +46,7 @@ rates.json         bundled prices, per model, per million tokens
   keys.ts          Ed25519 keypair at ~/.session/keys/, sign and verify
   verify.ts        the chain walk, pure
   git.ts           HEAD, diff, changed files
+  sync.ts          records over refs/session/*, push/pull/peers
   render/          terminal.ts, html.ts
 ```
 
@@ -242,6 +251,64 @@ verify` is the only thing that walks the chain.
 with no `~/.session` at all: with `--log`, nothing derives a store path, and
 this machine's own key is never reached for. Checking a stranger's log against
 your own key would report a mismatch that means nothing.
+
+A log with no records in it reports `no records` and exits non-zero. Nothing
+about it contradicts itself, so `isIntact` is true and stays true — that is
+what it means — but `verify` is an evidence tool, and answering "verified" to
+a file it read nothing out of is a vacuous pass, which is a defect. `isEmpty`
+is kept separate from `isIntact` for exactly this reason; don't collapse them,
+and don't make an empty log a chain break either, since nothing is broken.
+The same rule covers `--peers`: a chain with no records fails, and so does
+finding no chains at all.
+
+`session verify --peers` walks every chain under `refs/session/*` and reports
+each key on its own row. Not summed: each chain is one key's statement about
+its own work, so "4 of 5 keys check out" is not a fact about anything, and a
+break in one says nothing about the others. A key is only ever used on the
+chain that claims it — this machine's key on this machine's ref, a `--key` on
+the ref whose fingerprint matches — for the same reason a foreign log is never
+checked against the local key. Everything else gets hashes only, and the row
+says so rather than implying its signatures were checked. A plain `verify`
+walks one log, so where other chains are present it says they went unchecked;
+one log verifying is not everything here verifying.
+
+## Sync
+
+Records travel on `refs/session/<fingerprint>`, one ref per signing key. That is
+the whole conflict story: only the machine holding a key writes that key's ref,
+so two developers cannot write the same one and there is nothing to merge.
+
+The log is a blob in a tree under a commit whose parent is the previous push, so
+the ref carries the history of what was published and when. A rewrite is a tip
+that does not descend from the old one — visible in `git log <ref>`, not silent.
+A push whose log is byte-identical to the tip makes no commit; an empty commit
+per push would fill that history with pushes that published nothing.
+
+`pull` fetches every key's ref and stops. It never merges them into the local
+log and never writes to it: a chain is one key's statement about its own work,
+and folding two together would produce a file no key could stand behind. Peers
+are read-only, and this machine appends to exactly one log — its own.
+
+`push` verifies before it publishes and refuses a broken chain. Publishing a log
+that does not add up would put this machine's name on it. `peers` checks each
+peer's hashes on the way past — their signatures cannot be checked, since their
+key is not here — and names any log that contradicts itself.
+
+`(this machine)` is decided against the keypair in `~/.session/keys` and
+nothing else: a ref name is a claim by whoever pushed it, and records that look
+like ours are still not ours. The key is read, never generated — being asked
+who else is out there is not a reason to start signing on a machine that never
+has — so where there is no key here, nothing is labelled ours, which is true:
+nothing on that machine could have written a chain.
+
+Nothing lands under `refs/heads`, `refs/remotes` or `refs/tags`, so `git log`,
+`git status` and `git branch -a` are untouched. `git log --all` does show these
+refs, the same way it shows `refs/notes` and `refs/stash`: it means every ref,
+and nothing can be both pushable and invisible to that.
+
+All git plumbing sits below one line in `sync.ts` — hash-object, mktree,
+commit-tree, update-ref, push, fetch, for-each-ref, cat-file — and everything
+above it is pure. No porcelain, no index, no work tree.
 
 ## Style
 

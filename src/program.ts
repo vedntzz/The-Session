@@ -13,7 +13,14 @@ import { formatMark, formatSettle, markSession, settleSessions } from "./command
 import { showSession } from "./commands/show.js";
 import { formatStarted, startSession } from "./commands/start.js";
 import { formatStopped, stopIfOpen, stopSession, type StopOptions } from "./commands/stop.js";
-import { formatVerify, verifyFailed, verifyLog } from "./commands/verify.js";
+import {
+  formatVerify,
+  formatVerifyPeers,
+  peersFailed,
+  verifyFailed,
+  verifyLog,
+  verifyPeers,
+} from "./commands/verify.js";
 import {
   DEFAULT_DAYS,
   openInBrowser,
@@ -26,6 +33,14 @@ import {
 import { parseOutcome } from "./outcome.js";
 import { loadRates } from "./pricing.js";
 import { renderWeek } from "./render/html.js";
+import {
+  formatPeers,
+  formatPull,
+  formatPush,
+  listPeers,
+  pullPeers,
+  pushLog,
+} from "./sync.js";
 import { formatSession, formatWeek, terminalPalette } from "./render/terminal.js";
 import { storeHome } from "./store.js";
 
@@ -165,14 +180,33 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .description("Check a log's hash chain and signatures")
     .option("--log <path>", "a log file to check instead of this repo's own")
     .option("--key <path>", "the public key to check against: a key file, or the PEM itself")
-    .action(async (flags: { log?: string; key?: string }) => {
+    .option("--peers", "check every chain pulled into this repo, key by key")
+    .action(async (flags: { log?: string; key?: string; peers?: boolean }) => {
+      // A broken log, an empty one, and a pulled chain that does not add up are
+      // findings, not crashes: the report is the point. The exit code is there
+      // so a script can gate on it.
+      if (flags.peers) {
+        if (flags.log !== undefined) {
+          throw new Error(
+            "--peers checks the chains pulled into this repo; --log names one file. " +
+              "Pass one or the other.",
+          );
+        }
+        const result = await verifyPeers({ ...options, key: flags.key });
+        for (const line of formatVerifyPeers(result)) {
+          console.log(line);
+        }
+        if (peersFailed(result)) {
+          process.exitCode = 1;
+        }
+        return;
+      }
+
       const result = await verifyLog({ ...options, log: flags.log, key: flags.key });
       for (const line of formatVerify(result)) {
         console.log(line);
       }
       if (verifyFailed(result)) {
-        // A broken log is a finding, not a crash: the report above is the
-        // point. The exit code is there so a script can gate on it.
         process.exitCode = 1;
       }
     });
@@ -194,6 +228,33 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .action(async (id: string, outcome: string) => {
       const settled = await markSession(id, parseOutcome(outcome), options);
       for (const line of formatMark(settled)) {
+        console.log(line);
+      }
+    });
+
+  program
+    .command("push")
+    .description("Publish this machine's records to origin, on a ref of their own")
+    .action(async () => {
+      for (const line of formatPush(await pushLog(options))) {
+        console.log(line);
+      }
+    });
+
+  program
+    .command("pull")
+    .description("Fetch every key's records from origin. Nothing is merged into your log")
+    .action(async () => {
+      for (const line of formatPull(await pullPeers(options))) {
+        console.log(line);
+      }
+    });
+
+  program
+    .command("peers")
+    .description("The keys whose records are on this machine, and what they hold")
+    .action(async () => {
+      for (const line of formatPeers(await listPeers(options))) {
         console.log(line);
       }
     });
