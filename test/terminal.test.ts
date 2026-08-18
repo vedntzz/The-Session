@@ -357,6 +357,33 @@ describe("formatWeek", () => {
     ]);
   });
 
+  it("leaves the class column out until --class asks for it", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
+
+    expect(lines[1]).not.toContain("class");
+  });
+
+  it("adds the class column when --class asks for it", () => {
+    const classed = [
+      session({ intent: "rate limit /orders", reality: ["src/api/orders.ts"] }),
+      session({ intent: "restyle the header", reality: ["src/components/Header.tsx"] }),
+    ];
+
+    const lines = formatWeek(classed, 7, plainPalette, {}, { ...priced, classes: true });
+
+    expect(lines[1]).toContain("class");
+    expect(lines[2]).toContain("api");
+    expect(lines[3]).toContain("ui");
+  });
+
+  it("keeps the totals label spanning the columns on the left", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, classes: true });
+    const [, headings, , , , , totals] = lines as string[];
+
+    // The figures still line up under their headings once a column is added.
+    expect(endOf(totals as string, "19")).toBe(endOf(headings as string, "turns"));
+  });
+
   it("adds the tokens column back when --tokens asks for it", () => {
     const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, tokens: true });
 

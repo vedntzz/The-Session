@@ -1,4 +1,5 @@
 import pc from "picocolors";
+import { classOf } from "../classify.js";
 import type { SessionFilter } from "../commands/week.js";
 import { attributionEntries } from "../config.js";
 import { formatUsd, priceSession, spendOf, type Price, type RateTable } from "../pricing.js";
@@ -94,6 +95,8 @@ export interface View {
   rates?: RateTable;
   /** Whether `--tokens` asked for the raw counters as well. */
   tokens?: boolean;
+  /** Whether `--class` asked for the class column as well. */
+  classes?: boolean;
 }
 
 const NO_RATES: RateTable = new Map();
@@ -228,6 +231,7 @@ const ELLIPSIS = "…";
 interface WeekCells {
   when: string;
   intent: string;
+  class: string;
   cost: string;
   turns: string;
   tokens: string;
@@ -239,6 +243,7 @@ interface WeekCells {
 interface Widths {
   when: number;
   intent: number;
+  class: number;
   cost: number;
   turns: number;
   tokens: number;
@@ -248,6 +253,7 @@ interface Widths {
 const HEADINGS: WeekCells = {
   when: "started",
   intent: "intent",
+  class: "class",
   cost: "cost",
   turns: "turns",
   tokens: "tokens",
@@ -288,6 +294,7 @@ function cellsFor(session: Session, rates: RateTable): WeekCells {
   return {
     when: stamp(session.startedAt),
     intent: truncate(session.intent, INTENT_WIDTH),
+    class: classOf(session),
     cost: price.priced ? formatUsd(price.usd) : NO_PRICE,
     turns: figure(session.cost.turns),
     tokens: figure(totalTokens(session.cost)),
@@ -297,13 +304,25 @@ function cellsFor(session: Session, rates: RateTable): WeekCells {
 }
 
 /**
+ * The columns that are only there when something asked for them. Both default
+ * to off: the table is read at a glance, and every column that is not being
+ * looked at makes the ones that are harder to find.
+ */
+interface Columns {
+  /** `--tokens`: the raw counts beside the money. */
+  tokens: boolean;
+  /** `--class`: what each session was working on. */
+  classes: boolean;
+}
+
+/**
  * Lays out one row. Figures are right-aligned so their digits line up and a
  * column can be scanned for the expensive one; text is left-aligned. Cost
  * leads them, because it is the column the eye should land on first.
  */
-function tableRow(left: string, cells: WeekCells, widths: Widths, tokens: boolean): string {
+function tableRow(left: string, cells: WeekCells, widths: Widths, show: Columns): string {
   const columns = [padLeft(cells.cost, widths.cost), padLeft(cells.turns, widths.turns)];
-  if (tokens) {
+  if (show.tokens) {
     columns.push(padLeft(cells.tokens, widths.tokens));
   }
   columns.push(padLeft(cells.empty, widths.empty));
@@ -314,21 +333,32 @@ function tableRow(left: string, cells: WeekCells, widths: Widths, tokens: boolea
   return `${INDENT}${left}${COLUMN_GAP}${columns.join(COLUMN_GAP)}${tail}`;
 }
 
-function sessionRow(cells: WeekCells, widths: Widths, tokens: boolean): string {
-  const left = `${padRight(cells.when, widths.when)}${COLUMN_GAP}${padRight(cells.intent, widths.intent)}`;
-  return tableRow(left, cells, widths, tokens);
+/** The left block: when it ran, what it was for, and what it was working on. */
+function leftColumns(cells: WeekCells, widths: Widths, show: Columns): string[] {
+  const left = [padRight(cells.when, widths.when), padRight(cells.intent, widths.intent)];
+  if (show.classes) {
+    left.push(padRight(cells.class, widths.class));
+  }
+  return left;
 }
 
-/** The totals row, whose label runs across the time and intent columns. */
-function totalsRow(cells: WeekCells, widths: Widths, tokens: boolean): string {
-  const span = widths.when + COLUMN_GAP.length + widths.intent;
-  return tableRow(padRight(cells.when, span), cells, widths, tokens);
+function sessionRow(cells: WeekCells, widths: Widths, show: Columns): string {
+  return tableRow(leftColumns(cells, widths, show).join(COLUMN_GAP), cells, widths, show);
+}
+
+/** The totals row, whose label runs across every column on the left. */
+function totalsRow(cells: WeekCells, widths: Widths, show: Columns): string {
+  const spanned = leftColumns(HEADINGS, widths, show);
+  const span = spanned.reduce((total, column) => total + width(column), 0) +
+    COLUMN_GAP.length * (spanned.length - 1);
+  return tableRow(padRight(cells.when, span), cells, widths, show);
 }
 
 function measure(rows: readonly WeekCells[], totals: WeekCells): Widths {
   return {
     when: WHEN_WIDTH,
     intent: widest([HEADINGS.intent, ...rows.map((row) => row.intent)]),
+    class: widest([HEADINGS.class, ...rows.map((row) => row.class)]),
     cost: widest([HEADINGS.cost, totals.cost, ...rows.map((row) => row.cost)]),
     turns: widest([HEADINGS.turns, totals.turns, ...rows.map((row) => row.turns)]),
     tokens: widest([HEADINGS.tokens, totals.tokens, ...rows.map((row) => row.tokens)]),
@@ -348,6 +378,9 @@ export function describeFilter(filter: SessionFilter): string | undefined {
   }
   if (filter.project !== undefined) {
     parts.push(`project ${filter.project}`);
+  }
+  if (filter.class !== undefined) {
+    parts.push(`${filter.class} sessions`);
   }
   return parts.length > 0 ? parts.join(", ") : undefined;
 }
@@ -377,7 +410,7 @@ export function formatWeek(
   }
 
   const rates = view.rates ?? NO_RATES;
-  const showTokens = view.tokens === true;
+  const show: Columns = { tokens: view.tokens === true, classes: view.classes === true };
 
   const rows = sessions.map((session) => cellsFor(session, rates));
   const turns = sum(sessions, (session) => session.cost.turns);
@@ -386,6 +419,7 @@ export function formatWeek(
   const totals: WeekCells = {
     when: plural(sessions.length, "session", "sessions"),
     intent: "",
+    class: "",
     cost: spend.usd > 0 ? formatUsd(spend.usd) : NO_PRICE,
     turns: figure(turns),
     tokens: figure(sum(sessions, (session) => totalTokens(session.cost))),
@@ -398,14 +432,14 @@ export function formatWeek(
   if (narrowed) {
     lines.push(palette.dim(`${INDENT}only ${narrowed}`));
   }
-  lines.push(palette.dim(sessionRow(HEADINGS, widths, showTokens)));
+  lines.push(palette.dim(sessionRow(HEADINGS, widths, show)));
 
   for (const [index, session] of sessions.entries()) {
-    const row = sessionRow(rows[index] as WeekCells, widths, showTokens);
+    const row = sessionRow(rows[index] as WeekCells, widths, show);
     lines.push(session.outcome === "abandoned" ? palette.struck(row) : row);
   }
 
-  lines.push("", totalsRow(totals, widths, showTokens));
+  lines.push("", totalsRow(totals, widths, show));
 
   // The sentence the table is for. Everything that did not merge is money
   // still owed an outcome, which is a different question from the turn counts

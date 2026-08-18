@@ -30,6 +30,7 @@ src/
   store.ts         JSONL read/append
   config.ts        .session.json at the repo root — attribution, checked in
   outcome.ts       merged/abandoned/open from repo facts, pure
+  classify.ts      schema/api/ui/test/config/docs/build/other from paths, pure
   observe.ts       gathers those facts and applies them to sessions
   pricing.ts       tokens to dollars; loads rates.json, pure above that
 rates.json         bundled prices, per model, per million tokens
@@ -51,6 +52,9 @@ type Session = {
   baseline: string[]      // already dirty at start, subtracted from reality
   reality: string[]       // observed from git diff, less baseline
   drift: string[]         // reality minus scope
+  class?: SessionClass    // what it was mostly working on, from the path rules
+                          // in classify.ts. Written at stop; absent on older
+                          // records, where readers derive it from reality.
   cost: SessionCost
   outcome: 'open' | 'merged' | 'abandoned'
   startedAt: string
@@ -127,6 +131,29 @@ never outranks a fresh computation.
 
 Note this stays inside invariant 3: it is all git plumbing and hashes. No
 model is asked whether the work "really" shipped.
+
+## Class
+
+`classify.ts` is an ordered table of path patterns and nothing else: first match
+wins per path, and a session takes whichever class the most of its paths landed
+in, ties broken by the order of the table. The table is at the top of the file
+so a class can be checked, or a repo's layout added, in ten seconds. Every rule
+carries an example, and the tests assert each one — a rule inserted above
+another that shadows its example fails there rather than quietly relabelling a
+week of sessions.
+
+`other` competes on the same terms as the rest and can win. A session that
+mostly touched files no rule recognises is `other`; calling it `ui` because one
+stylesheet was in there would be a label made up to avoid admitting a gap. The
+fix for a repo that keeps landing in `other` is a line in the table.
+
+`stop` writes the class so the log says what it means on its own, but nothing
+depends on the stored field: the rules are pure and `reality` is on the record,
+so a session recorded before the field existed is classified from its paths and
+gets the same answer.
+
+Inside invariant 3: regular expressions over path strings. Nothing is asked what
+the code does.
 
 ## Cost in money
 

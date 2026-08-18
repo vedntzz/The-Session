@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { classOf, type SessionClass } from "../classify.js";
 import { withOutcomes } from "../observe.js";
 import {
   readSessions,
@@ -43,18 +44,26 @@ export function parseDays(value?: string): number {
   return days;
 }
 
-/** Narrows the week to the work done for one client, one project, or one end. */
+/**
+ * Narrows the week to the work done for one client, one project, one kind of
+ * change, or one end.
+ */
 export interface SessionFilter {
   client?: string;
   project?: string;
   /** Where the work went, as computed now — not as the record happens to say. */
   outcome?: SessionOutcome;
+  /** What was being worked on. See `classify.ts`. */
+  class?: SessionClass;
 }
 
 /** True when nothing is being filtered on. */
 export function isEmptyFilter(filter: SessionFilter): boolean {
   return (
-    filter.client === undefined && filter.project === undefined && filter.outcome === undefined
+    filter.client === undefined &&
+    filter.project === undefined &&
+    filter.outcome === undefined &&
+    filter.class === undefined
   );
 }
 
@@ -86,6 +95,11 @@ export function matchesFilter(session: Session, filter: SessionFilter): boolean 
   // Compared against `session.outcome`, which by the time the filter runs has
   // been replaced by the computed answer — see `withOutcomes`.
   if (filter.outcome !== undefined && session.outcome !== filter.outcome) {
+    return false;
+  }
+  // `classOf` rather than the stored field, so a session recorded before the
+  // class existed is matched on its paths rather than dropped from the week.
+  if (filter.class !== undefined && classOf(session) !== filter.class) {
     return false;
   }
   return true;

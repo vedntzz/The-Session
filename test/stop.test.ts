@@ -263,6 +263,26 @@ describe("stopSession", () => {
     expect(stopped.scope).toEqual(["api/"]);
   });
 
+  it("records what the session was working on", async () => {
+    await startSession("add rate limiting", { ...options, scope: ["api/"] });
+    await write("api/routes/orders.py", "changed");
+    await write("api/handlers/rate_limit.py", "new");
+    await write("README.md", "notes");
+
+    const stopped = await stopSession(options);
+
+    // Two api files against one doc: the class is what the most of it was.
+    expect(stopped.class).toBe("api");
+    const [stored] = await readSessions(options);
+    expect(stored?.class).toBe("api");
+  });
+
+  it("calls a session that changed nothing other, rather than guessing", async () => {
+    await startSession("think about it", options);
+
+    expect((await stopSession(options)).class).toBe("other");
+  });
+
   it("records empty reality when nothing changed", async () => {
     await startSession("a quiet session", options);
     const stopped = await stopSession(options);

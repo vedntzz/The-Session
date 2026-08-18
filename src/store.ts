@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { GENESIS, lineHash, recordHash, type SignedBody } from "./chain.js";
+import type { SessionClass } from "./classify.js";
 import { hasAttribution, type Attribution } from "./config.js";
 import { loadOrCreateKeypair, signHash } from "./keys.js";
 import type { Observation } from "./outcome.js";
@@ -102,6 +103,13 @@ export interface Session {
   reality: string[];
   /** `reality` minus `scope` — recorded, never blocked. */
   drift: string[];
+  /**
+   * What the session was mostly working on — schema, api, ui, test, config,
+   * docs, build, other — derived from `reality` at `stop` by the path rules in
+   * `classify.ts`. Absent on sessions stopped before it existed; readers
+   * derive it from `reality` instead, which is the same computation.
+   */
+  class?: SessionClass;
   cost: SessionCost;
   outcome: SessionOutcome;
   /** ISO-8601 timestamp. */

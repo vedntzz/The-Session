@@ -1,4 +1,5 @@
 import { captureCost, type Adapter } from "../capture/index.js";
+import { classifyPaths } from "../classify.js";
 import { changedFilesSince, endStateOf } from "../git.js";
 import {
   getOpenSession,
@@ -90,6 +91,11 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
     {
       reality,
       drift: computeDrift(reality, open.scope),
+      // Derived here rather than at display time so the log says what the
+      // session was about without anything having to re-run the rules over it.
+      // The rules are pure and the input is on the record, so a reader that
+      // does re-run them gets the same answer — see `classify.ts`.
+      class: classifyPaths(reality),
       // What the session left at each path. Recorded now because it cannot be
       // recovered later: this is what `settle` goes looking for in the default
       // branch, and by then the working tree has moved on.

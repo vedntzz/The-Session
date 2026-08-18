@@ -288,5 +288,18 @@ describe("matchesFilter", () => {
   it("knows when nothing is being filtered on", () => {
     expect(isEmptyFilter({})).toBe(true);
     expect(isEmptyFilter({ client: "Acme" })).toBe(false);
+    expect(isEmptyFilter({ class: "ui" })).toBe(false);
+  });
+
+  it("matches on the class the session recorded", () => {
+    const ui = { reality: [], class: "ui" } as unknown as Session;
+    expect(matchesFilter(ui, { class: "ui" })).toBe(true);
+    expect(matchesFilter(ui, { class: "api" })).toBe(false);
+  });
+
+  it("matches a session stopped before the class existed on its paths", () => {
+    const old = { reality: ["src/api/orders.ts"] } as Session;
+    expect(matchesFilter(old, { class: "api" })).toBe(true);
+    expect(matchesFilter(old, { class: "ui" })).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { parseClass } from "./classify.js";
 import {
   formatHook,
   installHook,
@@ -89,6 +90,10 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .option("--client <name>", "only sessions recorded for this client")
     .option("--project <name>", "only sessions recorded for this project")
     .option("--outcome <state>", "only sessions that are open, merged, or abandoned")
+    // Optional value, because the column and the filter are the same question
+    // asked twice: `--class` shows what each session was working on, and
+    // `--class ui` keeps the ones that were working on the same thing.
+    .option("--class [name]", "show the class column; with a name, only that class")
     .option("--tokens", "show the raw token counts as well as the cost")
     .option("--open", "write the week as an HTML page and open it")
     .action(
@@ -97,6 +102,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
         client?: string;
         project?: string;
         outcome?: string;
+        class?: string | boolean;
         tokens?: boolean;
         open?: boolean;
       }) => {
@@ -105,9 +111,16 @@ export function buildProgram(options: ProgramOptions = {}): Command {
           client: flags.client,
           project: flags.project,
           outcome: flags.outcome === undefined ? undefined : parseOutcome(flags.outcome),
+          // A bare `--class` arrives as true: it asked for the column, not for
+          // a class, so nothing is filtered on.
+          class: typeof flags.class === "string" ? parseClass(flags.class) : undefined,
         };
         const sessions = await weekSessions(days, options, filter);
-        const view = { rates: await loadRates(storeHome(options)), tokens: flags.tokens };
+        const view = {
+          rates: await loadRates(storeHome(options)),
+          tokens: flags.tokens,
+          classes: flags.class !== undefined,
+        };
 
         if (!flags.open) {
           for (const line of formatWeek(sessions, days, terminalPalette, filter, view)) {
