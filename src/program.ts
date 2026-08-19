@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Help } from "commander";
 import { parseClass } from "./classify.js";
 import {
   formatHook,
@@ -7,6 +7,7 @@ import {
   type HookOptions,
 } from "./commands/hook.js";
 import { formatConfig, setConfig, showConfig } from "./commands/config.js";
+import { homeState } from "./commands/home.js";
 import { estimateFor, formatEstimate, parseSince } from "./commands/estimate.js";
 import { captureFromPrompt, promptFromHook, readHookPayload } from "./commands/intent.js";
 import { formatKey, showKey } from "./commands/key.js";
@@ -43,7 +44,14 @@ import {
   pushLog,
 } from "./sync.js";
 import { paletteFor, type Palette } from "./render/palette.js";
-import { formatSession, formatWeek } from "./render/terminal.js";
+import {
+  formatBrief,
+  formatCommands,
+  formatHome,
+  formatSession,
+  formatWeek,
+  type CommandEntry,
+} from "./render/terminal.js";
 import { parseIntentSource, storeHome } from "./store.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
@@ -84,6 +92,76 @@ export function parseFlag(value: string): boolean {
 }
 
 /**
+ * The commands `session --help` lists, beside the bare screen itself.
+ *
+ * Three. Not because the others are unfinished or deprecated — they all work
+ * and are all documented — but because a first reader cannot use fifteen
+ * commands and can use these: start a session, look at the week, find the
+ * rest. A help screen that lists everything is a help screen nobody finishes
+ * reading, and the commands that get lost in it are the ones a newcomer most
+ * needs.
+ *
+ * Discoverability is not sacrificed, it is deferred: `session help all` is on
+ * the short list, and the line under it names what is behind it.
+ */
+const BRIEF_COMMANDS = ["start", "week", "help"];
+
+/**
+ * Narrows the top-level help to `BRIEF_COMMANDS` and nothing else.
+ *
+ * Only the top-level list is touched. `session config --help` and every other
+ * subcommand's help go through commander's own rendering, because there is
+ * nothing to hide there — a reader who has typed `session config` has already
+ * chosen the topic.
+ */
+function configureHelp(program: Command): void {
+  // A row for the bare screen. It is not a subcommand and there is nothing to
+  // dispatch to; it is here because it is the shortest thing to type and a
+  // list of entry points that leaves out the shortest one hides it.
+  const home = new Command("session").description("where this repo stands, and what to run next");
+
+  program.configureHelp({
+    visibleCommands(cmd) {
+      if (cmd !== program) {
+        return Help.prototype.visibleCommands.call(this, cmd);
+      }
+      // Filtered out of the real tree rather than listed separately, so a
+      // command renamed here cannot fall off this list silently.
+      return [home, ...program.commands.filter((sub) => BRIEF_COMMANDS.includes(sub.name()))];
+    },
+    subcommandTerm(cmd) {
+      // There is exactly one topic, so the term says it rather than leaving
+      // the reader to guess what a `[topic]` might be.
+      return cmd.name() === "help" ? "help all" : Help.prototype.subcommandTerm.call(this, cmd);
+    },
+  });
+
+  program.addHelpText(
+    "after",
+    "\nEverything else — stop, show, estimate, verify, settle, push, pull, config, key,\n" +
+      "hook — still works and is listed under session help all.",
+  );
+}
+
+/**
+ * Every command in the tree, parent and child, as `session help all` prints
+ * them.
+ *
+ * Read off the tree rather than kept in a list beside it. A hand-maintained
+ * list is one release away from being wrong, and the whole point of this
+ * command is that it is the place where nothing is left out.
+ */
+function commandEntries(program: Command): CommandEntry[] {
+  return program.commands.flatMap((command) => [
+    { name: command.name(), description: command.description() },
+    ...command.commands.map((sub) => ({
+      name: `${command.name()} ${sub.name()}`,
+      description: sub.description(),
+    })),
+  ]);
+}
+
+/**
  * Builds the `session` command tree. Kept separate from the executable entry
  * point so tests can drive it without spawning a process; `options` is the
  * seam that lets them point the store somewhere temporary.
@@ -97,7 +175,22 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program
     .name("session")
     .description("Record what an AI coding session declared, what it changed, and what it cost")
-    .version("0.2.0");
+    .version("0.3.0");
+
+  // The bare screen. Commander would print the help here, which is a list of
+  // everything this tool can do — the right answer to "what is this" and the
+  // wrong one to "where am I". See `formatHome`.
+  program.action(async () => {
+    const view = { rates: await loadRates(storeHome(options)) };
+    for (const line of formatHome(await homeState(options), palette, view)) {
+      console.log(line);
+    }
+  });
+
+  // Commander adds its own `help [command]`, which would collide with the one
+  // registered at the bottom of this function.
+  program.helpCommand(false);
+  configureHelp(program);
 
   program
     .command("start")
@@ -163,11 +256,16 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .command("show")
     .description("Show the last closed session")
     .argument("[id]", "a session id, or an unambiguous prefix of one")
+    .option("--full", "the labelled layout: every path, every counter, the outcome")
     .option("--tokens", "show the raw token counters as well as the cost")
-    .action(async (id: string | undefined, flags: { tokens?: boolean }) => {
+    .action(async (id: string | undefined, flags: { full?: boolean; tokens?: boolean }) => {
       const session = await showSession(id, options);
       const view = { rates: await loadRates(storeHome(options)), tokens: flags.tokens };
-      for (const line of formatSession(session, palette, view)) {
+      // `--tokens` asks for counters the brief view does not have a place for,
+      // so it implies `--full` rather than being quietly ignored.
+      const full = flags.full === true || flags.tokens === true;
+      const render = full ? formatSession : formatBrief;
+      for (const line of render(session, palette, view)) {
         console.log(line);
       }
     });
@@ -393,6 +491,25 @@ export function buildProgram(options: ProgramOptions = {}): Command {
         ? await uninstallHook(options)
         : await installHook({ ...options, passive: flags.passive });
       for (const line of formatHook(result)) {
+        console.log(line);
+      }
+    });
+
+  // Registered last, so it comes last in the short list: it is where a reader
+  // goes when the two commands above are not the ones they wanted.
+  program
+    .command("help")
+    .description("Every command, not just the ones above")
+    .argument("[topic]", 'the only topic is "all"')
+    .action((topic: string | undefined) => {
+      if (topic === undefined) {
+        program.outputHelp();
+        return;
+      }
+      if (topic !== "all") {
+        throw new Error(`No help topic ${topic}. The only one is: session help all.`);
+      }
+      for (const line of formatCommands(commandEntries(program), palette)) {
         console.log(line);
       }
     });

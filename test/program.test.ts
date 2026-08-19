@@ -147,12 +147,37 @@ describe("session", () => {
     await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
     await run("stop");
 
-    const lines = await run("show");
+    const lines = await run("show", "--full");
 
     expect(lines[1]).toMatch(/^ {2}touch a\.txt {2,}\d{2}:\d{2} → \d{2}:\d{2}$/);
     expect(lines).toContain("  declared    a.txt");
     expect(lines).toContain("  changed     a.txt");
     expect(lines).toContain("  outcome     open");
+  });
+
+  it("show without --full answers in two sentences and a line of figures", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    const lines = await run("show");
+
+    expect(lines[1]).toBe('  You asked for "touch a.txt".');
+    expect(lines[2]).toBe("  Everything it changed stayed inside what you declared.");
+    // No labelled columns, no gutter, no outcome word: that is what --full is.
+    expect(lines.join("\n")).not.toContain("declared    ");
+    expect(lines.join("\n")).not.toContain("outcome");
+  });
+
+  it("show says in the sentence what went outside the scope", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await writeFile(path.join(store.cwd as string, "undeclared.txt"), "surprise", "utf8");
+    await run("stop");
+
+    const lines = await run("show");
+
+    expect(lines[2]).toBe("  1 file changed outside what you declared: undeclared.txt.");
   });
 
   it("show marks drift", async () => {
@@ -161,7 +186,7 @@ describe("session", () => {
     await writeFile(path.join(store.cwd as string, "undeclared.txt"), "surprise", "utf8");
     await run("stop");
 
-    const outside = (await run("show")).find((line) => line.includes("outside")) as string;
+    const outside = (await run("show", "--full")).find((line) => line.includes("outside")) as string;
 
     expect(outside).toContain("! undeclared.txt");
     expect(outside).toContain("← you did not declare this");
@@ -177,6 +202,7 @@ describe("session", () => {
     const lines = await run("show", (first as Session).id);
 
     expect(lines[1]).toContain("the first thing");
+    expect(lines[1]).toBe('  You asked for "the first thing".');
   });
 
   it("show surfaces a refusal when no session has closed", async () => {
@@ -283,13 +309,111 @@ describe("session", () => {
     ]);
   });
 
-  it("registers exactly the fifteen subcommands", () => {
+  it("the bare screen names the state and at most two commands", async () => {
+    const lines = await run();
+
+    expect(lines[1]).toBe("  No sessions recorded in this repo yet.");
+    // Two suggestions, not a menu. Blank lines aside, that is the whole screen.
+    const said = lines.filter((line) => line.trim() !== "");
+    expect(said).toHaveLength(3);
+    expect(said[1]).toContain('session start "…"');
+    expect(said[2]).toContain("session hook install");
+  });
+
+  it("the bare screen says what is recording, and how to close it", async () => {
+    await run("start", "rate limit the /orders endpoint");
+
+    const lines = await run();
+
+    expect(lines[1]).toMatch(/^ {2}Recording since \d{2}:\d{2}: rate limit the \/orders endpoint\.$/);
+    const said = lines.filter((line) => line.trim() !== "");
+    expect(said).toHaveLength(3);
+    expect(said[1]).toContain("session stop");
+    expect(said[2]).toContain("session week");
+  });
+
+  it("the bare screen points at the last session once nothing is running", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await run("stop");
+
+    const lines = await run();
+
+    expect(lines[1]).toMatch(/^ {2}Nothing is recording\. The last session ended at \d{2}:\d{2}/);
+    const said = lines.filter((line) => line.trim() !== "");
+    expect(said).toHaveLength(3);
+    expect(said[1]).toContain("session show");
+    expect(said[2]).toContain('session start "…"');
+  });
+
+  it("--help lists the bare screen, start, week and help all, and nothing else", () => {
+    const help = buildProgram(store).helpInformation();
+    const commands = help
+      .slice(help.indexOf("Commands:"))
+      .split("\n")
+      .slice(1)
+      .filter((line) => line.startsWith("  "))
+      .map((line) => line.trim().split(/ {2,}/)[0]);
+
+    expect(commands).toEqual(["session", "start [options] [intent]", "week [options]", "help all"]);
+  });
+
+  it("--help says where the rest of the commands went", () => {
+    // Through `outputHelp`, because the trailing note is help *text* rather
+    // than part of the formatted body `helpInformation` returns.
+    const written: string[] = [];
+    buildProgram(store)
+      .configureOutput({ writeOut: (text) => written.push(text) })
+      .outputHelp();
+
+    expect(written.join("")).toContain("session help all");
+  });
+
+  it("help all lists every command, including the ones --help leaves out", async () => {
+    const listed = (await run("help", "all"))
+      .slice(3)
+      .map((line) => line.trim().split(/ {2,}/)[0]);
+
+    // Every top-level command, and the subcommands under the three that have
+    // them. Nothing is hidden here; that is the whole job of this command.
+    for (const name of ["start", "stop", "show", "estimate", "verify", "settle", "push", "peers"]) {
+      expect(listed).toContain(name);
+    }
+    expect(listed).toContain("config set");
+    expect(listed).toContain("hook install");
+  });
+
+  it("help all is built from the tree, so nothing can fall off it", async () => {
+    const registered = buildProgram(store).commands.flatMap((command) => [
+      command.name(),
+      ...command.commands.map((sub) => `${command.name()} ${sub.name()}`),
+    ]);
+    const listed = (await run("help", "all"))
+      .slice(3)
+      .map((line) => line.trim().split(/ {2,}/)[0]);
+
+    expect(listed).toEqual(registered);
+  });
+
+  it("help refuses a topic it does not have", async () => {
+    await expect(run("help", "sync")).rejects.toThrow(/The only one is: session help all/);
+  });
+
+  it("every command --help still lists says it is hidden from nowhere", async () => {
+    // The commands the short help leaves out are hidden from a list, not from
+    // the parser: each one still runs.
+    await expect(run("peers")).resolves.toBeDefined();
+    await expect(run("config", "show")).resolves.toBeDefined();
+    await expect(run("key", "show")).resolves.toBeDefined();
+  });
+
+  it("registers exactly the sixteen subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
     expect(names).toEqual([
       "config",
       "estimate",
+      "help",
       "hook",
       "intent",
       "key",
@@ -676,16 +800,23 @@ describe("session, priced", () => {
     store = { ...store, adapters: [] };
   }
 
-  it("show leads with the dollar figure and keeps tokens back", async () => {
+  it("show --full leads with the dollar figure and keeps tokens back", async () => {
     await spent();
-    const lines = await run("show");
+    const lines = await run("show", "--full");
 
     expect(lines.find((line) => line.includes("cost"))).toContain("$15.00");
     expect(lines.find((line) => line.includes("no edits"))).toContain("$3.75");
     expect(lines.some((line) => line.includes("tokens"))).toBe(false);
   });
 
-  it("show --tokens spells the counters out as well", async () => {
+  it("show puts the cost, the turns and the empty turns on one line", async () => {
+    await spent();
+    const lines = await run("show");
+
+    expect(lines.at(-1)).toMatch(/^ {2}\$15\.00 · \d+ turns? · \d+ produced nothing$/);
+  });
+
+  it("show --tokens spells the counters out as well, and implies --full", async () => {
     await spent();
     const lines = await run("show", "--tokens");
 
@@ -881,11 +1012,27 @@ describe("passive capture, end to end", () => {
     await prompt("why does /orders 500");
     await run("stop", "--if-open");
 
-    const lines = await run("show");
+    const lines = await run("show", "--full");
 
     expect(lines.some((text) => text.includes("captured from the first prompt"))).toBe(true);
     expect(lines.some((text) => text.includes("makes drift visible"))).toBe(true);
     expect(lines.some((text) => text.trimStart().startsWith("outside"))).toBe(false);
+  });
+
+  it("says the same in two sentences without --full", async () => {
+    await run("start", "--passive");
+    await prompt("why does /orders 500");
+    // Something has to change, or the stronger fact — that it changed nothing
+    // — is the one the second sentence reports.
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop", "--if-open");
+
+    const lines = await run("show");
+
+    expect(lines[1]).toBe(
+      '  Your first prompt was "why does /orders 500", and you declared nothing up front.',
+    );
+    expect(lines[2]).toContain("session start --scope");
   });
 
   it("week --intent keeps one kind and says which", async () => {

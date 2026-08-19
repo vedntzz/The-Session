@@ -19,6 +19,17 @@ session stop
 ```
 $ session show
 
+  You asked for "add rate limiting to /orders".
+  1 file changed outside what you declared: db/schema.py.
+
+  $0.42 · 3 turns · 1 produced nothing
+```
+
+Two sentences and three numbers, because that is what you can take in after watching an agent work for forty minutes. When you want the rest of it:
+
+```
+$ session show --full
+
   add rate limiting to /orders                          14:02 → 14:39
 
   declared    api/orders.py  api/middleware/
@@ -40,10 +51,14 @@ Without it there is one entry in the ledger — what the machine produced — an
 
 | | |
 |---|---|
+| `session` | Where this repo stands, and the one or two things worth typing next. |
+| `session --help` | The short list: `start`, `week`, and where the rest is. |
+| `session help all` | Every command there is. |
 | `session start "<intent>"` | Open a session. Records HEAD and your declared scope. |
 | `session stop` | Close it. Diffs the repo, reads the agent transcript, writes the record. |
-| `session show` | The last session, in full. |
-| `session show --tokens` | The same, with the four token counters spelled out. |
+| `session show` | The last session: what you asked for, what went outside it, what it cost. |
+| `session show --full` | The same session in the labelled layout — every path, every counter, the outcome. |
+| `session show --tokens` | `--full`, with the four token counters spelled out as well. |
 | `session week` | One row per session over the last 7 days, and what they came to. |
 | `session week --days <n>` | The same, over a window you choose. |
 | `session week --tokens` | Put the token column back beside the money. |
@@ -68,6 +83,33 @@ Without it there is one entry in the ledger — what the machine produced — an
 | `session push` | Publish your records to origin, on a ref of their own. Refuses a log that does not verify. |
 | `session pull` | Fetch everyone else's records. Nothing is merged into yours. |
 | `session peers` | The keys whose records are on this machine, with counts and dates. |
+
+## Finding your way around
+
+Type `session` on its own and it tells you where you are, not what it can do:
+
+```
+$ session
+
+  Recording since 14:02: add rate limiting to /orders.
+
+  session stop   close it and record what changed
+  session week   the sessions before this one
+```
+
+One sentence, at most two commands. It says something different when nothing is running, and something different again in a repo with no sessions in it yet.
+
+`session --help` is deliberately short — `start`, `week`, and a pointer to the rest:
+
+```
+Commands:
+  session                   where this repo stands, and what to run next
+  start [options] [intent]  Begin a new session
+  week [options]            Summarize recent sessions, one row each
+  help all                  Every command, not just the ones above
+```
+
+Nothing is removed by this. Every command below still runs, and `session help all` lists all of them with their descriptions. The short list is a decision about what a first reader can use, not a claim about what exists — a help screen with fifteen entries is one nobody finishes, and the commands that get lost in it are the ones a newcomer most needs.
 
 ## The record
 

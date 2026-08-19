@@ -33,7 +33,7 @@
 src/
   cli.ts           command registration
   commands/        start.ts stop.ts show.ts week.ts verify.ts key.ts config.ts
-                   settle.ts estimate.ts intent.ts
+                   settle.ts estimate.ts intent.ts home.ts
   capture/         hook.ts, adapters/claude-code.ts
   store.ts         JSONL read/append
   config.ts        .session.json at the repo root — attribution, checked in
@@ -48,6 +48,8 @@ rates.json         bundled prices, per model, per million tokens
   git.ts           HEAD, diff, changed files
   sync.ts          records over refs/session/*, push/pull/peers
   render/          palette.ts (semantic colour), terminal.ts, html.ts
+                   terminal.ts holds both shapes: the brief views `show` and
+                   the bare screen print, and the labelled layout behind --full
 ```
 
 ## The record
@@ -392,6 +394,56 @@ and nothing can be both pushable and invisible to that.
 All git plumbing sits below one line in `sync.ts` — hash-object, mktree,
 commit-tree, update-ref, push, fetch, for-each-ref, cat-file — and everything
 above it is pure. No porcelain, no index, no work tree.
+
+## The CLI surface
+
+Written for somebody who has just watched an agent run for forty minutes. That
+reader can hold about three facts, and every extra one pushes out a fact they
+needed.
+
+`session --help` lists four entry points: the bare screen, `start`, `week`, and
+`help all`. The other twelve commands are not hidden from the parser — they all
+run, and `session help all` lists every one of them with its description. The
+short list is a decision about what a first reader can use, not a claim about
+what exists. `BRIEF_COMMANDS` in `program.ts` is the whole of it, and the list
+is filtered out of the real command tree rather than written beside it, so a
+command renamed cannot silently fall off.
+
+`session help all` is built by walking `program.commands`, parents and
+children. A hand-kept list would be one release away from being wrong, and this
+is the one place that must not be.
+
+`session` with no arguments is a **state screen, not a menu**: one sentence
+about where the repo stands, then at most two commands. Which two depends on
+the state, because in each state there is one obvious next move and at most one
+other worth knowing. Commander would print the help here — the right answer to
+"what is this" and the wrong one to "where am I".
+
+`session show` is two sentences and a line of three figures: what was asked
+for, what went outside what was declared, and cost / turns / turns that
+produced nothing. The labelled layout is `--full`, and `--tokens` implies it
+rather than being quietly ignored.
+
+Nothing in the brief views is computed differently. They read the same
+`intent`, `scope`, `drift` and `cost` the full view reads; what changed is how
+much is said at once. Two consequences worth keeping:
+
+- The drift **count** in the sentence is always exact; the **list** stops at
+  three and counts the rest. A sentence naming twelve paths is one nobody
+  finishes, and the number in front of it is what decides whether to run
+  `--full`.
+- The four cases of the second sentence are ordered by which fact the reader
+  most needs: something went outside, here it is; nothing changed at all;
+  nothing was declared, so the question cannot be asked; everything stayed
+  inside. Note "changed nothing" comes before "declared nothing" — a session
+  that changed nothing had nothing to go outside a scope, and sending that
+  reader to `--scope` answers a question they do not have.
+
+The brief views add **no colour roles**. The intent is `intent`, the drift
+paths are `drift`, the framing is `meta`, and the money is left in the
+terminal's own colour — the same roles doing the same jobs as in the layout
+below. A view that needed a new role would be a view saying something the tool
+does not otherwise say.
 
 ## Colour
 

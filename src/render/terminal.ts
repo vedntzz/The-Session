@@ -291,6 +291,265 @@ export function formatSession(
   return lines;
 }
 
+// --- the brief views -----------------------------------------------------
+
+/**
+ * The default `session show`, and the reason `--full` exists.
+ *
+ * Two sentences and a line of figures. The labelled layout below says more,
+ * and says it in a shape that has to be learned: which column means what, what
+ * a bare `!` marks, why `declared` and `changed` are different lines. That is
+ * the right trade for somebody studying a session and the wrong one for
+ * somebody who has just watched an agent run for forty minutes and wants to
+ * know whether it went where they said. So the short answer is what `show`
+ * gives, and the layout is a flag away.
+ *
+ * Nothing here is computed differently. The sentences are the same `intent`,
+ * `scope`, `drift` and `cost` the full view reads; what changed is how much of
+ * it is said at once.
+ */
+
+/** Separates the figures on the metadata line. */
+const FIGURE_GAP = " · ";
+
+/**
+ * How many drift paths the sentence names before it starts counting instead.
+ * Three is what fits on a line beside the words around it.
+ */
+const DRIFT_IN_SENTENCE = 3;
+
+/** What `show` says when a session has no scope to have drifted from. */
+const NO_DRIFT_POSSIBLE =
+  "Nothing was declared to compare against — run session start --scope to see drift.";
+
+/**
+ * The first sentence: what was asked for.
+ *
+ * Returned in three pieces so the intent itself can be inked without the
+ * sentence around it going bold too. A captured intent says so in the
+ * sentence rather than in a line of its own — it is the same fact the full
+ * view spends a row on, and here it is four words.
+ */
+function askedFor(session: Session): { before: string; intent: string; after: string } {
+  if (session.intent === null) {
+    // Nothing to ink, so the whole sentence is the frame.
+    const text =
+      session.endedAt === null
+        ? "Nothing has been asked yet."
+        : "Nothing was ever asked: the session ended before a prompt arrived.";
+    return { before: text, intent: "", after: "" };
+  }
+  // Quoted, and the quotes sit outside the ink. Somebody's own words run into
+  // the sentence around them otherwise, and the reader who most needs this
+  // view is the one reading it with colour turned off in a log.
+  if (isCaptured(session)) {
+    return {
+      before: 'Your first prompt was "',
+      intent: session.intent,
+      after: '", and you declared nothing up front.',
+    };
+  }
+  return { before: 'You asked for "', intent: session.intent, after: '".' };
+}
+
+/**
+ * The second sentence: what went outside what was declared.
+ *
+ * Four cases, ordered by which fact a tired reader most needs. Something went
+ * outside, and here it is; nothing changed at all; nothing was declared, so
+ * the question cannot be asked; everything stayed inside.
+ */
+function wentOutside(session: Session): { before: string; paths: string; after: string } {
+  if (session.drift.length > 0) {
+    const files = plural(session.drift.length, "file", "files");
+    const shown = session.drift.slice(0, DRIFT_IN_SENTENCE);
+    // The count is always exact; the list is not always complete. A sentence
+    // naming twelve paths is a sentence nobody reads to the end, and the
+    // number in front of it is the part that decides whether to run `--full`.
+    const rest = session.drift.length - shown.length;
+    return {
+      before: `${files} changed outside what you declared: `,
+      paths: shown.join(", "),
+      after: rest > 0 ? `, and ${rest} more.` : ".",
+    };
+  }
+  // Before the scope check, because it is the stronger fact. A session that
+  // changed nothing had nothing to go outside a scope, declared or not, and
+  // sending that reader off to `--scope` would answer a question they do not
+  // have.
+  if (session.reality.length === 0) {
+    return { before: "It changed no files at all.", paths: "", after: "" };
+  }
+  if (session.scope.length === 0) {
+    return { before: NO_DRIFT_POSSIBLE, paths: "", after: "" };
+  }
+  return { before: "Everything it changed stayed inside what you declared.", paths: "", after: "" };
+}
+
+/**
+ * The figures, on one line: what it cost, how many turns that took, and how
+ * many of those turns produced nothing.
+ *
+ * Three numbers, because they are the three a person acts on. The api-call
+ * counters, the token breakdown and what the empty turns cost in money are
+ * all real and all in `--full`; putting them here would make the line a table
+ * again, which is the thing this view is not.
+ *
+ * The money is left in the terminal's own colour, as everywhere else: it is
+ * the figure that is always there, and colouring what is always there says
+ * nothing.
+ */
+function figures(cost: SessionCost, rates: RateTable): string | undefined {
+  if (cost.turns === 0 && cost.apiCalls === 0) {
+    // Nothing was captured for this session. A row of zeroes would read as a
+    // measurement of nothing rather than as an absence of measurement.
+    return undefined;
+  }
+  const spent = costCell(cost, priceSession(cost, rates));
+  const turns = plural(cost.turns, "turn", "turns");
+  return [spent, turns, `${cost.emptyTurns} produced nothing`].join(FIGURE_GAP);
+}
+
+/**
+ * The session as `session show` prints it without `--full`.
+ *
+ * Colour does the same work it does everywhere else and no more: the intent is
+ * the line you look for first, the drift paths are the thing that is there,
+ * and everything framing them is dim. No role is used here that the full view
+ * does not use for the same thing.
+ */
+export function formatBrief(
+  session: Session,
+  palette: Palette = plainPalette,
+  view: View = {},
+): string[] {
+  const asked = askedFor(session);
+  const outside = wentOutside(session);
+
+  const lines = [
+    "",
+    `${INDENT}${asked.before}${palette.intent(asked.intent)}${asked.after}`,
+    `${INDENT}${outside.before}${palette.drift(outside.paths)}${outside.after}`,
+  ];
+
+  const line = figures(session.cost, view.rates ?? NO_RATES);
+  if (line !== undefined) {
+    lines.push("", `${INDENT}${palette.meta(line)}`);
+  }
+  return lines;
+}
+
+// --- the home screen -----------------------------------------------------
+
+/** What the repo looks like right now, for the bare `session` screen. */
+export interface Home {
+  /** The session still running, when there is one. */
+  running?: Session;
+  /** The most recent session that has stopped, when there is one. */
+  last?: Session;
+}
+
+/** One thing worth typing next, and why. */
+interface Suggestion {
+  command: string;
+  why: string;
+}
+
+/**
+ * What to say when somebody types `session` and nothing else.
+ *
+ * One sentence about where the repo stands, then at most two commands. Two,
+ * not eight: a menu is something to read, and the reader typed a bare command
+ * because they did not want to read anything. Which two depends on the state,
+ * because in every state there is one obvious next move and at most one other
+ * worth knowing about.
+ *
+ * `session --help` is the list, and `session help all` is the whole list. This
+ * screen is not either of those and should never grow into one.
+ */
+export function formatHome(
+  home: Home,
+  palette: Palette = plainPalette,
+  view: View = {},
+): string[] {
+  const { sentence, suggestions } = homeText(home, view.rates ?? NO_RATES);
+
+  // Its own column rather than the layout's gutter at `GUTTER`: that one is
+  // sized for a labelled table, and two short commands stretched across it
+  // read as a table with the middle missing.
+  const column = suggestions.reduce((soFar, { command }) => Math.max(soFar, width(command)), 0);
+
+  const lines = ["", `${INDENT}${sentence}`, ""];
+  for (const { command, why } of suggestions) {
+    lines.push(`${INDENT}${padRight(command, column + 3)}${palette.meta(why)}`);
+  }
+  return lines;
+}
+
+function homeText(home: Home, rates: RateTable): { sentence: string; suggestions: Suggestion[] } {
+  if (home.running) {
+    const since = clock(home.running.startedAt);
+    const what = home.running.intent === null ? "nothing asked yet" : home.running.intent;
+    return {
+      sentence: `Recording since ${since}: ${what}.`,
+      suggestions: [
+        { command: "session stop", why: "close it and record what changed" },
+        { command: "session week", why: "the sessions before this one" },
+      ],
+    };
+  }
+
+  if (home.last) {
+    const price = priceSession(home.last.cost, rates);
+    const cost = price.priced ? `, costing ${formatUsd(price.usd)}` : "";
+    const ended = home.last.endedAt === null ? "" : ` at ${clock(home.last.endedAt)}`;
+    return {
+      sentence: `Nothing is recording. The last session ended${ended}${cost}.`,
+      suggestions: [
+        { command: "session show", why: "what that session asked for and changed" },
+        { command: 'session start "…"', why: "declare the next one before the agent runs" },
+      ],
+    };
+  }
+
+  return {
+    sentence: "No sessions recorded in this repo yet.",
+    suggestions: [
+      { command: 'session start "…"', why: "declare what you are about to do" },
+      { command: "session hook install", why: "record them automatically instead" },
+    ],
+  };
+}
+
+// --- the command list ----------------------------------------------------
+
+/** One row of `session help all`. Subcommands carry their parent in the name. */
+export interface CommandEntry {
+  name: string;
+  description: string;
+}
+
+/**
+ * Every command, for `session help all`.
+ *
+ * The bare `--help` lists three, which is a decision about what a first reader
+ * needs rather than a claim about what exists. This is where the claim is
+ * kept, and it is built from the command tree itself rather than from a list
+ * beside it — a list beside it would be one release away from being wrong.
+ */
+export function formatCommands(
+  entries: readonly CommandEntry[],
+  palette: Palette = plainPalette,
+): string[] {
+  const widest = entries.reduce((soFar, entry) => Math.max(soFar, width(entry.name)), 0);
+
+  const lines = ["", `${INDENT}Every command. The short list is session --help.`, ""];
+  for (const entry of entries) {
+    lines.push(`${INDENT}${padRight(entry.name, widest + 2)}${palette.meta(entry.description)}`);
+  }
+  return lines;
+}
+
 // --- the week table ------------------------------------------------------
 
 /** Space between columns. Two, so the eye reads them as separate. */

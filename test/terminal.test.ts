@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { RateTable } from "../src/pricing.js";
 import { plainPalette, type Palette } from "../src/render/palette.js";
-import { formatSession, formatWeek, type View } from "../src/render/terminal.js";
+import {
+  formatBrief,
+  formatCommands,
+  formatHome,
+  formatSession,
+  formatWeek,
+  type View,
+} from "../src/render/terminal.js";
 import { zeroCost, zeroTokens, type Session, type SessionCost } from "../src/store.js";
 
 /**
@@ -780,5 +787,186 @@ describe("a filtered week", () => {
 
   it("still says the plain thing when an unfiltered week is empty", () => {
     expect(formatWeek([], 7, plainPalette, {}, priced)).toEqual(["", "  No sessions in the last 7 days"]);
+  });
+});
+
+describe("formatBrief", () => {
+  /** Renders the short `show` with no colour, which is the contract. */
+  function brief(overrides: Partial<Session> = {}, view: View = priced): string[] {
+    return formatBrief(session(overrides), plainPalette, view);
+  }
+
+  it("leads with what was asked for, in the developer's own words and quoted", () => {
+    expect(brief()[1]).toBe('  You asked for "add rate limiting to /orders".');
+  });
+
+  it("says a captured intent was a prompt rather than a declaration", () => {
+    const lines = brief({ intentSource: "captured", intent: "why does /orders 500" });
+
+    expect(lines[1]).toBe(
+      '  Your first prompt was "why does /orders 500", and you declared nothing up front.',
+    );
+  });
+
+  it("says so plainly when nothing was ever asked", () => {
+    expect(brief({ intent: null, intentSource: "captured" })[1]).toBe(
+      "  Nothing was ever asked: the session ended before a prompt arrived.",
+    );
+  });
+
+  it("names what went outside the scope, and how many", () => {
+    const lines = brief({
+      scope: ["src/api/"],
+      reality: ["src/api/orders.ts", "src/store.ts"],
+      drift: ["src/store.ts"],
+    });
+
+    expect(lines[2]).toBe("  1 file changed outside what you declared: src/store.ts.");
+  });
+
+  it("counts the rest rather than naming twelve paths in a sentence", () => {
+    const drift = ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"];
+    const lines = brief({ scope: ["src/"], reality: drift, drift });
+
+    // The count in front is exact; the list is what fits. `--full` has all five.
+    expect(lines[2]).toBe("  5 files changed outside what you declared: a.ts, b.ts, c.ts, and 2 more.");
+  });
+
+  it("says when everything stayed inside", () => {
+    const lines = brief({ scope: ["src/api/"], reality: ["src/api/orders.ts"] });
+
+    expect(lines[2]).toBe("  Everything it changed stayed inside what you declared.");
+  });
+
+  it("says a session changed nothing before it says nothing was declared", () => {
+    // The stronger fact. A session that changed nothing had nothing to go
+    // outside a scope, so sending the reader to --scope answers nothing.
+    expect(brief({ scope: [], reality: [] })[2]).toBe("  It changed no files at all.");
+  });
+
+  it("sends a reader with no scope to the flag that would have given them one", () => {
+    const lines = brief({ scope: [], reality: ["src/store.ts"] });
+
+    expect(lines[2]).toBe(
+      "  Nothing was declared to compare against — run session start --scope to see drift.",
+    );
+  });
+
+  it("puts the cost, the turns and the empty turns on one line and stops", () => {
+    const lines = brief({
+      cost: cost({ inputTokens: 100_000, turns: 9, emptyTurns: 3, apiCalls: 40 }),
+    });
+
+    expect(lines.at(-1)).toBe("  $1.50 · 9 turns · 3 produced nothing");
+    // The api-call counters and the token breakdown are --full's business.
+    expect(lines.join("\n")).not.toContain("api call");
+    expect(lines.join("\n")).not.toContain("no edits");
+  });
+
+  it("reports an unpriced model rather than pricing it at a guess", () => {
+    const lines = brief({
+      cost: cost({ model: "mystery-9", inputTokens: 100_000, turns: 4, apiCalls: 9 }),
+    });
+
+    expect(lines.at(-1)).toContain("100,000 tokens, mystery-9 unpriced");
+  });
+
+  it("leaves the figures out when nothing was captured", () => {
+    // A row of zeroes reads as a measurement of nothing rather than as an
+    // absence of measurement.
+    const lines = brief({ cost: zeroCost() });
+
+    expect(lines).toHaveLength(3);
+    expect(lines.join("\n")).not.toContain("turn");
+  });
+
+  it("inks the intent as intent and the drift as drift, and nothing else", () => {
+    const lines = formatBrief(
+      session({ scope: ["src/api/"], reality: ["src/store.ts"], drift: ["src/store.ts"] }),
+      tagged,
+      priced,
+    );
+
+    expect(lines[1]).toBe('  You asked for "<intent>add rate limiting to /orders</intent>".');
+    expect(lines[2]).toBe("  1 file changed outside what you declared: <drift>src/store.ts</drift>.");
+  });
+
+  it("gives back the plain bytes when the ink is off", () => {
+    // The same contract the rest of the terminal output keeps: colour is an
+    // addition to a terminal, never a change to the output.
+    const marked = formatBrief(session({ drift: ["src/store.ts"], scope: ["src/api/"] }), tagged, priced);
+    const plain = brief({ drift: ["src/store.ts"], scope: ["src/api/"] });
+
+    expect(marked.map((line) => line.replace(/<\/?\w+>/g, ""))).toEqual(plain);
+  });
+});
+
+describe("formatHome", () => {
+  it("says what is recording, and offers two commands", () => {
+    const lines = formatHome({ running: session({ endedAt: null }) }, plainPalette, priced);
+
+    expect(lines[1]).toBe("  Recording since 14:02: add rate limiting to /orders.");
+    expect(lines.filter((line) => line.trim() !== "")).toHaveLength(3);
+    expect(lines.at(-2)).toContain("session stop");
+    expect(lines.at(-1)).toContain("session week");
+  });
+
+  it("says a passive session has not been given a prompt yet", () => {
+    const running = session({ endedAt: null, intent: null, intentSource: "captured" });
+
+    expect(formatHome({ running }, plainPalette, priced)[1]).toBe(
+      "  Recording since 14:02: nothing asked yet.",
+    );
+  });
+
+  it("names the last session and what it cost once nothing is running", () => {
+    const last = session({ cost: cost({ inputTokens: 100_000 }) });
+
+    expect(formatHome({ last }, plainPalette, priced)[1]).toBe(
+      "  Nothing is recording. The last session ended at 14:39, costing $1.50.",
+    );
+  });
+
+  it("leaves the money off a session no rate covers", () => {
+    const last = session({ cost: cost({ model: "mystery-9", inputTokens: 100_000 }) });
+
+    expect(formatHome({ last }, plainPalette, priced)[1]).toBe(
+      "  Nothing is recording. The last session ended at 14:39.",
+    );
+  });
+
+  it("tells an empty repo what to type", () => {
+    const lines = formatHome({}, plainPalette, priced);
+
+    expect(lines[1]).toBe("  No sessions recorded in this repo yet.");
+    expect(lines.at(-2)).toContain('session start "…"');
+    expect(lines.at(-1)).toContain("session hook install");
+  });
+
+  it("never offers more than two commands", () => {
+    const states = [{ running: session({ endedAt: null }) }, { last: session() }, {}];
+
+    for (const state of states) {
+      const said = formatHome(state, plainPalette, priced).filter((line) => line.trim() !== "");
+      expect(said).toHaveLength(3);
+    }
+  });
+});
+
+describe("formatCommands", () => {
+  const entries = [
+    { name: "start", description: "Begin a new session" },
+    { name: "config set", description: "Set an attribution field" },
+  ];
+
+  it("lines the descriptions up in a column of their own", () => {
+    const lines = formatCommands(entries, plainPalette);
+
+    expect(lines).toContain("  start       Begin a new session");
+    expect(lines).toContain("  config set  Set an attribution field");
+  });
+
+  it("says where the short list is, so the two are not confused", () => {
+    expect(formatCommands(entries, plainPalette)[1]).toContain("session --help");
   });
 });
