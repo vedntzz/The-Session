@@ -261,6 +261,22 @@ describe("summarize", () => {
     expect(figures.median).toBe(1.5);
   });
 
+  it("counts the sessions that declared a scope apart from the sample", () => {
+    const figures = summarize(
+      [
+        session({ drift: ["src/store.ts"] }),
+        session({ intentSource: "captured", scope: [] }),
+        session({ intentSource: "captured", scope: [] }),
+      ],
+      RATES,
+    );
+
+    // All three are work like this and belong in the money. Only one of them
+    // could have drifted.
+    expect(figures.declared).toBe(1);
+    expect(figures.drift).toEqual([{ path: "src/store.ts", sessions: 1 }]);
+  });
+
   it("counts the open sessions apart from the decided ones", () => {
     const figures = summarize(
       [session({ outcome: "merged" }), session({ outcome: "abandoned" }), session({ outcome: "open" })],
@@ -367,12 +383,93 @@ describe("estimateFor", () => {
   });
 });
 
+describe("sessions that changed nothing", () => {
+  /**
+   * Five sessions that changed a file no rule recognises, costing $1.50 to
+   * $7.50, and three that changed nothing at all. Both land in `other` — the
+   * empties because there are no paths to read a class off, which is what
+   * `stop` records for them — so an `other` estimate is where they collide.
+   *
+   * The empties are the cheap ones on purpose: left in, they drag the median
+   * below anything anybody was ever billed for the work.
+   */
+  async function withEmpties(): Promise<void> {
+    for (let unit = 1; unit <= 5; unit += 1) {
+      await record(`odd job ${unit}`, { reality: ["src/thing.ts"], units: unit });
+    }
+    for (let n = 0; n < 3; n += 1) {
+      await record(`came to nothing ${n}`, { reality: [], outcome: "abandoned", units: 0.1 });
+    }
+  }
+
+  const asking = { intent: "another odd job", class: "other" } as const;
+
+  it("leaves them out of the sample, and says how many it left out", async () => {
+    await withEmpties();
+
+    const estimate = await estimateFor(asking, RATES, options);
+
+    expect(estimate.matched).toBe(5);
+    expect(estimate.empty).toBe(3);
+  });
+
+  it("leaves them out of the distribution", async () => {
+    await withEmpties();
+
+    const estimate = await estimateFor(asking, RATES, options);
+
+    // The five that did something: median $4.50, p90 $7.50. With the three
+    // empties in the sample the median would be $2.25 — a figure describing
+    // sessions that did no work.
+    expect(estimate.figures).toMatchObject({ priced: 5, median: 4.5, p90: 7.5 });
+  });
+
+  it("leaves them out of the first-time merge rate, top and bottom", async () => {
+    await withEmpties();
+
+    const estimate = await estimateFor(asking, RATES, options);
+
+    // Five decided, five merged. The empties are in neither half: they did not
+    // fail to merge, they never had anything to merge.
+    expect(estimate.figures).toMatchObject({ mergedFirstTime: 5, decided: 5, open: 0 });
+  });
+
+  it("leaves their drift out too — a session that changed nothing drifted nowhere", async () => {
+    for (let unit = 1; unit <= 5; unit += 1) {
+      await record(`odd job ${unit}`, { reality: ["src/thing.ts"], units: unit });
+    }
+    await record("came to nothing", { reality: [], drift: ["src/store.ts"] });
+
+    const estimate = await estimateFor(asking, RATES, options);
+
+    expect(estimate.figures?.drift).toEqual([]);
+  });
+
+  it("cannot be counted towards the threshold by them", async () => {
+    // Four sessions that did something and four that did not is eight records
+    // and a sample of four, which is not enough to say anything about.
+    for (let unit = 1; unit <= 4; unit += 1) {
+      await record(`odd job ${unit}`, { reality: ["src/thing.ts"], units: unit });
+    }
+    for (let n = 0; n < 4; n += 1) {
+      await record(`came to nothing ${n}`, { reality: [] });
+    }
+
+    const estimate = await estimateFor(asking, RATES, options);
+
+    expect(estimate.matched).toBe(4);
+    expect(estimate.empty).toBe(4);
+    expect(estimate.figures).toBeUndefined();
+  });
+});
+
 describe("formatEstimate", () => {
   const base: Estimate = {
     intent: "rate limit the /orders endpoint",
     class: "api",
     source: "intent",
     matched: 9,
+    empty: 0,
     figures: {
       priced: 9,
       unpriced: 0,
@@ -381,12 +478,58 @@ describe("formatEstimate", () => {
       mergedFirstTime: 6,
       decided: 8,
       open: 1,
+      declared: 9,
       drift: [
         { path: "src/store.ts", sessions: 5 },
         { path: "rates.json", sessions: 2 },
       ],
     },
   };
+
+  it("says what it left out, beside the sample rather than after the figures", () => {
+    const lines = formatEstimate({ ...base, empty: 3 });
+
+    expect(lines[4]).toBe(
+      "  left out  3 sessions changed no files — nothing was attempted, so there is " +
+        "nothing to estimate from",
+    );
+  });
+
+  it("counts drift over the sessions that declared a scope, not the whole sample", () => {
+    // Four of the twelve were recorded by the hook and declared nothing, so
+    // they had nothing to drift from. Counting them in would report the path
+    // as turning up in a smaller share of the work than it did.
+    const lines = formatEstimate({
+      ...base,
+      matched: 12,
+      figures: { ...base.figures!, declared: 8 },
+    });
+
+    expect(lines).toContain("  drift     src/store.ts  5 of 8");
+    expect(lines).toContain(
+      "            4 sessions here declared no scope, so nothing they changed counts as drift",
+    );
+  });
+
+  it("says so under the drift label when nothing in the sample declared a scope", () => {
+    const lines = formatEstimate({
+      ...base,
+      matched: 9,
+      figures: { ...base.figures!, declared: 0, drift: [] },
+    });
+
+    expect(lines).toContain(
+      "  drift     9 sessions here declared no scope, so nothing they changed counts as drift",
+    );
+  });
+
+  it("says nothing of the sort when every session in the sample declared one", () => {
+    expect(formatEstimate(base).join("\n")).not.toContain("declared no scope");
+  });
+
+  it("says nothing about empties when there were none", () => {
+    expect(formatEstimate(base).join("\n")).not.toContain("left out");
+  });
 
   it("leads with the question and where the class came from", () => {
     const lines = formatEstimate(base);

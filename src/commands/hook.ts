@@ -2,11 +2,11 @@ import { chmod, readFile, rename, stat, unlink, writeFile } from "node:fs/promis
 import { homedir } from "node:os";
 import path from "node:path";
 import {
-  hasHook,
-  HOOK_COMMAND,
-  HOOK_EVENT,
-  withHook,
-  withoutHook,
+  hasHooks,
+  wantedHooks,
+  withHooks,
+  withoutHooks,
+  type HookSpec,
   type Settings,
 } from "../capture/hook.js";
 
@@ -14,14 +14,21 @@ import {
 export interface HookOptions {
   /** The Claude Code settings file. Defaults to ~/.claude/settings.json. */
   settings?: string;
+  /**
+   * Whether to register the two hooks that record sessions nobody declared.
+   * Defaults to on. `--passive=false` is the manual flow and nothing else:
+   * `session start` opens every session, and the only hook is the one that
+   * closes it.
+   */
+  passive?: boolean;
 }
 
 /** What happened, in the words the command prints. */
 export interface HookResult {
   /** The settings file that was read, and written if anything changed. */
   file: string;
-  event: string;
-  command: string;
+  /** What the file holds afterwards. Empty when the hooks were removed. */
+  hooks: HookSpec[];
   /** False when the file already said what was asked for. */
   changed: boolean;
   action: "installed" | "removed";
@@ -97,12 +104,13 @@ async function writeSettings(file: string, settings: Settings): Promise<void> {
 async function apply(
   action: HookResult["action"],
   options: HookOptions,
-  wanted: (settings: Settings) => boolean,
+  hooks: HookSpec[],
+  settled: (settings: Settings) => boolean,
   edit: (settings: Settings) => Settings,
 ): Promise<HookResult> {
   const file = settingsFile(options);
   const settings = await readSettings(file);
-  const changed = !wanted(settings);
+  const changed = !settled(settings);
 
   // Nothing to say means nothing to write: an unchanged settings file keeps
   // its modification time, and no other tool watching it is disturbed.
@@ -110,21 +118,46 @@ async function apply(
     await writeSettings(file, edit(settings));
   }
 
-  return { file, event: HOOK_EVENT, command: HOOK_COMMAND, changed, action };
+  return { file, hooks, changed, action };
 }
 
-/** Registers the hook, leaving every other setting as it was. */
+/**
+ * Registers the hooks, leaving every other setting as it was.
+ *
+ * Passive capture is on unless it is turned off, and turning it off is a
+ * statement about the file rather than an omission from it: the two hooks it
+ * needs are taken back out if an earlier install put them there. Otherwise
+ * `--passive=false` would be a flag that could not be changed its mind about.
+ */
 export function installHook(options: HookOptions = {}): Promise<HookResult> {
-  return apply("installed", options, hasHook, withHook);
+  const wanted = wantedHooks(options.passive ?? true);
+  return apply(
+    "installed",
+    options,
+    wanted,
+    (settings) => hasHooks(settings, wanted),
+    (settings) => withHooks(settings, wanted),
+  );
 }
 
-/** Takes the hook back out, leaving every other setting as it was. */
+/** Takes every hook back out, leaving every other setting as it was. */
 export function uninstallHook(options: HookOptions = {}): Promise<HookResult> {
-  return apply("removed", options, (settings) => !hasHook(settings), withoutHook);
+  return apply(
+    "removed",
+    options,
+    [],
+    (settings) => hasHooks(settings, []),
+    withoutHooks,
+  );
 }
 
-/** What the command prints: what it wrote, and where it wrote it. */
-export function formatHook(result: HookResult): [string, string] {
+/**
+ * What the command prints: what it wrote, where it wrote it, and every hook
+ * the file now holds. The hooks are listed rather than counted because which
+ * ones are registered is the whole difference between the two arrangements —
+ * one line is the manual flow, three is passive capture.
+ */
+export function formatHook(result: HookResult): string[] {
   const label =
     result.action === "installed"
       ? result.changed
@@ -134,8 +167,12 @@ export function formatHook(result: HookResult): [string, string] {
         ? "removed"
         : "not set";
 
-  return [
-    `  ${label.padEnd(7)}  ${result.file}`,
-    `  hook     ${result.event} → ${result.command}`,
-  ];
+  const lines = [`  ${label.padEnd(7)}  ${result.file}`];
+  if (result.hooks.length === 0) {
+    lines.push("  hook     none registered");
+  }
+  for (const hook of result.hooks) {
+    lines.push(`  hook     ${hook.event} → ${hook.command}`);
+  }
+  return lines;
 }

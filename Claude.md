@@ -47,7 +47,7 @@ rates.json         bundled prices, per model, per million tokens
   verify.ts        the chain walk, pure
   git.ts           HEAD, diff, changed files
   sync.ts          records over refs/session/*, push/pull/peers
-  render/          terminal.ts, html.ts
+  render/          palette.ts (semantic colour), terminal.ts, html.ts
 ```
 
 ## The record
@@ -65,7 +65,7 @@ type Session = {
                           // in classify.ts. Written at stop; absent on older
                           // records, where readers derive it from reality.
   cost: SessionCost
-  outcome: 'open' | 'merged' | 'abandoned'
+  outcome: 'open' | 'merged' | 'abandoned' | 'empty'
   startedAt: string
   endedAt: string | null
   startCommit: string
@@ -138,6 +138,29 @@ A manual `mark` outranks the computation permanently — it can see renames,
 reverts and other repos, and the computation cannot. A `computed` observation
 never outranks a fresh computation.
 
+The one thing a mark does not outrank is `empty`. A session whose `reality` is
+empty changed no files, so nothing was attempted and nothing was abandoned —
+and everything a person knows better than the computation is knowledge about
+where work went, which is not a question a session without any work has. So
+`empty` is decided first, from the record alone, before facts or marks are
+looked at; `mark` refuses these rather than writing an observation the display
+would then ignore, and refuses `empty` as a mark since nothing declares it.
+`settle` skips them too: `empty` is read off `reality` every time it is asked,
+so an observation saying so would be a copy of a field that cannot disagree
+with it.
+
+Empty sessions are excluded from every figure about work: the unmerged spend
+in `week` (they had no change to land — the money is still in the total), and
+`estimate`'s sample, median, p90, drift and first-time merge rate. They are
+counted and named in both places rather than dropped quietly. What they are
+not excluded from is what they cost: that was spent.
+
+Note an empty session is not the same as one that touched files and left no
+end state for any of them — that one attempted something, and `classify`
+reports it abandoned. `attemptedNothing` is the whole test, and it is false
+while a session is still running: a session that has changed nothing *yet* is
+`open`.
+
 Note this stays inside invariant 3: it is all git plumbing and hashes. No
 model is asked whether the work "really" shipped.
 
@@ -189,6 +212,14 @@ billed, not one interpolated between two of them. "First time" means the first
 terminal observation on the record, or the outcome computed now for a session
 nobody has settled — a session abandoned and revived a month later merged, but
 it did not merge the first time.
+
+Sessions that changed no files come out before anything is counted, and the
+count of them is printed beside the sample. They are not instances of the work
+being asked about: they would drag the median below anything anyone was billed
+for doing it, and sit in the merge rate's denominator as failures to merge
+when there was nothing to merge. Note they mostly land in `other`, since a
+session with no paths has nothing to read a class off — which is exactly the
+estimate they would otherwise swamp.
 
 ## Cost in money
 
@@ -310,11 +341,47 @@ All git plumbing sits below one line in `sync.ts` — hash-object, mktree,
 commit-tree, update-ref, push, fetch, for-each-ref, cat-file — and everything
 above it is pure. No porcelain, no index, no work tree.
 
+## Colour
+
+`render/palette.ts` is the only file that knows an escape code, and the only
+one that imports picocolors. Roles are named for what a thing *is* — `intent`,
+`drift`, `waste`, `path`, `meta`, `merged`, `abandoned` — never for the ink
+they get, so what the tool emphasises can be read off one file. `path` and
+`meta` are both dim and are still two roles: the day one of them stops being
+dim is a line here, not an audit of the layout code.
+
+Only the 16 basic ANSI colours, and mostly attributes (bold, dim,
+strikethrough). No 256-colour, no truecolor, no hex. The hues belong to
+whoever configured the terminal — their red is legible on their background
+because they picked it, and a hard-coded one is a guess about a background
+this tool cannot see.
+
+Red means *there is something here*: drift paths, and the waste figure only
+when it is not zero. `$0.00` in red would teach the reader to ignore red, and
+then the session that wasted $40 would go unread too. The cost figure itself
+is never coloured — it is always there, and colouring what is always there
+says nothing.
+
+`colorEnabled` decides: `FORCE_COLOR` outranks everything either way, then
+`NO_COLOR` (non-empty), then whether stdout is a TTY. Note this deliberately
+differs from picocolors' own rule, which turns colour *on* under `CI` and on
+Windows regardless of the stream — a CI log is a file somebody reads later.
+
+The colourless render is the contract. It is what goes into pipes, files, CI
+logs and bug reports, and `test/palette.test.ts` pins it byte for byte against
+literals, plus asserts that stripping the codes out of the coloured render
+gives back exactly the same bytes. Colour is an addition to a terminal, never
+a change to the output. `plainPalette` is the same construction as
+`ansiPalette` with the ink switched off, not a second hand-written table —
+built the other way the two could come to disagree about what a role wraps.
+
 ## Style
 
 - Small pure functions. Side effects only in `commands/` and `store.ts`.
 - Errors state what happened and what to do: `No scope set. Run session start before your agent.`
-- No emoji in CLI output. No spinners. No "Oops!".
+- No emoji in CLI output. No spinners. No "Oops!". Colour only through
+  `render/palette.ts`, and only ever as an addition to output that reads
+  correctly without it — `!` still marks drift where colour cannot.
 - Never anthropomorphise the agent — it ran, it changed files, it cost money.
 - Prefer adding a test over adding a log line.
 
@@ -333,4 +400,7 @@ above it is pure. No porcelain, no index, no work tree.
   config, no `--format`, no default flags file.
 - Don't build a spec language. Scope is a list of path prefixes, matched at directory boundaries.
 - Don't add telemetry of any kind.
-- Don't add a knowledge graph, a web server, or a dashboard. Those are week-two questions.
+- Don't add a knowledge graph or a web server. Those are week-two questions.
+- No hosted dashboard, no web server, no service to log into. A generated file
+  the user opens or sends is not that — `week --open` and `report` write HTML to
+  disk and nothing serves it.

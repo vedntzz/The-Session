@@ -1,9 +1,15 @@
-import pc from "picocolors";
 import { classOf } from "../classify.js";
 import type { SessionFilter } from "../commands/week.js";
 import { attributionEntries } from "../config.js";
 import { formatUsd, priceSession, spendOf, type Price, type RateTable } from "../pricing.js";
-import { totalTokens, type Session, type SessionCost } from "../store.js";
+import {
+  isCaptured,
+  totalTokens,
+  type Session,
+  type SessionCost,
+  type SessionOutcome,
+} from "../store.js";
+import { plainPalette, type Palette } from "./palette.js";
 
 const INDENT = "  ";
 /** Width of the label column, sized to the longest label the layout uses. */
@@ -17,34 +23,40 @@ const MIN_GAP = 2;
  * a terminal someone has turned colour off in.
  */
 const DRIFT_MARKER = "!";
+/**
+ * Marks an intent that was captured from a prompt rather than declared before
+ * the work. Like `DRIFT_MARKER`, it is a character rather than an ink, so the
+ * distinction survives a pipe, a log file and a screenshot; the tables that
+ * use it say what it means underneath.
+ */
+const CAPTURED_MARKER = "~";
+
+/** What `show` says about an intent nobody declared. */
+const CAPTURED_INTENT = "captured from the first prompt, not declared";
+/** What `show` says instead of a scope, for a session nobody declared one for. */
+const NO_SCOPE = "no scope — nothing was declared to drift from";
+/** Where a reader who wants drift is sent. */
+const SCOPE_HINT = "← session start --scope is what makes drift visible";
+
+/** How a session with no intent yet reads. */
+const NO_INTENT_OPEN = "(no prompt yet)";
+/** How a session that ended without ever being given one reads. */
+const NO_INTENT_ENDED = "(no prompt)";
 
 /**
- * The two treatments the renderer uses. Injected rather than reached for, so
- * tests can assert where colour lands without depending on whether the
- * terminal running them has any.
+ * The intent as any view prints it.
+ *
+ * A passive session that has not had a prompt yet has no words to show, and a
+ * session that ended before one arrived never will. Both say so rather than
+ * printing an empty column: a blank would read as a session whose intent was
+ * lost, and nothing was lost — nothing was ever said.
  */
-export interface Palette {
-  /** Chrome and paths that went where they were declared to go. */
-  dim(text: string): string;
-  /** Drift — the one thing on the page the eye should catch. */
-  bright(text: string): string;
-  /** Work that was thrown away. It still happened, and it still cost money. */
-  struck(text: string): string;
+export function intentOf(session: Pick<Session, "intent" | "endedAt">): string {
+  if (session.intent !== null) {
+    return session.intent;
+  }
+  return session.endedAt === null ? NO_INTENT_OPEN : NO_INTENT_ENDED;
 }
-
-/** No colour at all: what a pipe sees. */
-export const plainPalette: Palette = {
-  dim: (text) => text,
-  bright: (text) => text,
-  struck: (text) => text,
-};
-
-/** What a terminal sees. picocolors decides for itself whether to emit codes. */
-export const terminalPalette: Palette = {
-  dim: (text) => pc.dim(text),
-  bright: (text) => pc.bold(text),
-  struck: (text) => pc.strikethrough(text),
-};
 
 /** Visible width. Code points, not UTF-16 units, so an emoji-free intent lines up. */
 function width(text: string): number {
@@ -113,17 +125,32 @@ function costCell(cost: SessionCost, price: Price): string {
   return `${figure(totalTokens(cost))} tokens, ${model} unpriced`;
 }
 
-/** What the turns that changed no files came to. */
-function wasteCell(cost: SessionCost, price: Price): string {
+/** A figure, and whether it is a figure worth raising your voice about. */
+interface Cell {
+  text: string;
+  /** True when the figure is not zero. See `wasteCell`. */
+  spent: boolean;
+}
+
+/**
+ * What the turns that changed no files came to.
+ *
+ * `spent` is what decides whether it is printed in red, and it is false at
+ * zero: a session that wasted nothing showing `$0.00` in alarm colour would
+ * teach the reader to ignore the colour, and then the one that wasted $40
+ * would not be seen either. Red has to mean there is something there.
+ */
+function wasteCell(cost: SessionCost, price: Price): Cell {
   if (price.priced && price.emptyUsd !== undefined) {
-    return formatUsd(price.emptyUsd);
+    return { text: formatUsd(price.emptyUsd), spent: price.emptyUsd > 0 };
   }
   if (cost.emptyTurnTokens) {
-    return `${figure(totalTokens(cost.emptyTurnTokens))} tokens`;
+    const tokens = totalTokens(cost.emptyTurnTokens);
+    return { text: `${figure(tokens)} tokens`, spent: tokens > 0 };
   }
   // Captured before the split was recorded. A share of the total worked out
   // from the turn count would look like a measurement and would not be one.
-  return "not recorded";
+  return { text: "not recorded", spent: false };
 }
 
 /** The four counters, spelled out. Only ever shown when `--tokens` asks. */
@@ -137,6 +164,24 @@ function breakdown(cost: SessionCost): string {
 }
 
 /**
+ * How an outcome is written, wherever one is printed.
+ *
+ * `open` is left in the terminal's own colour on purpose. It is the ordinary
+ * case — most sessions are open most of the time — and a view that colours
+ * every outcome emphasises none of them.
+ */
+function outcomeInk(palette: Palette, outcome: SessionOutcome): (text: string) => string {
+  switch (outcome) {
+    case "merged":
+      return (text) => palette.merged(text);
+    case "abandoned":
+      return (text) => palette.abandoned(text);
+    default:
+      return (text) => text;
+  }
+}
+
+/**
  * The session as `session show` prints it.
  *
  * `changed` and `outside` partition what actually changed: the paths that
@@ -145,26 +190,52 @@ function breakdown(cost: SessionCost): string {
  */
 export function formatSession(
   session: Session,
-  palette: Palette = terminalPalette,
+  palette: Palette = plainPalette,
   view: View = {},
 ): string[] {
   const lines: string[] = [""];
 
-  const heading = `${INDENT}${session.intent}`;
+  // Inked and measured separately: `gap` counts the characters a reader sees,
+  // and an escape code is not one of them.
+  const intent = intentOf(session);
+  const heading = `${INDENT}${intent}`;
   const ended = session.endedAt === null ? "still running" : clock(session.endedAt);
   const times = `${clock(session.startedAt)} → ${ended}`;
-  lines.push(`${heading}${gap(heading)}${palette.dim(times)}`);
+  lines.push(`${INDENT}${palette.intent(intent)}${gap(heading)}${palette.meta(times)}`);
   lines.push("");
 
-  const declared = session.scope.length > 0 ? session.scope.join("  ") : "none declared";
-  lines.push(`${INDENT}${palette.dim(label("declared"))}${palette.dim(declared)}`);
+  // Said outright, and only when it applies. A declared intent is the ordinary
+  // case and says so by having no line here; a captured one is a different
+  // kind of evidence and a reader comparing it to the paths below is owed the
+  // difference.
+  if (isCaptured(session)) {
+    lines.push(`${INDENT}${palette.meta(label("intent"))}${palette.meta(CAPTURED_INTENT)}`);
+  }
+
+  // A passive session has an empty scope because nobody was asked for one, not
+  // because somebody declared that nothing would change. Printing "none
+  // declared" there would read as a developer who declared nothing; printing
+  // an empty drift line under it would read as a session that stayed inside a
+  // scope. Neither happened, so the line says what did — and says what to do
+  // about it, since declaring a scope is the whole of how drift becomes
+  // visible.
+  if (isCaptured(session)) {
+    const bare = `${INDENT}${label("declared")}${NO_SCOPE}`;
+    lines.push(
+      `${INDENT}${palette.meta(label("declared"))}${palette.meta(NO_SCOPE)}` +
+        `${gap(bare)}${palette.meta(SCOPE_HINT)}`,
+    );
+  } else {
+    const declared = session.scope.length > 0 ? session.scope.join("  ") : "none declared";
+    lines.push(`${INDENT}${palette.meta(label("declared"))}${palette.path(declared)}`);
+  }
 
   const drifted = new Set(session.drift);
   const inScope = session.reality.filter((path) => !drifted.has(path));
   if (inScope.length > 0) {
-    lines.push(`${INDENT}${palette.dim(label("changed"))}${palette.dim(inScope.join("  "))}`);
+    lines.push(`${INDENT}${palette.meta(label("changed"))}${palette.path(inScope.join("  "))}`);
   } else if (session.reality.length === 0) {
-    lines.push(`${INDENT}${palette.dim(label("changed"))}${palette.dim("nothing")}`);
+    lines.push(`${INDENT}${palette.meta(label("changed"))}${palette.path("nothing")}`);
   }
   // Otherwise every changed path drifted, and the `outside` line below already
   // accounts for all of them.
@@ -174,8 +245,8 @@ export function formatSession(
     const bare = `${INDENT}${label("outside")}${marked}`;
     const note = `← you did not declare ${session.drift.length === 1 ? "this" : "these"}`;
     lines.push(
-      `${INDENT}${palette.dim(label("outside"))}${palette.bright(marked)}` +
-        `${gap(bare)}${palette.dim(note)}`,
+      `${INDENT}${palette.meta(label("outside"))}${palette.drift(marked)}` +
+        `${gap(bare)}${palette.meta(note)}`,
     );
   }
 
@@ -187,31 +258,35 @@ export function formatSession(
   if (turns > 0 || apiCalls > 0) {
     const price = priceSession(session.cost, view.rates ?? NO_RATES);
 
-    const spent = `${INDENT}${label("cost")}${costCell(session.cost, price)}`;
+    // The cost itself is left in the terminal's own colour. It is the figure
+    // that is always there, and colouring what is always there says nothing.
+    const cell = costCell(session.cost, price);
+    const spent = `${INDENT}${label("cost")}${cell}`;
     lines.push(
-      `${INDENT}${palette.dim(label("cost"))}${costCell(session.cost, price)}` +
-        `${gap(spent)}${palette.dim(`${plural(turns, "turn", "turns")}, ${emptyTurns} without edits`)}`,
+      `${INDENT}${palette.meta(label("cost"))}${cell}` +
+        `${gap(spent)}${palette.meta(`${plural(turns, "turn", "turns")}, ${emptyTurns} without edits`)}`,
     );
 
-    const wasted = `${INDENT}${label("no edits")}${wasteCell(session.cost, price)}`;
+    const waste = wasteCell(session.cost, price);
+    const wasted = `${INDENT}${label("no edits")}${waste.text}`;
     lines.push(
-      `${INDENT}${palette.dim(label("no edits"))}${wasteCell(session.cost, price)}` +
+      `${INDENT}${palette.meta(label("no edits"))}${waste.spent ? palette.waste(waste.text) : waste.text}` +
         `${gap(wasted)}` +
-        palette.dim(`${plural(apiCalls, "api call", "api calls")}, ${callsWithoutEdits} without edits`),
+        palette.meta(`${plural(apiCalls, "api call", "api calls")}, ${callsWithoutEdits} without edits`),
     );
 
     if (view.tokens) {
-      lines.push(`${INDENT}${palette.dim(label("tokens"))}${palette.dim(breakdown(session.cost))}`);
+      lines.push(`${INDENT}${palette.meta(label("tokens"))}${palette.meta(breakdown(session.cost))}`);
     }
   }
   // Who it was for, one field per line rather than run together: `sow` and
   // `billingCode` are strings of characters nobody can tell apart on sight,
   // and an unlabelled pair of them would be unreadable.
   for (const [key, value] of attributionEntries(session.attribution)) {
-    lines.push(`${INDENT}${palette.dim(label(key))}${palette.dim(value)}`);
+    lines.push(`${INDENT}${palette.meta(label(key))}${palette.meta(value)}`);
   }
 
-  lines.push(`${INDENT}${palette.dim(label("outcome"))}${session.outcome}`);
+  lines.push(`${INDENT}${palette.meta(label("outcome"))}${outcomeInk(palette, session.outcome)(session.outcome)}`);
 
   return lines;
 }
@@ -293,7 +368,13 @@ function cellsFor(session: Session, rates: RateTable): WeekCells {
   const price = priceSession(session.cost, rates);
   return {
     when: stamp(session.startedAt),
-    intent: truncate(session.intent, INTENT_WIDTH),
+    // The marker is inside the column rather than beside it: a fourth column
+    // holding one character for some rows would cost more width than the fact
+    // is worth, and the note under the table says what it means.
+    intent: truncate(
+      isCaptured(session) ? `${CAPTURED_MARKER} ${intentOf(session)}` : intentOf(session),
+      INTENT_WIDTH,
+    ),
     class: classOf(session),
     cost: price.priced ? formatUsd(price.usd) : NO_PRICE,
     turns: figure(session.cost.turns),
@@ -316,11 +397,30 @@ interface Columns {
 }
 
 /**
+ * The two cells in a row that carry ink of their own. Applied after padding,
+ * so the column widths are measured off text a reader can see; the padding
+ * goes inside the escape codes, where it is still just spaces.
+ */
+interface RowInk {
+  intent(text: string): string;
+  outcome(text: string): string;
+}
+
+/** Headings, totals, and any row whose ink is carried by the row itself. */
+const NO_INK: RowInk = { intent: (text) => text, outcome: (text) => text };
+
+/**
  * Lays out one row. Figures are right-aligned so their digits line up and a
  * column can be scanned for the expensive one; text is left-aligned. Cost
  * leads them, because it is the column the eye should land on first.
  */
-function tableRow(left: string, cells: WeekCells, widths: Widths, show: Columns): string {
+function tableRow(
+  left: string,
+  cells: WeekCells,
+  widths: Widths,
+  show: Columns,
+  ink: RowInk = NO_INK,
+): string {
   const columns = [padLeft(cells.cost, widths.cost), padLeft(cells.turns, widths.turns)];
   if (show.tokens) {
     columns.push(padLeft(cells.tokens, widths.tokens));
@@ -329,26 +429,29 @@ function tableRow(left: string, cells: WeekCells, widths: Widths, show: Columns)
 
   // The outcome column is last and never padded: trailing spaces would show up
   // as an overlong rule on a struck-through row.
-  const tail = cells.outcome === "" ? "" : `${COLUMN_GAP}${cells.outcome}`;
+  const tail = cells.outcome === "" ? "" : `${COLUMN_GAP}${ink.outcome(cells.outcome)}`;
   return `${INDENT}${left}${COLUMN_GAP}${columns.join(COLUMN_GAP)}${tail}`;
 }
 
 /** The left block: when it ran, what it was for, and what it was working on. */
-function leftColumns(cells: WeekCells, widths: Widths, show: Columns): string[] {
-  const left = [padRight(cells.when, widths.when), padRight(cells.intent, widths.intent)];
+function leftColumns(cells: WeekCells, widths: Widths, show: Columns, ink: RowInk): string[] {
+  const left = [
+    padRight(cells.when, widths.when),
+    ink.intent(padRight(cells.intent, widths.intent)),
+  ];
   if (show.classes) {
     left.push(padRight(cells.class, widths.class));
   }
   return left;
 }
 
-function sessionRow(cells: WeekCells, widths: Widths, show: Columns): string {
-  return tableRow(leftColumns(cells, widths, show).join(COLUMN_GAP), cells, widths, show);
+function sessionRow(cells: WeekCells, widths: Widths, show: Columns, ink: RowInk = NO_INK): string {
+  return tableRow(leftColumns(cells, widths, show, ink).join(COLUMN_GAP), cells, widths, show, ink);
 }
 
 /** The totals row, whose label runs across every column on the left. */
 function totalsRow(cells: WeekCells, widths: Widths, show: Columns): string {
-  const spanned = leftColumns(HEADINGS, widths, show);
+  const spanned = leftColumns(HEADINGS, widths, show, NO_INK);
   const span = spanned.reduce((total, column) => total + width(column), 0) +
     COLUMN_GAP.length * (spanned.length - 1);
   return tableRow(padRight(cells.when, span), cells, widths, show);
@@ -396,7 +499,7 @@ export function describeFilter(filter: SessionFilter): string | undefined {
 export function formatWeek(
   sessions: readonly Session[],
   days: number,
-  palette: Palette = terminalPalette,
+  palette: Palette = plainPalette,
   filter: SessionFilter = {},
   view: View = {},
 ): string[] {
@@ -430,13 +533,24 @@ export function formatWeek(
   const widths = measure(rows, totals);
   const lines = [""];
   if (narrowed) {
-    lines.push(palette.dim(`${INDENT}only ${narrowed}`));
+    lines.push(palette.meta(`${INDENT}only ${narrowed}`));
   }
-  lines.push(palette.dim(sessionRow(HEADINGS, widths, show)));
+  lines.push(palette.meta(sessionRow(HEADINGS, widths, show)));
 
   for (const [index, session] of sessions.entries()) {
-    const row = sessionRow(rows[index] as WeekCells, widths, show);
-    lines.push(session.outcome === "abandoned" ? palette.struck(row) : row);
+    const cells = rows[index] as WeekCells;
+    // An abandoned row takes one ink and no other: the whole row is written
+    // off, and brightening its intent inside the strike would argue with it.
+    if (session.outcome === "abandoned") {
+      lines.push(palette.abandoned(sessionRow(cells, widths, show)));
+      continue;
+    }
+    lines.push(
+      sessionRow(cells, widths, show, {
+        intent: (text) => palette.intent(text),
+        outcome: outcomeInk(palette, session.outcome),
+      }),
+    );
   }
 
   lines.push("", totalsRow(totals, widths, show));
@@ -453,7 +567,7 @@ export function formatWeek(
   if (spend.unpriced > 0) {
     // Said out loud, because the total above is a total of the rest.
     lines.push(
-      palette.dim(
+      palette.meta(
         `${INDENT}${plural(spend.unpriced, "session", "sessions")} unpriced: ` +
           `${spend.unpricedModels.join(", ")} — add rates to ${RATES_HINT}`,
       ),
@@ -461,7 +575,18 @@ export function formatWeek(
   }
   if (turns > 0) {
     lines.push(
-      palette.dim(`${INDENT}${figure(empty)} of ${plural(turns, "turn", "turns")} changed no files`),
+      palette.meta(`${INDENT}${figure(empty)} of ${plural(turns, "turn", "turns")} changed no files`),
+    );
+  }
+  // Only when a row carries one. A legend for a marker nobody used is a line
+  // the reader has to check the table against to find out it says nothing.
+  const captured = sessions.filter(isCaptured).length;
+  if (captured > 0) {
+    lines.push(
+      palette.meta(
+        `${INDENT}${CAPTURED_MARKER} ${plural(captured, "session", "sessions")} recorded by the ` +
+          "hook: intent captured from the first prompt, no scope declared",
+      ),
     );
   }
   return lines;

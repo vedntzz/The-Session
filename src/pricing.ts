@@ -116,9 +116,12 @@ export interface Spend {
   /** Total over the sessions that could be priced. */
   usd: number;
   /**
-   * Of that, the sessions whose outcome is anything but merged. Open sessions
-   * count: work that has not landed has not paid for itself yet, and a figure
-   * that only counted the abandoned ones would flatter every week in progress.
+   * Of that, the sessions whose outcome is anything but merged — bar the empty
+   * ones. Open sessions count: work that has not landed has not paid for
+   * itself yet, and a figure that only counted the abandoned ones would
+   * flatter every week in progress. A session that changed no files is the
+   * other way round: it has no unlanded work, so counting it here would
+   * inflate the figure with sessions that never had anything to land.
    */
   unmerged: number;
   /** How many sessions carried a model no rate covers. */
@@ -149,7 +152,15 @@ export function spendOf(sessions: readonly Session[], rates: RateTable): Spend {
       continue;
     }
     usd += price.usd;
-    if (session.outcome !== "merged") {
+    // Everything that did not merge, less what never tried to. A session that
+    // changed no files has no changes that failed to land, and counting its
+    // spend here would put money into a figure about work that was thrown
+    // away when no work was done. It stays in `usd`: it was still spent.
+    //
+    // Read off `outcome`, which by the time a view calls this holds what the
+    // repository says now — see `withOutcomes`. The same is true of `merged`
+    // beside it.
+    if (session.outcome !== "merged" && session.outcome !== "empty") {
       unmerged += price.usd;
     }
   }

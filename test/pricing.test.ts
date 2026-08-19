@@ -181,6 +181,23 @@ describe("spendOf", () => {
     expect(spend.unmerged).toBe(150);
   });
 
+  it("keeps a session that changed nothing out of the unmerged figure", () => {
+    const spend = spendOf(
+      [
+        spent("claude-opus-4-1", 1_000_000, { outcome: "abandoned" }),
+        spent("claude-opus-4-1", 1_000_000, { outcome: "empty", reality: [] }),
+      ],
+      rates,
+    );
+
+    // Both were spent; only one of them is money on changes that never
+    // merged. A session that changed no files has no unlanded work, and
+    // counting it here would fill a figure about work that was thrown away
+    // with sessions where none was done.
+    expect(spend.usd).toBe(150);
+    expect(spend.unmerged).toBe(75);
+  });
+
   it("counts the sessions it could not price, and names their models", () => {
     const spend = spendOf(
       [

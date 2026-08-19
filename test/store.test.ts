@@ -6,7 +6,10 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appendSession,
+  captureIntent,
   getOpenSession,
+  intentSourceOf,
+  isCaptured,
   normalizeRemoteUrl,
   readLog,
   readSessions,
@@ -96,6 +99,7 @@ describe("appendSession / readSessions", () => {
       id: written.id,
       repo: written.repo,
       intent: "look around",
+      intentSource: "declared",
       scope: [],
       baseline: [],
       reality: [],
@@ -230,6 +234,131 @@ describe("updateSession", () => {
 
     const [session] = await readSessions(options);
     expect(session?.intent).toBe("what I said");
+  });
+
+  it("refuses to edit intentSource, which is decided when the session opens", async () => {
+    const created = await appendSession(started("mine"), options);
+
+    await expect(
+      updateSession(created.id, { intentSource: "captured" } as SessionPatch, options),
+    ).rejects.toThrow(/cannot be edited/);
+  });
+});
+
+/** A session as the hook opens one: no intent yet, and nothing declared. */
+function opened(startedAt = T.start): NewSession {
+  return { startedAt, intent: null, intentSource: "captured", startCommit: HEAD, scope: [] };
+}
+
+describe("intentSource", () => {
+  it("is declared for a session opened with words in it", async () => {
+    const written = await appendSession(started("I said this"), options);
+
+    expect(written.intentSource).toBe("declared");
+    expect(isCaptured(written)).toBe(false);
+  });
+
+  it("is captured for a session opened without any", async () => {
+    const written = await appendSession(opened(), options);
+
+    expect(written.intent).toBeNull();
+    expect(written.intentSource).toBe("captured");
+    expect(isCaptured(written)).toBe(true);
+  });
+
+  it("reads as declared on a record written before capture existed", () => {
+    // Nothing but `session start` could have opened one then, so this is a
+    // fact about those records rather than a guess about them.
+    expect(intentSourceOf({})).toBe("declared");
+    expect(isCaptured({})).toBe(false);
+  });
+
+  it("refuses a session with no intent that claims somebody declared it", async () => {
+    await expect(
+      appendSession({ ...opened(), intentSource: "declared" }, options),
+    ).rejects.toThrow(/captured one, not a declared one/);
+  });
+
+  it("survives the round trip through the log", async () => {
+    const written = await appendSession(opened(), options);
+
+    await expect(readSessions(options)).resolves.toEqual([written]);
+  });
+});
+
+describe("captureIntent", () => {
+  it("writes the intent of a session that has none", async () => {
+    const created = await appendSession(opened(), options);
+
+    const filled = await captureIntent(created.id, "fix the login redirect", options);
+
+    expect(filled.intent).toBe("fix the login redirect");
+    const [session] = await readSessions(options);
+    expect(session?.intent).toBe("fix the login redirect");
+    // Still captured. Words arriving does not turn it into a declaration.
+    expect(session?.intentSource).toBe("captured");
+  });
+
+  it("refuses a second one, exactly as it refuses editing a declared intent", async () => {
+    const created = await appendSession(opened(), options);
+    await captureIntent(created.id, "the first prompt", options);
+
+    await expect(captureIntent(created.id, "the second prompt", options)).rejects.toThrow(
+      /written once/,
+    );
+
+    const [session] = await readSessions(options);
+    expect(session?.intent).toBe("the first prompt");
+  });
+
+  it("refuses to overwrite an intent somebody declared", async () => {
+    const created = await appendSession(started("what I said"), options);
+
+    await expect(captureIntent(created.id, "what the agent was asked", options)).rejects.toThrow(
+      /written once/,
+    );
+  });
+
+  it("refuses an empty prompt rather than writing an empty intent", async () => {
+    const created = await appendSession(opened(), options);
+
+    await expect(captureIntent(created.id, "   ", options)).rejects.toThrow(/was empty/);
+  });
+
+  it("throws on an unknown id", async () => {
+    await expect(captureIntent("nope", "words", options)).rejects.toThrow(/no session with id/);
+  });
+
+  it("leaves the chain intact", async () => {
+    const created = await appendSession(opened(), options);
+    await captureIntent(created.id, "the first prompt", options);
+
+    const { lines, complete } = await readLog(options);
+    const check = checkChain(lines, complete);
+
+    expect(check.total).toBe(2);
+    expect(check.verified).toBe(2);
+    expect(check.break).toBeUndefined();
+  });
+
+  it("keeps the first intent even when a later record claims another", async () => {
+    // The writer's check is the one that produces a readable error; this is
+    // the backstop. A record appended by hand cannot rewrite an intent either.
+    const created = await appendSession(opened(), options);
+    await captureIntent(created.id, "the first prompt", options);
+
+    const file = await resolveStoreFile(options);
+    const forged = JSON.stringify({
+      v: 1,
+      id: created.id,
+      at: T.later,
+      set: { intent: "something else entirely" },
+    });
+    await writeFile(file, `${await readFile(file, "utf8")}${forged}
+`, "utf8");
+
+    const [session] = await readSessions(options);
+    expect(session?.intent).toBe("the first prompt");
   });
 });
 

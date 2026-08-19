@@ -76,18 +76,46 @@ export interface OutcomeVerdict {
   lost: string[];
 }
 
-/** True for an outcome that is not going to change on its own. */
+/**
+ * True for an outcome that says where work ended up and is not going to
+ * change.
+ *
+ * `empty` is not one, though it will never change either: it says no work was
+ * done, which is not a destination. Nothing that consumes this — recording an
+ * observation, counting a merge rate — wants a session that changed nothing in
+ * its numerator or its denominator.
+ */
 export function isTerminal(outcome: SessionOutcome): boolean {
   return outcome === "merged" || outcome === "abandoned";
 }
 
-/** Reads an outcome off the command line, naming the alternatives when it is not one. */
+/**
+ * True for a session that finished having changed no files.
+ *
+ * The whole of what `empty` means, and it is a fact about the record rather
+ * than a judgement about the repository: `reality` is what the session
+ * changed, and an empty one says it changed nothing. No branch is consulted,
+ * so this is decidable on a machine that is not in the repo at all, and it
+ * cannot be revised by anything that happens later.
+ *
+ * A session still running is not empty. It has changed nothing *yet*, which is
+ * what `open` already says.
+ */
+export function attemptedNothing(session: Session): boolean {
+  return session.endedAt !== null && session.reality.length === 0;
+}
+
+/**
+ * Reads an outcome off the command line, naming the alternatives when it is
+ * not one. `empty` is readable — `week --outcome empty` is a fair question —
+ * but `mark` refuses it: see `markSession`.
+ */
 export function parseOutcome(value: string): SessionOutcome {
   const wanted = value.trim().toLowerCase();
-  if (wanted === "merged" || wanted === "abandoned" || wanted === "open") {
+  if (wanted === "merged" || wanted === "abandoned" || wanted === "open" || wanted === "empty") {
     return wanted;
   }
-  throw new Error(`${value} is not an outcome. Use one of: open, merged, abandoned.`);
+  throw new Error(`${value} is not an outcome. Use one of: open, merged, abandoned, empty.`);
 }
 
 /**
@@ -156,9 +184,11 @@ export function classify(files: readonly FileEvidence[]): OutcomeVerdict {
     lost,
   });
 
-  // A session that left nothing behind has nothing anywhere to find. It is
-  // over, and none of it survived — which is what abandoned means, even when
-  // there was never anything to abandon.
+  // Every path the session left is unaccounted for: it touched files, and
+  // there is no end state for any of them to go looking for. Nothing of it
+  // survived anywhere this can see. Note a session that touched no files at
+  // all never reaches here — that is `empty`, and it is settled before any
+  // evidence is gathered.
   if (files.length === 0) {
     return verdict("abandoned");
   }
@@ -201,6 +231,14 @@ export function manualOutcome(session: Session): Observation | undefined {
  * refusal to guess, not an answer.
  */
 export function effectiveOutcome(session: Session, facts?: RepoFacts): SessionOutcome {
+  // Before everything, including a manual mark. A mark outranks the
+  // computation because a person can see a rename, a revert or another repo
+  // and the computation cannot — but all of that is knowledge about where work
+  // went, and here there was no work. There is nothing for a mark to know
+  // better about, so `mark` refuses these rather than writing one.
+  if (attemptedNothing(session)) {
+    return "empty";
+  }
   const manual = manualOutcome(session);
   if (manual) {
     return manual.outcome;
@@ -216,5 +254,8 @@ export function effectiveOutcome(session: Session, facts?: RepoFacts): SessionOu
 
 /** The verdict with its evidence, for the commands that explain themselves. */
 export function judge(session: Session, facts: RepoFacts): OutcomeVerdict {
+  if (attemptedNothing(session)) {
+    return { outcome: "empty", landed: [], inFlight: [], lost: [] };
+  }
   return classify(evidenceFor(session, facts));
 }

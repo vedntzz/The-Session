@@ -8,10 +8,11 @@ import {
 } from "./commands/hook.js";
 import { formatConfig, setConfig, showConfig } from "./commands/config.js";
 import { estimateFor, formatEstimate, parseSince } from "./commands/estimate.js";
+import { captureFromPrompt, promptFromHook, readHookPayload } from "./commands/intent.js";
 import { formatKey, showKey } from "./commands/key.js";
 import { formatMark, formatSettle, markSession, settleSessions } from "./commands/settle.js";
 import { showSession } from "./commands/show.js";
-import { formatStarted, startSession } from "./commands/start.js";
+import { formatStarted, startPassiveSession, startSession } from "./commands/start.js";
 import { formatStopped, stopIfOpen, stopSession, type StopOptions } from "./commands/stop.js";
 import {
   formatVerify,
@@ -41,11 +42,46 @@ import {
   pullPeers,
   pushLog,
 } from "./sync.js";
-import { formatSession, formatWeek, terminalPalette } from "./render/terminal.js";
+import { paletteFor, type Palette } from "./render/palette.js";
+import { formatSession, formatWeek } from "./render/terminal.js";
 import { storeHome } from "./store.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
-export type ProgramOptions = StopOptions & WeekOptions & HookOptions;
+export type ProgramOptions = StopOptions &
+  WeekOptions &
+  HookOptions & {
+    /**
+     * How the terminal views are inked. Defaults to what this process's stdout
+     * and environment call for — colour into a terminal, nothing into a pipe.
+     */
+    palette?: Palette;
+    /**
+     * Where a hook payload is read from. Defaults to this process's stdin,
+     * which is where Claude Code writes it; the seam is so tests can hand one
+     * over without a pipe.
+     */
+    stdin?: AsyncIterable<Buffer | string>;
+  };
+
+/**
+ * Reads a flag written out in words: `--passive=false` as well as `--passive`.
+ *
+ * Commander's own `--no-passive` says the same thing, and both are accepted,
+ * but the negated spelling is the one nobody guesses. Anything that is not
+ * plainly one or the other is refused rather than read as false, since a
+ * typo silently turning capture off is exactly the failure that would go
+ * unnoticed until a week of sessions was missing.
+ */
+export function parseFlag(value: string): boolean {
+  const wanted = value.trim().toLowerCase();
+  if (["true", "yes", "on", "1"].includes(wanted)) {
+    return true;
+  }
+  if (["false", "no", "off", "0"].includes(wanted)) {
+    return false;
+  }
+  throw new Error(`--passive takes true or false. Got ${value}.`);
+}
 
 /**
  * Builds the `session` command tree. Kept separate from the executable entry
@@ -54,6 +90,9 @@ export type ProgramOptions = StopOptions & WeekOptions & HookOptions;
  */
 export function buildProgram(options: ProgramOptions = {}): Command {
   const program = new Command();
+  // Decided once, here, rather than per command: whether stdout is a terminal
+  // does not change between two lines of the same run.
+  const palette = options.palette ?? paletteFor();
 
   program
     .name("session")
@@ -63,12 +102,46 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program
     .command("start")
     .description("Begin a new session")
-    .argument("<intent>", "what you are setting out to do")
+    .argument("[intent]", "what you are setting out to do")
     .option("--scope <paths...>", "paths you expect to change")
-    .action(async (intent: string, flags: { scope?: string[] }) => {
+    .option("--passive", "for the editor hook: open an undeclared session, or do nothing")
+    .action(async (intent: string | undefined, flags: { scope?: string[]; passive?: boolean }) => {
+      // The hook's half of the command, and it prints nothing either way. A
+      // SessionStart handler's stdout is fed to the agent as context, so a
+      // line here would arrive inside somebody's prompt.
+      if (flags.passive) {
+        await startPassiveSession(options);
+        return;
+      }
+
+      if (intent === undefined) {
+        throw new Error('No intent given. Run: session start "what you are about to do"');
+      }
       const session = await startSession(intent, { ...options, scope: flags.scope });
       for (const line of formatStarted(session)) {
         console.log(line);
+      }
+    });
+
+  program
+    .command("intent")
+    .description("For the editor hook: record the first prompt as an undeclared session's intent")
+    .requiredOption("--from-prompt", "read the Claude Code hook payload on stdin")
+    .action(async () => {
+      // Nothing is printed and nothing throws. This runs between a developer
+      // pressing enter and the agent starting: a UserPromptSubmit handler that
+      // exits non-zero blocks the prompt outright, and one that prints is
+      // adding text to it. A recorder that can eat a prompt is worse than no
+      // recorder.
+      try {
+        const payload = await readHookPayload(options.stdin ?? process.stdin);
+        const prompt = promptFromHook(payload);
+        if (prompt !== undefined) {
+          await captureFromPrompt(prompt, options);
+        }
+      } catch {
+        // The session keeps whatever it had, which is nothing, and the next
+        // prompt tries again.
       }
     });
 
@@ -94,7 +167,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .action(async (id: string | undefined, flags: { tokens?: boolean }) => {
       const session = await showSession(id, options);
       const view = { rates: await loadRates(storeHome(options)), tokens: flags.tokens };
-      for (const line of formatSession(session, terminalPalette, view)) {
+      for (const line of formatSession(session, palette, view)) {
         console.log(line);
       }
     });
@@ -105,7 +178,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .option("--days <n>", "how many days back to look", String(DEFAULT_DAYS))
     .option("--client <name>", "only sessions recorded for this client")
     .option("--project <name>", "only sessions recorded for this project")
-    .option("--outcome <state>", "only sessions that are open, merged, or abandoned")
+    .option("--outcome <state>", "only sessions that are open, merged, abandoned, or empty")
     // Optional value, because the column and the filter are the same question
     // asked twice: `--class` shows what each session was working on, and
     // `--class ui` keeps the ones that were working on the same thing.
@@ -139,7 +212,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
         };
 
         if (!flags.open) {
-          for (const line of formatWeek(sessions, days, terminalPalette, filter, view)) {
+          for (const line of formatWeek(sessions, days, palette, filter, view)) {
             console.log(line);
           }
           return;
@@ -299,10 +372,23 @@ export function buildProgram(options: ProgramOptions = {}): Command {
 
   hook
     .command("install")
-    .description("Register a Claude Code SessionEnd hook that closes an open session")
-    .option("--uninstall", "take the hook back out instead")
-    .action(async (flags: { uninstall?: boolean }) => {
-      const result = flags.uninstall ? await uninstallHook(options) : await installHook(options);
+    .description("Register the Claude Code hooks that open and close sessions")
+    .option("--uninstall", "take the hooks back out instead")
+    .option(
+      "--passive [yes|no]",
+      "record sessions nobody declared, from the first prompt onwards",
+      parseFlag,
+      true,
+    )
+    // The same answer spelled the way commander spells it. Both are here
+    // because `--passive=false` is what anyone reading the other flag would
+    // reach for, and `--no-passive` is what anyone reading a commander CLI
+    // would.
+    .option("--no-passive", "register only the hook that closes a session you started")
+    .action(async (flags: { uninstall?: boolean; passive?: boolean }) => {
+      const result = flags.uninstall
+        ? await uninstallHook(options)
+        : await installHook({ ...options, passive: flags.passive });
       for (const line of formatHook(result)) {
         console.log(line);
       }

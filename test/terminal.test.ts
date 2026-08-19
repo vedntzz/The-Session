@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RateTable } from "../src/pricing.js";
-import {
-  formatSession,
-  formatWeek,
-  plainPalette,
-  type Palette,
-  type View,
-} from "../src/render/terminal.js";
+import { plainPalette, type Palette } from "../src/render/palette.js";
+import { formatSession, formatWeek, type View } from "../src/render/terminal.js";
 import { zeroCost, zeroTokens, type Session, type SessionCost } from "../src/store.js";
 
 /**
@@ -56,16 +51,24 @@ function render(overrides: Partial<Session> = {}, view: View = priced): string[]
   return formatSession(session(overrides), plainPalette, view);
 }
 
-/** Marks up where colour lands, so placement can be asserted exactly. */
+/**
+ * Marks up where colour lands, by role rather than by ink: these tests assert
+ * that the drift path is treated as drift, not that drift is red. Which ink a
+ * role gets is `palette.test.ts`'s business.
+ */
 const tagged: Palette = {
-  dim: (text) => `<dim>${text}</dim>`,
-  bright: (text) => `<bright>${text}</bright>`,
-  struck: (text) => `<struck>${text}</struck>`,
+  intent: (text) => `<intent>${text}</intent>`,
+  drift: (text) => `<drift>${text}</drift>`,
+  waste: (text) => `<waste>${text}</waste>`,
+  path: (text) => `<path>${text}</path>`,
+  meta: (text) => `<meta>${text}</meta>`,
+  merged: (text) => `<merged>${text}</merged>`,
+  abandoned: (text) => `<abandoned>${text}</abandoned>`,
 };
 
 /** Strips the markup `tagged` adds, leaving what the reader would see. */
 function visible(text: string): string {
-  return text.replace(/<\/?(?:dim|bright|struck)>/g, "");
+  return text.replace(/<\/?(?:intent|drift|waste|path|meta|merged|abandoned)>/g, "");
 }
 
 function line(lines: string[], label: string): string | undefined {
@@ -209,7 +212,7 @@ describe("formatSession", () => {
     expect(line(lines, "outside")).toContain("! a.py  ! b.py");
   });
 
-  it("dims the declared and in-scope paths and brightens the drift", () => {
+  it("marks the declared and in-scope paths as paths and the drift as drift", () => {
     const lines = formatSession(
       session({
         scope: ["api/"],
@@ -219,10 +222,10 @@ describe("formatSession", () => {
       tagged,
     );
 
-    expect(line(lines, "declared")).toBe("  <dim>declared    </dim><dim>api/</dim>");
-    expect(line(lines, "changed")).toBe("  <dim>changed     </dim><dim>api/orders.py</dim>");
-    expect(line(lines, "outside")).toContain("<bright>! db/schema.py</bright>");
-    expect(line(lines, "outside")).not.toContain("<dim>! db/schema.py</dim>");
+    expect(line(lines, "declared")).toBe("  <meta>declared    </meta><path>api/</path>");
+    expect(line(lines, "changed")).toBe("  <meta>changed     </meta><path>api/orders.py</path>");
+    expect(line(lines, "outside")).toContain("<drift>! db/schema.py</drift>");
+    expect(line(lines, "outside")).not.toContain("<path>! db/schema.py</path>");
   });
 
   it("aligns the drift note against the visible text, not the colour codes", () => {
@@ -342,6 +345,82 @@ function endOf(text: string, cell: string): number {
   return at + cell.length;
 }
 
+describe("a session the hook recorded", () => {
+  /** As the hook leaves one: intent from the first prompt, no scope. */
+  const captured = { intentSource: "captured" as const, scope: [] };
+
+  it("says the intent was captured rather than declared", () => {
+    const lines = render({ ...captured, reality: ["api/orders.py"] });
+
+    expect(visible(line(lines, "intent") as string)).toBe(
+      "  intent      captured from the first prompt, not declared",
+    );
+  });
+
+  it("says nothing of the sort for a session somebody declared", () => {
+    // The ordinary case says so by having no line about it.
+    expect(line(render({ reality: ["api/orders.py"] }), "intent")).toBeUndefined();
+  });
+
+  it("says there was no scope to drift from, rather than 'none declared'", () => {
+    const lines = render({ ...captured, reality: ["api/orders.py"] });
+
+    expect(visible(line(lines, "declared") as string)).toContain(
+      "no scope — nothing was declared to drift from",
+    );
+  });
+
+  it("points at what makes drift visible", () => {
+    const lines = render({ ...captured, reality: ["api/orders.py"] });
+
+    expect(visible(line(lines, "declared") as string)).toContain(
+      "← session start --scope is what makes drift visible",
+    );
+  });
+
+  it("prints no outside line, because there is no drift to print", () => {
+    const lines = render({ ...captured, reality: ["api/orders.py", "db/schema.py"] });
+
+    expect(line(lines, "outside")).toBeUndefined();
+    expect(visible(line(lines, "changed") as string)).toBe(
+      "  changed     api/orders.py  db/schema.py",
+    );
+  });
+
+  it("lays the whole thing out with the scope line where a scope would be", () => {
+    expect(render({ ...captured, reality: ["api/orders.py"] }, {})).toEqual([
+      "",
+      "  add rate limiting to /orders                          14:02 → 14:39",
+      "",
+      "  intent      captured from the first prompt, not declared",
+      "  declared    no scope — nothing was declared to drift from" +
+        "  ← session start --scope is what makes drift visible",
+      "  changed     api/orders.py",
+      "",
+      "  outcome     open",
+    ]);
+  });
+
+  it("says so where the intent goes when no prompt ever arrived", () => {
+    const lines = render({ ...captured, intent: null });
+
+    expect(lines[1]).toContain("(no prompt)");
+  });
+
+  it("says the prompt is still to come while the session is running", () => {
+    const lines = render({ ...captured, intent: null, endedAt: null });
+
+    expect(lines[1]).toContain("(no prompt yet)");
+    expect(lines[1]).toContain("still running");
+  });
+
+  it("marks the intent as the intent, whether it was declared or captured", () => {
+    const lines = formatSession(session({ ...captured }), tagged, priced);
+
+    expect(lines[1]).toContain("<intent>add rate limiting to /orders</intent>");
+  });
+});
+
 describe("formatWeek", () => {
   it("renders one row per session, with a totals footer", () => {
     expect(formatWeek(week(), 7, plainPalette, {}, priced)).toEqual([
@@ -374,6 +453,58 @@ describe("formatWeek", () => {
     expect(lines[1]).toContain("class");
     expect(lines[2]).toContain("api");
     expect(lines[3]).toContain("ui");
+  });
+
+  it("marks the rows the hook recorded, and says underneath what the mark means", () => {
+    const rows = [
+      session({ intent: "add rate limiting", startedAt: at(9, 14), cost: cost({ turns: 1 }) }),
+      session({
+        intent: "why does /orders 500",
+        intentSource: "captured",
+        startedAt: at(11, 2),
+        cost: cost({ turns: 1 }),
+      }),
+    ];
+
+    const lines = formatWeek(rows, 7, plainPalette, {}, priced);
+
+    expect(lines[2]).toContain("add rate limiting");
+    expect(lines[2]).not.toContain("~");
+    expect(lines[3]).toContain("~ why does /orders 500");
+    expect(lines.at(-1)).toBe(
+      "  ~ 1 session recorded by the hook: intent captured from the first prompt, " +
+        "no scope declared",
+    );
+  });
+
+  it("says nothing about the mark when no row carries one", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
+
+    expect(lines.some((text) => text.includes("recorded by the hook"))).toBe(false);
+  });
+
+  it("counts the marked rows in the plural", () => {
+    const rows = [
+      session({ intent: "one", intentSource: "captured", cost: cost({ turns: 1 }) }),
+      session({ intent: "two", intentSource: "captured", cost: cost({ turns: 1 }) }),
+    ];
+
+    expect(formatWeek(rows, 7, plainPalette, {}, priced).at(-1)).toContain("~ 2 sessions");
+  });
+
+  it("keeps the marked intent inside its column", () => {
+    const long = session({
+      intent: "why does /orders 500 when the cart is empty and the user is new",
+      intentSource: "captured",
+      cost: cost({ turns: 1 }),
+    });
+
+    const [, headings, row] = formatWeek([long], 7, plainPalette, {}, priced) as string[];
+
+    // The marker lives inside the intent column, so the figures beside it
+    // still line up under their headings.
+    expect((row as string).includes("~ why does /orders 500 when…")).toBe(true);
+    expect(endOf(row as string, "1")).toBe(endOf(headings as string, "turns"));
   });
 
   it("keeps the totals label spanning the columns on the left", () => {
@@ -434,19 +565,36 @@ describe("formatWeek", () => {
     expect(first).toContain("add rate limiting to /orders");
   });
 
-  it("strikes through abandoned sessions and leaves merged ones in normal weight", () => {
+  it("writes off abandoned sessions and leaves the others in normal weight", () => {
     const lines = formatWeek(week(), 7, tagged, {}, priced);
 
-    expect(lines[4]).toMatch(/^<struck> {2}01-16 08:31/);
-    expect(lines[4]).toMatch(/abandoned<\/struck>$/);
-    expect(lines[3]).not.toContain("<struck>");
-    expect(lines[2]).not.toContain("<struck>");
+    expect(lines[4]).toMatch(/^<abandoned> {2}01-16 08:31/);
+    expect(lines[4]).toMatch(/abandoned<\/abandoned>$/);
+    expect(lines[3]).not.toContain("<abandoned>");
+    expect(lines[2]).not.toContain("<abandoned>");
   });
 
-  it("strikes the whole row, so the eye can write off the figures too", () => {
+  it("writes off the whole row, so the eye can drop the figures too", () => {
     const abandoned = formatWeek(week(), 7, tagged, {}, priced)[4] as string;
     expect(visible(abandoned)).toBe(formatWeek(week(), 7, plainPalette, {}, priced)[4]);
-    expect(abandoned.match(/<struck>/g)).toHaveLength(1);
+    // One ink and no other: nothing inside a row that has been written off
+    // gets to argue with the strike.
+    expect(abandoned.match(/<abandoned>/g)).toHaveLength(1);
+    expect(abandoned).not.toContain("<intent>");
+  });
+
+  it("marks a merged outcome, and leaves an open one in the terminal's own colour", () => {
+    const lines = formatWeek(week(), 7, tagged, {}, priced);
+
+    expect(lines[3]).toMatch(/<merged>merged<\/merged>$/);
+    expect(lines[2]).toMatch(/ {2}open$/);
+  });
+
+  it("marks each live row's intent, and nothing else in it", () => {
+    const [, , first] = formatWeek(week(), 7, tagged, {}, priced) as string[];
+
+    expect(first).toContain("<intent>add rate limiting to /orders</intent>");
+    expect(visible(first as string)).toBe(formatWeek(week(), 7, plainPalette, {}, priced)[2]);
   });
 
   it("does not pad past the outcome, so a struck row has no trailing rule", () => {
@@ -455,12 +603,12 @@ describe("formatWeek", () => {
     }
   });
 
-  it("dims the headings and the waste line, not the rows", () => {
+  it("treats the headings and the waste line as metadata, not the rows", () => {
     const lines = formatWeek(week(), 7, tagged, {}, priced);
 
-    expect(lines[1]).toMatch(/^<dim>.*<\/dim>$/);
-    expect(lines.at(-1)).toBe("<dim>  10 of 19 turns changed no files</dim>");
-    expect(lines[2]).not.toContain("<dim>");
+    expect(lines[1]).toMatch(/^<meta>.*<\/meta>$/);
+    expect(lines.at(-1)).toBe("<meta>  10 of 19 turns changed no files</meta>");
+    expect(lines[2]).not.toContain("<meta>");
   });
 
   it("totals cost, turns and empty turns across the week", () => {

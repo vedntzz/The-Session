@@ -7,7 +7,13 @@ import {
 import { withOutcomes } from "../observe.js";
 import { isTerminal, observations } from "../outcome.js";
 import { formatUsd, isPriced, priceSession, type RateTable } from "../pricing.js";
-import { readSessions, type Session, type SessionOutcome, type StoreOptions } from "../store.js";
+import {
+  isCaptured,
+  readSessions,
+  type Session,
+  type SessionOutcome,
+  type StoreOptions,
+} from "../store.js";
 
 /**
  * What sessions like this one have cost before.
@@ -71,6 +77,13 @@ export interface EstimateFigures {
   decided: number;
   /** Matched sessions still in flight, which no rate can be asked about yet. */
   open: number;
+  /**
+   * Matched sessions that declared a scope to drift from — the denominator of
+   * the drift counts, and not the same as `matched` once the hook is
+   * recording sessions nobody declared. Those cannot drift, so counting them
+   * in would report a path as rarer than it was.
+   */
+  declared: number;
   /** The paths that most often turned up as drift, commonest first. */
   drift: DriftCount[];
 }
@@ -82,8 +95,15 @@ export interface Estimate {
   source: ClassSource;
   /** The cutoff as a date, when `--since` set one. */
   since?: string;
-  /** How many past sessions of this class were found. */
+  /** How many past sessions of this class were found — the empty ones aside. */
   matched: number;
+  /**
+   * Sessions of this class that changed no files, left out of everything
+   * above. Counted and printed rather than silently dropped: how often a
+   * session comes to nothing is worth knowing, and a sample that quietly
+   * shrank would be a sample nobody could check.
+   */
+  empty: number;
   /** Absent when `matched` is under `MIN_SESSIONS`. */
   figures?: EstimateFigures;
 }
@@ -203,7 +223,12 @@ export function driftPaths(
     .slice(0, limit);
 }
 
-/** The figures over a set of matched sessions. Pure; the rates come from above. */
+/**
+ * The figures over a set of matched sessions. Pure; the rates come from above.
+ *
+ * Expects the empty sessions to be out already — `estimateFor` removes them
+ * before anything here counts anything.
+ */
 export function summarize(
   sessions: readonly Session[],
   rates: RateTable,
@@ -224,6 +249,7 @@ export function summarize(
     mergedFirstTime: decided.filter((outcome) => outcome === "merged").length,
     decided: decided.length,
     open: sessions.length - decided.length,
+    declared: sessions.filter((session) => !isCaptured(session)).length,
     drift: driftPaths(sessions),
   };
 }
@@ -237,6 +263,14 @@ export function summarize(
  * to have merged. Outcomes are resolved for the matches alone — which class a
  * session was is a fact about its paths, so the repository need only be asked
  * about the ones that survive the filter.
+ *
+ * Sessions that changed no files come out before anything is counted. The
+ * question this answers is what work like this has cost and how often it
+ * landed, and a session that attempted nothing is not an instance of the work:
+ * it would drag the median down, and it would sit in the merge rate's
+ * denominator as a session that failed to merge when there was nothing to
+ * merge. What it did cost is real, which is why it is still reported — as its
+ * own count, in its own words.
  */
 export async function estimateFor(
   request: EstimateRequest,
@@ -252,7 +286,8 @@ export async function estimateFor(
       (request.since === undefined || Date.parse(session.startedAt) >= request.since) &&
       classOf(session) === choice.class,
   );
-  const matched = await withOutcomes(past, options.cwd ?? process.cwd());
+  const resolved = await withOutcomes(past, options.cwd ?? process.cwd());
+  const matched = resolved.filter((session) => session.outcome !== "empty");
 
   return {
     intent: request.intent,
@@ -262,6 +297,7 @@ export async function estimateFor(
       ? {}
       : { since: new Date(request.since).toISOString().slice(0, 10) }),
     matched: matched.length,
+    empty: resolved.length - matched.length,
     ...(matched.length >= MIN_SESSIONS ? { figures: summarize(matched, rates) } : {}),
   };
 }
@@ -309,6 +345,18 @@ export function formatEstimate(estimate: Estimate): string[] {
     line("like it", sample),
   ];
 
+  // Beside the sample, not after the figures: it says what the sample is not,
+  // and that belongs where the reader is deciding how much to believe it.
+  if (estimate.empty > 0) {
+    lines.push(
+      line(
+        "left out",
+        `${plural(estimate.empty, "session", "sessions")} changed no files — nothing ` +
+          `was attempted, so there is nothing to estimate from`,
+      ),
+    );
+  }
+
   const figures = estimate.figures;
   if (!figures) {
     // What was found and what would make it enough. The alternative is a
@@ -341,10 +389,27 @@ export function formatEstimate(estimate: Estimate): string[] {
 
   // The paths under a column of their own, so a list of five can be read down
   // rather than across. Only the first line carries the label.
+  //
+  // Counted over the sessions that declared a scope rather than over the whole
+  // sample: a session the hook recorded had nothing to drift from, and putting
+  // it in the denominator would report a path as turning up in a smaller share
+  // of the work than it did.
   const width = figures.drift.reduce((widest, entry) => Math.max(widest, entry.path.length), 0);
   for (const [index, entry] of figures.drift.entries()) {
-    const count = `${entry.sessions} of ${estimate.matched}`;
+    const count = `${entry.sessions} of ${figures.declared}`;
     lines.push(line(index === 0 ? "drift" : "", `${entry.path.padEnd(width + 2)}${count}`));
+  }
+
+  // Said whenever the two differ, because "2 of 7" under a sample of twelve is
+  // a figure the reader would otherwise have to reconcile on their own.
+  if (figures.declared < estimate.matched) {
+    lines.push(
+      line(
+        figures.drift.length > 0 ? "" : "drift",
+        `${plural(estimate.matched - figures.declared, "session", "sessions")} here declared no ` +
+          `scope, so nothing they changed counts as drift`,
+      ),
+    );
   }
 
   if (figures.unpriced > 0) {

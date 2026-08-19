@@ -148,12 +148,12 @@ describe("work that never landed", () => {
     await expect(outcomeOf(session)).resolves.toBe("open");
   });
 
-  it("is abandoned when the session changed no files at all", async () => {
+  it("is empty when the session changed no files at all — nothing was attempted", async () => {
     await startSession("read the code and change nothing", options);
     const session = await stopSession(options);
 
     expect(session.reality).toEqual([]);
-    await expect(outcomeOf(session)).resolves.toBe("abandoned");
+    await expect(outcomeOf(session)).resolves.toBe("empty");
   });
 });
 
@@ -223,6 +223,33 @@ describe("settle", () => {
     expect(result.stillOpen).toBe(1);
     const [stored] = await readSessions(options);
     expect(stored?.observations).toBeUndefined();
+  });
+
+  it("writes nothing down for a session that changed no files", async () => {
+    await startSession("read the code and change nothing", options);
+    await stopSession(options);
+
+    const result = await settleSessions(options);
+
+    // `empty` is read off `reality` every time it is asked, so an observation
+    // saying so would be a copy of a field already on the record. Counted, not
+    // recorded, and not filed under "still in flight" either — it has finished.
+    expect(result.settled).toEqual([]);
+    expect(result.empty).toBe(1);
+    expect(result.stillOpen).toBe(0);
+    const [stored] = await readSessions(options);
+    expect(stored?.observations).toBeUndefined();
+  });
+
+  it("says how many changed nothing", async () => {
+    await startSession("read the code and change nothing", options);
+    await stopSession(options);
+
+    const lines = formatSettle(await settleSessions(options));
+
+    expect(lines).toContain(
+      "  empty    1 session changed no files, so there is nothing to have ended up anywhere",
+    );
   });
 
   it("leaves a session that has not stopped alone", async () => {
@@ -297,6 +324,23 @@ describe("mark", () => {
     await markSession(session.id, "merged", options);
 
     await expect(outcomeOf(session)).resolves.toBe("merged");
+  });
+
+  it("refuses a session that changed no files: there is nothing to have gone anywhere", async () => {
+    await startSession("read the code and change nothing", options);
+    const session = await stopSession(options);
+
+    await expect(markSession(session.id, "abandoned", options)).rejects.toThrow(
+      /changed no files.*nothing was attempted/s,
+    );
+    await expect(markSession(session.id, "merged", options)).rejects.toThrow(/changed no files/);
+    await expect(outcomeOf(session)).resolves.toBe("empty");
+  });
+
+  it("refuses empty as a mark, since nothing declares it", async () => {
+    const session = await sessionOnBranch("feature", "src/a.ts", "the work");
+
+    await expect(markSession(session.id, "empty", options)).rejects.toThrow(/not a mark/);
   });
 
   it("records the override as a manual observation", async () => {

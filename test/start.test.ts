@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { formatStarted, startSession } from "../src/commands/start.js";
+import { formatStarted, startPassiveSession, startSession } from "../src/commands/start.js";
 import { stopSession } from "../src/commands/stop.js";
 import { getOpenSession, readSessions, updateSession, type SessionPatch } from "../src/store.js";
 
@@ -144,6 +144,102 @@ describe("startSession", () => {
   it("writes nothing when it refuses", async () => {
     await expect(startSession("too early", options)).rejects.toThrow();
     await expect(readSessions(options)).resolves.toEqual([]);
+  });
+});
+
+describe("startPassiveSession", () => {
+  it("opens a session with no intent and no scope", async () => {
+    const head = await commit("a.txt");
+
+    const session = await startPassiveSession(options);
+
+    expect(session?.intent).toBeNull();
+    expect(session?.intentSource).toBe("captured");
+    expect(session?.scope).toEqual([]);
+    expect(session?.startCommit).toBe(head);
+    expect(session?.endedAt).toBeNull();
+  });
+
+  it("persists it, so the first prompt has something to fill", async () => {
+    await commit("a.txt");
+    const session = await startPassiveSession(options);
+
+    await expect(readSessions(options)).resolves.toEqual([session]);
+    await expect(getOpenSession(options)).resolves.toEqual(session);
+  });
+
+  it("records what was already dirty, so the session is not blamed for it", async () => {
+    await commit("a.txt");
+    await writeFile(path.join(cwd, "a.txt"), "edited before anyone started", "utf8");
+
+    const session = await startPassiveSession(options);
+
+    expect(session?.baseline).toEqual(["a.txt"]);
+  });
+
+  it("does nothing at all when the developer already started one", async () => {
+    // They declared an intent and a scope. A second session would take the
+    // diff away from the one they meant.
+    await commit("a.txt");
+    const declared = await startSession("extract the store layer", {
+      ...options,
+      scope: ["src/store.ts"],
+    });
+
+    await expect(startPassiveSession(options)).resolves.toBeUndefined();
+
+    await expect(readSessions(options)).resolves.toEqual([declared]);
+    await expect(getOpenSession(options)).resolves.toEqual(declared);
+  });
+
+  it("does nothing when a passive session is already open", async () => {
+    await commit("a.txt");
+    const first = await startPassiveSession(options);
+
+    await expect(startPassiveSession(options)).resolves.toBeUndefined();
+
+    const sessions = await readSessions(options);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.id).toBe(first?.id);
+  });
+
+  it("opens the next one once the last has stopped", async () => {
+    await commit("a.txt");
+    await startPassiveSession(options);
+    await stopSession({ ...options, adapters: [] });
+
+    const second = await startPassiveSession(options);
+
+    expect(second).toBeDefined();
+    await expect(readSessions(options)).resolves.toHaveLength(2);
+  });
+
+  it("says nothing and writes nothing outside a repo", async () => {
+    // It runs whenever an editor starts, wherever that is.
+    const elsewhere = path.join(root, "not-a-repo");
+    await mkdir(elsewhere, { recursive: true });
+
+    await expect(
+      startPassiveSession({ home, cwd: elsewhere }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("says nothing in a repo with no commits to diff against", async () => {
+    await expect(startPassiveSession(options)).resolves.toBeUndefined();
+    await expect(readSessions(options)).resolves.toEqual([]);
+  });
+
+  it("copies attribution in, the same as a declared session does", async () => {
+    await commit("a.txt");
+    await writeFile(
+      path.join(cwd, ".session.json"),
+      JSON.stringify({ client: "Acme", project: "orders-api" }),
+      "utf8",
+    );
+
+    const session = await startPassiveSession(options);
+
+    expect(session?.attribution).toEqual({ client: "Acme", project: "orders-api" });
   });
 });
 

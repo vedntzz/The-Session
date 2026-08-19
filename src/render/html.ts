@@ -1,7 +1,7 @@
 import type { SessionFilter } from "../commands/week.js";
 import { formatUsd, priceSession, spendOf, type RateTable } from "../pricing.js";
-import { totalTokens, type Session } from "../store.js";
-import { describeFilter, stamp, type View } from "./terminal.js";
+import { isCaptured, totalTokens, type Session } from "../store.js";
+import { describeFilter, intentOf, stamp, type View } from "./terminal.js";
 
 /**
  * The page's whole palette. Two of these carry meaning — `primary` marks what
@@ -79,6 +79,9 @@ function weigh(sessions: readonly Session[], rates: RateTable): number[] {
  * above zero: a red nought teaches the eye that red means nothing in
  * particular, and then the one number that matters cannot get its attention.
  */
+/** The marker the terminal table uses for an intent nobody declared. */
+const CAPTURED_MARKER = "~";
+
 export function hue(count: number): string {
   return count > 0 ? "waste" : "quiet";
 }
@@ -203,12 +206,40 @@ function costCells(session: Session, rates: RateTable, tokens: boolean): string 
  * What the session changed that nobody declared. The count is the signal; the
  * paths are on the element, so the question "which files?" is a hover rather
  * than another column.
+ *
+ * A session the hook recorded declared no scope, so it has no drift — and `0
+ * outside` would be a claim that it stayed inside one. The column says which
+ * of the two it is looking at instead.
  */
 function driftCell(session: Session): string {
+  if (isCaptured(session)) {
+    return (
+      `<span class="figure drift quiet" title="no scope was declared, ` +
+      `so there is nothing for these paths to be outside of">no scope</span>`
+    );
+  }
+
   const count = session.drift.length;
   const paths =
     count > 0 ? ` title="${session.drift.map(escapeHtml).join("&#10;")}"` : "";
   return `<span class="figure drift ${hue(count)}"${paths}>${escapeHtml(figure(count))} outside</span>`;
+}
+
+/**
+ * The intent, marked when nobody declared it. The same `~` the terminal table
+ * uses, for the same reason: the page is read next to that table, and a
+ * distinction drawn one way in one view and another way in the other is a
+ * distinction the reader has to learn twice.
+ */
+function intentCell(session: Session): string {
+  const intent = intentOf(session);
+  if (!isCaptured(session)) {
+    return `<span class="intent">${escapeHtml(intent)}</span>`;
+  }
+  return (
+    `<span class="intent" title="captured from the first prompt, not declared">` +
+    `${escapeHtml(`${CAPTURED_MARKER} ${intent}`)}</span>`
+  );
 }
 
 function renderRow(
@@ -223,7 +254,7 @@ function renderRow(
   return (
     `<li class="${classes}" style="height:${rowHeight(weight, heaviest)}px">` +
     `<span class="when">${escapeHtml(stamp(session.startedAt))}</span>` +
-    `<span class="intent">${escapeHtml(session.intent)}</span>` +
+    intentCell(session) +
     costCells(session, rates, tokens) +
     driftCell(session) +
     `<span class="outcome">${escapeHtml(session.outcome)}</span>` +
@@ -278,7 +309,15 @@ function renderBody(sessions: readonly Session[], window: string, view: View): s
       ? `<p><span class="${hue(empty)}">${escapeHtml(figure(empty))}</span> of ` +
         `${escapeHtml(plural(turns, "turn", "turns"))} changed no files</p>`
       : "";
-  const footer = spent || wasted ? `<footer>${spent}${wasted}</footer>` : "";
+  // The legend for the marker on those rows, and only when there are any.
+  const captured = sessions.filter(isCaptured).length;
+  const recorded =
+    captured > 0
+      ? `<p>${escapeHtml(`~ ${plural(captured, "session", "sessions")}`)} recorded by the hook: ` +
+        `intent captured from the first prompt, no scope declared</p>`
+      : "";
+  const footer =
+    spent || wasted || recorded ? `<footer>${spent}${wasted}${recorded}</footer>` : "";
 
   return (
     summary +

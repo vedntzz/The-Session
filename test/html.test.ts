@@ -389,6 +389,80 @@ describe("renderWeek: drift", () => {
   });
 });
 
+describe("renderWeek: sessions the hook recorded", () => {
+  /** As the hook leaves one: intent from the first prompt, no scope. */
+  function captured(overrides: Partial<Session> = {}): Session {
+    return session({
+      intent: "why does /orders 500",
+      intentSource: "captured",
+      scope: [],
+      drift: [],
+      cost: cost({ turns: 1, apiCalls: 1 }),
+      ...overrides,
+    });
+  }
+
+  it("marks the intent with the same character the terminal table uses", () => {
+    const listed = rows(renderWeek([captured()], 7, {}, priced));
+
+    expect(listed[0]).toContain("~ why does /orders 500");
+  });
+
+  it("says on the element what the mark means", () => {
+    const listed = rows(renderWeek([captured()], 7, {}, priced));
+
+    expect(listed[0]).toContain('title="captured from the first prompt, not declared"');
+  });
+
+  it("leaves a declared intent unmarked", () => {
+    const listed = rows(renderWeek(week(), 7, {}, priced));
+
+    expect(listed[0]).not.toContain("~ ");
+    expect(listed[0]).toContain('<span class="intent">add rate limiting to /orders</span>');
+  });
+
+  it("says there was no scope, rather than counting zero paths outside one", () => {
+    // `0 outside` would be a claim that the session stayed inside a scope.
+    const listed = rows(renderWeek([captured()], 7, {}, priced));
+
+    expect(listed[0]).toContain("no scope</span>");
+    expect(listed[0]).not.toContain("0 outside");
+  });
+
+  it("explains that on hover too", () => {
+    const listed = rows(renderWeek([captured()], 7, {}, priced));
+
+    expect(listed[0]).toContain(
+      'title="no scope was declared, so there is nothing for these paths to be outside of"',
+    );
+  });
+
+  it("keeps such a session out of the week's drift total", () => {
+    const html = renderWeek([...week(), captured()], 7, {}, priced);
+
+    expect(html).toContain('<span class="waste">3 outside</span>');
+  });
+
+  it("says in the footer how many rows the hook recorded", () => {
+    const html = renderWeek([...week(), captured()], 7, {}, priced);
+
+    expect(html).toContain(
+      "~ 1 session recorded by the hook: intent captured from the first prompt, " +
+        "no scope declared",
+    );
+  });
+
+  it("says nothing of the sort when no row was", () => {
+    expect(renderWeek(week(), 7, {}, priced)).not.toContain("recorded by the hook");
+  });
+
+  it("says so where the intent goes when no prompt ever arrived", () => {
+    const listed = rows(renderWeek([captured({ intent: null })], 7, {}, priced));
+
+    expect(listed[0]).toContain("(no prompt)");
+  });
+});
+
 describe("renderWeek: height reads as mass", () => {
   it("top-aligns the row, so height is not mistaken for padding", () => {
     expect(renderWeek(week(), 7, {}, priced)).toContain("align-items: start;");

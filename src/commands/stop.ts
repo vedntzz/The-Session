@@ -3,11 +3,13 @@ import { classifyPaths } from "../classify.js";
 import { changedFilesSince, endStateOf } from "../git.js";
 import {
   getOpenSession,
+  isCaptured,
   totalTokens,
   updateSession,
   type Session,
   type StoreOptions,
 } from "../store.js";
+import { intentOf } from "../render/terminal.js";
 
 /** What `session stop` needs, on top of where the store lives. */
 export interface StopOptions extends StoreOptions {
@@ -53,6 +55,26 @@ export function computeDrift(reality: readonly string[], scope: readonly string[
 }
 
 /**
+ * The drift a session is recorded with. Nothing, for a session nobody
+ * declared.
+ *
+ * A passive session has an empty scope because no scope was asked for, not
+ * because the developer said the work would touch nothing — and running the
+ * rule over it would call every file it touched drift, which would make the
+ * word mean "changed" and empty it of the only thing it says. Drift is the
+ * distance between a declaration and reality. Without a declaration there is
+ * no distance to measure, and an unmeasured quantity is recorded as absent
+ * rather than as zero-by-way-of-everything.
+ *
+ * This is why `session start --scope` still earns its keep once the hook is
+ * recording everything: declaring a scope is what turns a record of what
+ * changed into a record of what changed that you did not expect.
+ */
+export function driftOf(session: Session, reality: readonly string[]): string[] {
+  return isCaptured(session) ? [] : computeDrift(reality, session.scope);
+}
+
+/**
  * Closes the open session: diffs the repo against the commit it started from,
  * records what actually changed and what drifted outside the declared scope,
  * and stamps the end time.
@@ -90,7 +112,7 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
     open.id,
     {
       reality,
-      drift: computeDrift(reality, open.scope),
+      drift: driftOf(open, reality),
       // Derived here rather than at display time so the log says what the
       // session was about without anything having to re-run the rules over it.
       // The rules are pure and the input is on the record, so a reader that
@@ -127,7 +149,7 @@ export async function stopIfOpen(options: StopOptions = {}): Promise<Session | u
  */
 export function formatStopped(session: Session): string[] {
   const changed = session.reality.length > 0 ? session.reality.join("  ") : "nothing";
-  const lines = [`  stopped  ${session.intent}`, `  changed  ${changed}`];
+  const lines = [`  stopped  ${intentOf(session)}`, `  changed  ${changed}`];
   if (session.drift.length > 0) {
     lines.push(`  outside  ${session.drift.join("  ")}`);
   }

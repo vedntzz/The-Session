@@ -48,7 +48,7 @@ Without it there is one entry in the ledger — what the machine produced — an
 | `session week --days <n>` | The same, over a window you choose. |
 | `session week --tokens` | Put the token column back beside the money. |
 | `session week --client <name>` | Only the sessions recorded for that client. `--project` likewise. |
-| `session week --outcome merged` | Only the sessions that ended up there. Also `abandoned`, `open`. |
+| `session week --outcome merged` | Only the sessions that ended up there. Also `abandoned`, `open`, `empty`. |
 | `session week --class` | Add a column saying what each session was working on. |
 | `session week --class ui` | Only the sessions that were. Also `schema`, `api`, `test`, `config`, `docs`, `build`, `other`. |
 | `session estimate "<intent>"` | What sessions like this one have cost before. |
@@ -77,13 +77,30 @@ Eight fields. Everything else is a query over them.
 - **baseline** — what was already modified when the session opened, so you are not billed for work that was sitting there before it.
 - **reality** — the files that actually changed, less the baseline.
 - **cost** — four token counters, kept apart because cache reads, cache writes, input and output all bill differently; plus how much of the work produced nothing, and what those tokens came to in dollars.
-- **outcome** — merged, abandoned, or open. Worked out from the repository every time it is shown, not taken on trust from the record.
+- **outcome** — merged, abandoned, open, or empty. Worked out from the repository every time it is shown, not taken on trust from the record.
 - **class** — what the session was working on: schema, api, ui, test, config, docs, build, other. Read off the paths it changed, by a table of rules you can edit.
 - **attribution** — who the work was for: client, project, sow, billingCode. Optional, and captured at start from the repo rather than typed per session.
 
 Cost counts two ways, because they answer different questions. **Turns** are your prompts: one per thing you asked for. **API calls** are what each prompt set off — the reads, the greps, the edits. A turn that ends without touching a file is waste you can act on; a call that ends without touching a file is usually just the agent looking something up.
 
 Stored as JSONL under `~/.session/`. Your data, your disk. No account, no server, no telemetry.
+
+### Colour
+
+`show` and `week` use colour to say a few specific things and nothing else:
+the intent in your terminal's own colour, brightened; drift paths and the
+money spent on turns that changed no files in red, and only when that figure
+is not zero; declared paths, labels, times and counts dimmed; merged in green;
+abandoned dimmed and struck through, never hidden.
+
+Only the 16 basic ANSI colours, so the hues are the ones you chose for your
+terminal rather than ones this tool guessed. Colour is always an addition: `!`
+still marks every drift path, so nothing is lost to a pipe, a log file or a
+screenshot.
+
+Colour goes to a terminal and nowhere else — redirect the output and you get
+exactly the bytes above with no escape codes in them. `NO_COLOR=1` turns it
+off in a terminal too, and `FORCE_COLOR=1` turns it on anywhere.
 
 ## What it cost
 
@@ -170,8 +187,13 @@ Nothing was written between those two runs. The default branch comes from `origi
 - **merged** — the content reached the default branch.
 - **open** — some of it is still sitting in your working tree, unlanded.
 - **abandoned** — it is in neither place.
+- **empty** — the session changed no files at all.
 
 A session that landed some files and still has the rest in your tree is **open**: the rest has not gone in yet. Once nothing is left in the tree, a partial landing is **merged** — the remainder was dropped in review, which is what review is for.
+
+**Empty is not abandoned.** A session that read the code, answered a question and wrote nothing did not abandon anything, because nothing was attempted. Calling it abandoned puts every one of those sessions into the figures about work that was thrown away — and there are a lot of them. So they are named for what they are and left out of what they are not: the unmerged spend in `week`, and the sample, median, p90, drift and first-time merge rate in `estimate`. Both say how many they left out. What an empty session cost stays in the total, because it was spent.
+
+It is read off what the session changed, so it needs no repository to decide and nothing later can revise it. `session mark` refuses these: where no work was done, there is nothing a person can know better about — and if it did change files, it is the record of what it changed that is wrong, which a mark cannot fix.
 
 ### Writing the answer down
 

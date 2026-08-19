@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildProgram, type ProgramOptions } from "../src/program.js";
+import { HOOKS } from "../src/capture/hook.js";
+import { buildProgram, parseFlag, type ProgramOptions } from "../src/program.js";
 import { readSessions, type Session } from "../src/store.js";
 
 const execFileAsync = promisify(execFile);
@@ -42,6 +43,15 @@ beforeEach(async () => {
   await execFileAsync("git", ["-C", cwd, "add", "-A"]);
   await execFileAsync("git", ["-C", cwd, "commit", "-q", "--no-verify", "-m", "first"]);
 });
+
+/** A hook payload on a stream, standing in for the one Claude Code pipes in. */
+function stdinWith(payload: string): AsyncIterable<string> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield payload;
+    },
+  };
+}
 
 /** Runs a subcommand and returns everything it wrote to stdout via console.log. */
 async function run(...argv: string[]): Promise<string[]> {
@@ -270,7 +280,7 @@ describe("session", () => {
     ]);
   });
 
-  it("registers exactly the fourteen subcommands", () => {
+  it("registers exactly the fifteen subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
@@ -278,6 +288,7 @@ describe("session", () => {
       "config",
       "estimate",
       "hook",
+      "intent",
       "key",
       "mark",
       "peers",
@@ -524,8 +535,46 @@ describe("session", () => {
     expect(lines).toEqual([
       `  wrote    ${settings}`,
       "  hook     SessionEnd → session stop --if-open",
+      "  hook     SessionStart → session start --passive",
+      "  hook     UserPromptSubmit → session intent --from-prompt",
     ]);
     await expect(readFile(settings, "utf8")).resolves.toContain('"SessionEnd"');
+  });
+
+  it("hook install --passive=false registers the closer alone", async () => {
+    const settings = path.join(root, "settings.json");
+    await writeFile(settings, JSON.stringify({ model: "opus" }), "utf8");
+    store.settings = settings;
+
+    const lines = await run("hook", "install", "--passive=false");
+
+    expect(lines).toEqual([
+      `  wrote    ${settings}`,
+      "  hook     SessionEnd → session stop --if-open",
+    ]);
+    const written = await readFile(settings, "utf8");
+    expect(written).not.toContain("SessionStart");
+    expect(written).not.toContain("UserPromptSubmit");
+  });
+
+  it("hook install --no-passive says the same thing", async () => {
+    const settings = path.join(root, "settings.json");
+    await writeFile(settings, "{}", "utf8");
+    store.settings = settings;
+
+    const lines = await run("hook", "install", "--no-passive");
+
+    expect(lines).toHaveLength(2);
+  });
+
+  it("hook install refuses a --passive value that is neither", async () => {
+    const settings = path.join(root, "settings.json");
+    await writeFile(settings, "{}", "utf8");
+    store.settings = settings;
+
+    await expect(run("hook", "install", "--passive=maybe")).rejects.toThrow(
+      /--passive takes true or false/,
+    );
   });
 
   it("hook install --uninstall takes it back out", async () => {
@@ -546,14 +595,15 @@ describe("session", () => {
     await expect(run("hook", "install")).rejects.toThrow(/No Claude Code settings file at/);
   });
 
-  it("the hook it registers is a command this CLI answers to", async () => {
-    // The hook is only worth writing if `session stop --if-open` parses.
-    const program = buildProgram(store).exitOverride();
-    program.configureOutput({ writeErr: () => {} });
+  it("every hook it registers is a command this CLI answers to", async () => {
+    // A hook is only worth writing if the command line in it parses.
+    for (const hook of HOOKS) {
+      const argv = hook.command.split(" ").slice(1);
+      const program = buildProgram({ ...store, stdin: stdinWith("") }).exitOverride();
+      program.configureOutput({ writeErr: () => {} });
 
-    await expect(
-      program.parseAsync(["stop", "--if-open"], { from: "user" }),
-    ).resolves.toBeDefined();
+      await expect(program.parseAsync(argv, { from: "user" })).resolves.toBeDefined();
+    }
   });
 
   it("rejects an unknown subcommand", async () => {
@@ -606,7 +656,19 @@ describe("session, priced", () => {
 
   async function spent(model = "claude-opus-4-1", inputTokens = 1_000_000): Promise<void> {
     await run("start", "spend some money");
+    // Changes a file, so the session has something that could have merged.
+    // Without one it is `empty`, which is a different thing entirely — see
+    // the test below.
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
     store = { ...store, adapters: spending(model, inputTokens) };
+    await run("stop");
+    store = { ...store, adapters: [] };
+  }
+
+  /** The same money, on a session that changed nothing at all. */
+  async function spentOnNothing(): Promise<void> {
+    await run("start", "read the code and change nothing");
+    store = { ...store, adapters: spending("claude-opus-4-1", 1_000_000) };
     await run("stop");
     store = { ...store, adapters: [] };
   }
@@ -647,6 +709,35 @@ describe("session, priced", () => {
 
     // Nothing has merged, so the whole of it is still owed an outcome.
     expect(lines).toContain("  $15.00 spent, $15.00 of it on changes that never merged");
+  });
+
+  it("week calls a session that changed nothing empty, not abandoned", async () => {
+    await spentOnNothing();
+
+    const lines = await run("week");
+
+    expect(lines[2]).toMatch(/ {2}empty$/);
+    expect(lines.join("\n")).not.toContain("abandoned");
+  });
+
+  it("week keeps that session's spend out of what never merged", async () => {
+    await spent();
+    await spentOnNothing();
+
+    const lines = await run("week");
+
+    // Both cost $15. Only the one that changed a file is money on changes
+    // that never merged; the other never had a change to land.
+    expect(lines).toContain("  $30.00 spent, $15.00 of it on changes that never merged");
+  });
+
+  it("mark refuses a session that changed nothing", async () => {
+    await spentOnNothing();
+    const [session] = await readSessions(store);
+
+    await expect(run("mark", (session as Session).id, "abandoned")).rejects.toThrow(
+      /changed no files/,
+    );
   });
 
   it("week reports an unpriced model rather than pricing it at a guess", async () => {
@@ -690,5 +781,129 @@ describe("session, priced", () => {
     );
 
     expect((await run("week"))[2]).toContain("$15.00");
+  });
+});
+
+describe("passive capture, end to end", () => {
+  /** What Claude Code writes to a UserPromptSubmit hook. */
+  function payload(prompt: string): string {
+    return JSON.stringify({
+      session_id: "abc",
+      transcript_path: "/tmp/transcript.jsonl",
+      cwd: store.cwd,
+      hook_event_name: "UserPromptSubmit",
+      prompt,
+    });
+  }
+
+  /** Runs the prompt hook with a payload on stdin, as the editor would. */
+  async function prompt(text: string): Promise<void> {
+    const program = buildProgram({ ...store, stdin: stdinWith(payload(text)) }).exitOverride();
+    await program.parseAsync(["intent", "--from-prompt"], { from: "user" });
+  }
+
+  it("records a session nobody declared, from the hook alone", async () => {
+    await run("start", "--passive");
+    await prompt("why does /orders 500 when the cart is empty");
+    await run("stop", "--if-open");
+
+    const [session] = await readSessions(store);
+    expect(session?.intent).toBe("why does /orders 500 when the cart is empty");
+    expect(session?.intentSource).toBe("captured");
+    expect(session?.scope).toEqual([]);
+    expect(session?.drift).toEqual([]);
+    expect(session?.endedAt).not.toBeNull();
+  });
+
+  it("says nothing on the way past, either time", async () => {
+    // Both handlers have their stdout fed to the agent as context.
+    await expect(run("start", "--passive")).resolves.toEqual([]);
+    const program = buildProgram({
+      ...store,
+      stdin: stdinWith(payload("do the thing")),
+    }).exitOverride();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await program.parseAsync(["intent", "--from-prompt"], { from: "user" });
+    expect(log.mock.calls).toEqual([]);
+  });
+
+  it("keeps the first prompt as the intent, whatever comes after it", async () => {
+    await run("start", "--passive");
+    await prompt("fix the redirect loop");
+    await prompt("actually, rewrite the whole module");
+
+    const [session] = await readSessions(store);
+    expect(session?.intent).toBe("fix the redirect loop");
+  });
+
+  it("defers entirely to a session the developer started", async () => {
+    await run("start", "extract the store layer", "--scope", "src/store.ts");
+    await run("start", "--passive");
+    await prompt("actually just fix the tests");
+
+    const sessions = await readSessions(store);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.intent).toBe("extract the store layer");
+    expect(sessions[0]?.intentSource).toBe("declared");
+  });
+
+  it("blocks nothing when there is no session to write to", async () => {
+    // No SessionStart ran, so there is nothing open. The prompt goes through.
+    await expect(prompt("nobody is recording this")).resolves.toBeUndefined();
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("blocks nothing when the payload is not what it expected", async () => {
+    const program = buildProgram({ ...store, stdin: stdinWith("{ not json") }).exitOverride();
+
+    await expect(
+      program.parseAsync(["intent", "--from-prompt"], { from: "user" }),
+    ).resolves.toBeDefined();
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("marks the row in the week, and says underneath what the mark means", async () => {
+    await run("start", "--passive");
+    await prompt("why does /orders 500");
+    await run("stop", "--if-open");
+
+    const lines = await run("week");
+
+    expect(lines[2]).toContain("~ why does /orders 500");
+    expect(lines.at(-1)).toContain("1 session recorded by the hook");
+  });
+
+  it("says on show that the intent was captured and no scope was declared", async () => {
+    await run("start", "--passive");
+    await prompt("why does /orders 500");
+    await run("stop", "--if-open");
+
+    const lines = await run("show");
+
+    expect(lines.some((text) => text.includes("captured from the first prompt"))).toBe(true);
+    expect(lines.some((text) => text.includes("makes drift visible"))).toBe(true);
+    expect(lines.some((text) => text.trimStart().startsWith("outside"))).toBe(false);
+  });
+
+  it("start with neither an intent nor --passive still says what to type", async () => {
+    await expect(run("start")).rejects.toThrow(/No intent given/);
+  });
+});
+
+describe("parseFlag", () => {
+  it("reads the words a person would write", () => {
+    expect(parseFlag("true")).toBe(true);
+    expect(parseFlag("yes")).toBe(true);
+    expect(parseFlag("1")).toBe(true);
+    expect(parseFlag("false")).toBe(false);
+    expect(parseFlag("No")).toBe(false);
+    expect(parseFlag(" off ")).toBe(false);
+  });
+
+  it("refuses anything else rather than reading it as off", () => {
+    // A typo silently turning capture off is the failure nobody would notice
+    // until a week of sessions was missing.
+    expect(() => parseFlag("maybe")).toThrow(/takes true or false/);
+    expect(() => parseFlag("")).toThrow(/takes true or false/);
   });
 });

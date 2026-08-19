@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attemptedNothing,
   classify,
   effectiveOutcome,
   evidenceFor,
@@ -348,16 +349,86 @@ describe("isTerminal", () => {
     expect(isTerminal("abandoned")).toBe(true);
     expect(isTerminal("open")).toBe(false);
   });
+
+  it("is false for empty, which is not a destination", () => {
+    // It will never change either. But nothing that asks this question —
+    // whether to record an observation, what to put in a merge rate — wants a
+    // session that attempted nothing in the answer.
+    expect(isTerminal("empty")).toBe(false);
+  });
 });
 
 describe("parseOutcome", () => {
-  it("takes the three outcomes, in any case and with stray space", () => {
+  it("takes the four outcomes, in any case and with stray space", () => {
     expect(parseOutcome("merged")).toBe("merged");
     expect(parseOutcome("  ABANDONED ")).toBe("abandoned");
     expect(parseOutcome("Open")).toBe("open");
+    expect(parseOutcome("empty")).toBe("empty");
   });
 
   it("names the alternatives when it is given something else", () => {
-    expect(() => parseOutcome("shipped")).toThrow(/not an outcome.*open, merged, abandoned/s);
+    expect(() => parseOutcome("shipped")).toThrow(
+      /not an outcome.*open, merged, abandoned, empty/s,
+    );
+  });
+});
+
+/**
+ * The rule that nothing else may undo: a session that changed no files did not
+ * attempt anything, so it did not abandon anything either. It is decided from
+ * the record alone, which is why none of these tests needs a repository.
+ */
+describe("a session that changed nothing", () => {
+  const nothing = session({ reality: [], endState: {} });
+
+  it("is empty, not abandoned", () => {
+    expect(effectiveOutcome(nothing, facts())).toBe("empty");
+  });
+
+  it("is empty with no repository to ask at all", () => {
+    expect(effectiveOutcome(nothing)).toBe("empty");
+  });
+
+  it("is empty however the stored field was left", () => {
+    // What every settle before this wrote for these: the field on disk says
+    // abandoned, and the answer is still empty.
+    expect(effectiveOutcome({ ...nothing, outcome: "abandoned" }, facts())).toBe("empty");
+  });
+
+  it("is empty even where somebody marked it by hand", () => {
+    // A mark outranks the computation because a person can see a rename, a
+    // revert or another repo. None of that is knowledge about a session that
+    // changed no files: there is no work for it to be knowledge about. `mark`
+    // refuses to write one of these; a log that already holds one does not
+    // get to call a session abandoned that never attempted anything.
+    const marked = session({
+      reality: [],
+      observations: [observation({ outcome: "abandoned", source: "manual" })],
+    });
+
+    expect(effectiveOutcome(marked, facts())).toBe("empty");
+  });
+
+  it("is open while it is still running: it may yet change something", () => {
+    expect(effectiveOutcome({ ...nothing, endedAt: null }, facts())).toBe("open");
+    expect(attemptedNothing({ ...nothing, endedAt: null })).toBe(false);
+  });
+
+  it("gets a verdict with no evidence in it, rather than one about files", () => {
+    expect(judge(nothing, facts())).toEqual({
+      outcome: "empty",
+      landed: [],
+      inFlight: [],
+      lost: [],
+    });
+  });
+
+  it("is not what a session that touched files but left no end state is", () => {
+    // Both reach `classify` with nothing to go on, and they are not the same
+    // thing: this one attempted something, and none of it is anywhere.
+    const touched = session({ reality: ["src/a.ts"], endState: {} });
+
+    expect(attemptedNothing(touched)).toBe(false);
+    expect(effectiveOutcome(touched, facts())).toBe("abandoned");
   });
 });

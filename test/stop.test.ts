@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { startSession } from "../src/commands/start.js";
+import { startPassiveSession, startSession } from "../src/commands/start.js";
 import {
   computeDrift,
   computeReality,
+  driftOf,
   formatStopped,
   stopSession,
   type StopOptions,
@@ -82,6 +83,36 @@ describe("computeDrift", () => {
 
   it("treats . as declaring the whole repo", () => {
     expect(computeDrift(["a.py", "b/c.py"], ["."])).toEqual([]);
+  });
+});
+
+describe("driftOf", () => {
+  const passive = { intentSource: "captured", scope: [] } as const;
+  const declared = { intentSource: "declared", scope: ["api/"] } as const;
+
+  it("is nothing for a session nobody declared a scope for", () => {
+    // The empty scope means nobody was asked, not that somebody said nothing
+    // would change — and calling every path drift would make the word mean
+    // "changed" and empty it of the only thing it says.
+    expect(driftOf(passive as never, ["api/orders.py", "db/schema.py"])).toEqual([]);
+  });
+
+  it("is the paths outside the scope for a session that declared one", () => {
+    expect(driftOf(declared as never, ["api/orders.py", "db/schema.py"])).toEqual([
+      "db/schema.py",
+    ]);
+  });
+
+  it("is everything for a declared session that declared no scope", () => {
+    // Different from a passive session: this developer was asked and said
+    // nothing, so every path is outside what they declared.
+    const nothing = { intentSource: "declared", scope: [] } as const;
+
+    expect(driftOf(nothing as never, ["api/orders.py"])).toEqual(["api/orders.py"]);
+  });
+
+  it("reads a record from before capture existed as declared", () => {
+    expect(driftOf({ scope: [] } as never, ["api/orders.py"])).toEqual(["api/orders.py"]);
   });
 });
 
@@ -362,6 +393,46 @@ describe("stopSession", () => {
     await commitAll("unrelated");
 
     await expect(stopSession(options)).rejects.toThrow(/Cannot diff against the commit/);
+  });
+});
+
+describe("stopping a session the hook opened", () => {
+  it("records what changed and no drift at all", async () => {
+    await startPassiveSession(options);
+    await write("api/orders.py", "changed");
+    await write("db/schema.py");
+
+    const stopped = await stopSession(options);
+
+    expect(stopped.reality).toEqual(["api/orders.py", "db/schema.py"]);
+    expect(stopped.drift).toEqual([]);
+  });
+
+  it("classifies it from its paths like any other session", async () => {
+    await startPassiveSession(options);
+    await write("api/orders.py", "changed");
+
+    expect((await stopSession(options)).class).toBe("api");
+  });
+
+  it("keeps a null intent when the session ended before any prompt arrived", async () => {
+    // Nothing was declared and nothing was asked. Writing words there now
+    // would be inventing them.
+    await startPassiveSession(options);
+
+    const stopped = await stopSession(options);
+
+    expect(stopped.intent).toBeNull();
+    expect(stopped.intentSource).toBe("captured");
+  });
+
+  it("says so rather than printing a blank where the intent goes", async () => {
+    await startPassiveSession(options);
+
+    expect(formatStopped(await stopSession(options))).toEqual([
+      "  stopped  (no prompt)",
+      "  changed  nothing",
+    ]);
   });
 });
 

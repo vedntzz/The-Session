@@ -41,7 +41,7 @@ async function record(intent: string, daysAgo: number): Promise<void> {
   );
 }
 
-function intents(sessions: { intent: string }[]): string[] {
+function intents(sessions: { intent: string | null }[]): (string | null)[] {
   return sessions.map((session) => session.intent);
 }
 

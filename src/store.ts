@@ -83,15 +83,51 @@ export function zeroCost(): SessionCost {
 /**
  * Where the session landed. Distinct from whether it is still running: a
  * session that has stopped is still `open` until it merges or is abandoned.
+ *
+ * `empty` is the fourth because "where did it land" has no answer for a
+ * session that changed no files. Nothing was attempted, so nothing was
+ * abandoned — and calling it abandoned would put a session that never wrote a
+ * line into every figure about work that was thrown away. It is read off
+ * `reality`, never declared. See `outcome.ts`.
  */
-export type SessionOutcome = "open" | "merged" | "abandoned";
+export type SessionOutcome = "open" | "merged" | "abandoned" | "empty";
+
+/**
+ * Where a session's intent came from.
+ *
+ * `declared` was typed by the developer at `session start`, before the agent
+ * ran. `captured` was taken from the first prompt of a session the editor hook
+ * opened on its own — the same words, in the same order, but nobody chose to
+ * write them down as a declaration.
+ *
+ * The two are kept apart everywhere because they are different evidence. A
+ * declaration is a commitment made in advance; a captured intent is a
+ * transcript of what was asked for. Both are written before anything happened,
+ * and neither can be edited afterwards — but a reader comparing intent to
+ * reality is owed the fact that one of them was never a promise.
+ */
+export type IntentSource = "declared" | "captured";
 
 export interface Session {
   id: string;
   /** Normalized repo identity, e.g. `remote:github.com/acme/tool`. */
   repo: string;
-  /** What the session set out to do. Written once, never edited. */
-  intent: string;
+  /**
+   * What the session set out to do. Written once, never edited.
+   *
+   * `null` only on a passively opened session that has not seen a prompt yet,
+   * and only until the first one arrives. A session that ended without one
+   * keeps it: nothing was declared and nothing was asked, and writing words
+   * there afterwards would be inventing them.
+   */
+  intent: string | null;
+  /**
+   * Which of the two `intent` is. Absent on records written before passive
+   * capture existed, where it reads as `declared` — nothing but `session
+   * start` could have written one then, so this is a fact about those records
+   * rather than a guess about them.
+   */
+  intentSource?: IntentSource;
   /** The paths the developer declared. May be empty. */
   scope: string[];
   /**
@@ -146,16 +182,38 @@ export interface Session {
   attribution?: Attribution;
 }
 
+/**
+ * Which kind of intent a session carries.
+ *
+ * Absent means `declared`: passive capture did not exist when those records
+ * were written, so `session start` is the only thing that could have opened
+ * them. Same shape as `classOf` — the stored field is written for whoever
+ * reads the raw JSONL, and every reader derives the same answer without it.
+ */
+export function intentSourceOf(session: Pick<Session, "intentSource">): IntentSource {
+  return session.intentSource ?? "declared";
+}
+
+/** True when the intent was taken from a prompt rather than declared up front. */
+export function isCaptured(session: Pick<Session, "intentSource">): boolean {
+  return intentSourceOf(session) === "captured";
+}
+
 /** The `set` payload of a record. Creating records carry every field. */
 type RecordFields = Partial<Omit<Session, "id">>;
 
 /**
- * Fields `updateSession` may set. Three are absent by design: intent is
- * written once at `start` so a declaration cannot be retrofitted to match what
- * happened, repo is derived from where the store lives, and attribution is
+ * Fields `updateSession` may set. Four are absent by design: intent is written
+ * once — at `start`, or from the first prompt of a passive session, which is
+ * what `captureIntent` is for and the only way it is ever written twice —
+ * `intentSource` says which of those happened and so is fixed when the session
+ * opens, repo is derived from where the store lives, and attribution is
  * captured at start so that who was billed cannot be decided after the fact.
  */
-export type SessionPatch = Omit<RecordFields, "intent" | "repo" | "attribution">;
+export type SessionPatch = Omit<
+  RecordFields,
+  "intent" | "intentSource" | "repo" | "attribution"
+>;
 
 /**
  * What a caller supplies at `session start`. Everything a session cannot know
@@ -458,6 +516,30 @@ async function writeRecord(id: string, set: RecordFields, options: StoreOptions)
 }
 
 /**
+ * Enforces write-once on `intent` while folding.
+ *
+ * A passive session's intent arrives in a second record — the first prompt —
+ * so the fold cannot simply refuse every later `intent`. What it refuses is a
+ * later one on top of an intent that is already there: the first words written
+ * are the ones that stand, whatever any subsequent record says.
+ *
+ * `captureIntent` checks the same thing before it writes, and that check is
+ * the one that produces an error somebody can read. This is the backstop, and
+ * it is here rather than only there because immutability that lives in the
+ * writer is a convention, while immutability in the reader is a property of
+ * the log: a record appended by hand cannot rewrite an intent either.
+ */
+function keptIntent(
+  existing: Partial<Session> | undefined,
+  record: LogRecord,
+): { intent?: string | null } {
+  if (!existing || existing.intent == null || record.set.intent === undefined) {
+    return {};
+  }
+  return { intent: existing.intent };
+}
+
+/**
  * True once the folded fields amount to a whole session. Only a creating
  * record carries all of them, so this is what distinguishes a session from a
  * patch left dangling by a missing first record.
@@ -501,10 +583,20 @@ export async function appendSession(
     assertTimestamp("endedAt", input.endedAt);
   }
 
+  // A session whose intent is null is one nobody declared: it was opened by
+  // the hook and is waiting for its first prompt. Recording that as
+  // `declared` would be a claim that somebody typed it.
+  const intentSource: IntentSource =
+    input.intentSource ?? (input.intent === null ? "captured" : "declared");
+  if (input.intent === null && intentSource !== "captured") {
+    throw new Error("a session with no intent yet is a captured one, not a declared one");
+  }
+
   const session: Session = {
     id: input.id ?? randomUUID(),
     repo: await repoIdentity(options.cwd ?? process.cwd()),
     intent: input.intent,
+    intentSource,
     scope: input.scope ?? [],
     baseline: input.baseline ?? [],
     reality: input.reality ?? [],
@@ -553,7 +645,7 @@ export async function readSessions(options: StoreOptions = {}): Promise<Session[
     }
 
     const existing = sessions.get(record.id);
-    const merged: Partial<Session> = { ...existing, ...record.set };
+    const merged: Partial<Session> = { ...existing, ...record.set, ...keptIntent(existing, record) };
     if (!isComplete(merged)) {
       // A patch whose creating record is missing: nothing to anchor it to.
       continue;
@@ -582,6 +674,41 @@ export async function getOpenSession(options: StoreOptions = {}): Promise<Sessio
 }
 
 /**
+ * Writes the intent of a passively opened session, once.
+ *
+ * The one path by which `intent` is ever written after the creating record,
+ * and it exists because a session the hook opened has no intent to write at
+ * the moment it opens: the developer has not typed anything yet. The first
+ * prompt is those words, and they are recorded the moment they are said —
+ * before the agent has run, before there is a result to shape them.
+ *
+ * Refuses everything else. A session that already has an intent keeps it,
+ * whether it was declared or captured, so this can never become the edit that
+ * invariant 1 exists to prevent.
+ */
+export async function captureIntent(
+  id: string,
+  intent: string,
+  options: StoreOptions = {},
+): Promise<Session> {
+  const declared = intent.trim();
+  if (declared === "") {
+    throw new Error("no intent to capture: the prompt was empty");
+  }
+
+  const current = (await readSessions(options)).find((session) => session.id === id);
+  if (!current) {
+    throw new Error(`no session with id ${id}`);
+  }
+  if (current.intent !== null) {
+    throw new Error("intent is written once and cannot be edited");
+  }
+
+  await writeRecord(id, { intent: declared }, options);
+  return { ...current, intent: declared };
+}
+
+/**
  * Overlays `patch` onto an existing session by appending a patch record.
  * Throws if the id is unknown, so a typo cannot silently create a session
  * that consists only of an end time.
@@ -592,7 +719,13 @@ export async function updateSession(
   options: StoreOptions = {},
 ): Promise<Session> {
   if ("intent" in patch) {
-    throw new Error("intent is written once at start and cannot be edited");
+    throw new Error(
+      "intent is written once and cannot be edited. A passive session's first " +
+        "prompt is written by captureIntent, which refuses an intent that is already there.",
+    );
+  }
+  if ("intentSource" in patch) {
+    throw new Error("intentSource is decided when the session opens and cannot be edited");
   }
   if ("attribution" in patch) {
     throw new Error("attribution is captured at start and cannot be edited");

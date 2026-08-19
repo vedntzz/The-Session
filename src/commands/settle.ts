@@ -1,5 +1,6 @@
 import { factsFor } from "../observe.js";
 import {
+  attemptedNothing,
   effectiveOutcome,
   isTerminal,
   judge,
@@ -16,6 +17,7 @@ import {
   type SessionOutcome,
   type StoreOptions,
 } from "../store.js";
+import { intentOf } from "../render/terminal.js";
 import { findSession } from "./show.js";
 
 /**
@@ -45,6 +47,8 @@ export interface SettleResult {
   settled: Settled[];
   /** Sessions still in flight, counted rather than listed. */
   stillOpen: number;
+  /** Sessions that changed no files, counted rather than listed. */
+  empty: number;
   /** Sessions with no end state to look for — stopped before it was recorded. */
   undecidable: number;
 }
@@ -104,12 +108,20 @@ export async function settleSessions(options: StoreOptions = {}): Promise<Settle
     ...(facts ? { branch: facts.branch } : {}),
     settled: [],
     stillOpen: 0,
+    empty: 0,
     undecidable: 0,
   };
 
   for (const session of sessions) {
     if (session.endedAt === null) {
       result.stillOpen += 1;
+      continue;
+    }
+    // Nothing to write down: `empty` is read off `reality` every time it is
+    // asked, so an observation saying so would be a copy of a field that is
+    // already on the record and can never disagree with it.
+    if (attemptedNothing(session)) {
+      result.empty += 1;
       continue;
     }
     if (!facts || session.endState === undefined) {
@@ -155,10 +167,29 @@ export async function markSession(
   const sessions = await readSessions(options);
   const session = findSession(sessions, id);
 
+  if (outcome === "empty") {
+    throw new Error(
+      `empty is not a mark. Whether a session changed anything is read off what it ` +
+        `changed, every time it is asked, and saying so by hand could only ever agree ` +
+        `or lie.`,
+    );
+  }
   if (session.endedAt === null) {
     throw new Error(
       `That session is still running. Run session stop first — where it ended up is ` +
         `not a thing that can be true yet.`,
+    );
+  }
+  // A mark beats the computation because a person can see a rename, a revert
+  // or another repo. None of that applies to a session that changed no files:
+  // there is no work to have gone anywhere, so there is nothing to know better
+  // about. If it did change files, the record of what it changed is what is
+  // wrong, and a mark cannot repair that.
+  if (attemptedNothing(session)) {
+    throw new Error(
+      `That session changed no files, so it did not end up anywhere — nothing was ` +
+        `attempted, and nothing can be marked ${outcome}. If it did change files, it is ` +
+        `the record of what it changed that is wrong, and a mark cannot fix that.`,
     );
   }
 
@@ -227,6 +258,15 @@ export function formatSettle(result: SettleResult): string[] {
   if (result.stillOpen > 0) {
     lines.push(line("open", `${plural(result.stillOpen, "session", "sessions")}, still in flight`));
   }
+  if (result.empty > 0) {
+    lines.push(
+      line(
+        "empty",
+        `${plural(result.empty, "session", "sessions")} changed no files, so there is ` +
+          `nothing to have ended up anywhere`,
+      ),
+    );
+  }
   if (result.undecidable > 0) {
     lines.push(
       line(
@@ -243,7 +283,7 @@ export function formatSettle(result: SettleResult): string[] {
 export function formatMark(settled: Settled): string[] {
   return [
     line("marked", `${settled.session.id.slice(0, 8)}  ${settled.outcome}`),
-    line("intent", settled.session.intent),
+    line("intent", intentOf(settled.session)),
     line("note", "recorded as a manual observation; it overrides what the repo says"),
   ];
 }
