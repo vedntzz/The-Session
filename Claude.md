@@ -47,7 +47,7 @@ rates.json         bundled prices, per model, per million tokens
   verify.ts        the chain walk, pure
   git.ts           HEAD, diff, changed files
   sync.ts          records over refs/session/*, push/pull/peers
-  render/          palette.ts (semantic colour), terminal.ts, html.ts
+  render/          palette.ts (semantic colour), terminal.ts, html.ts, markdown.ts
                    terminal.ts holds both shapes: the brief views `show` and
                    the bare screen print, and the labelled layout behind --full
 ```
@@ -445,6 +445,58 @@ terminal's own colour — the same roles doing the same jobs as in the layout
 below. A view that needed a new role would be a view saying something the tool
 does not otherwise say.
 
+## Markdown
+
+`session week --md` writes the week for somebody who was not there — meeting
+notes, a Slack post, a Notion or Confluence page. `--copy` puts it on the
+clipboard instead of stdout, and implies `--md`, since a terminal table is not
+what anybody pastes into a page.
+
+A different document from the terminal table, not the same one with the escape
+codes taken out. It leads with the two figures that survive being read cold —
+what the week cost and what shipped — and the table comes after them.
+
+`render/markdown.ts` is pure: sessions, rates and a clock in, one string out,
+with no trailing newline. The clock is injected so the heading is a function of
+its arguments. Plain Markdown throughout — no colour, no escape codes, no box
+drawing, and `test/markdown.test.ts` asserts all three.
+
+**The tick is the one place emoji are allowed.** The ban in Style below is
+about a terminal, where a glyph may not render and so cannot be relied on to
+carry meaning. A Notion page is not that place, and a column of ticks is what
+somebody skimming for "did anything ship" is looking for. Nothing else in the
+document carries one, and nothing in a terminal view ever should.
+
+Three things the table cannot survive, all handled in `workCell` in this order:
+a newline ends a row wherever it falls; the width is measured before escaping,
+so the limit counts characters a reader sees; and an unescaped `|` silently
+splits a row into two cells and shifts everything right of it. That last one is
+why nothing here interpolates an intent raw, and there is a test that a pipe in
+an intent leaves the row with exactly five cells.
+
+Every figure in the document is over the sessions the table lists, so the total
+row is a total of the rows above it. That is a departure from `week`, where an
+empty session's spend stays in the total: here the empty sessions are not rows,
+and a total larger than the column under it is a table that visibly does not
+add up. What they cost is stated in its own line below instead — disclosed, not
+folded in.
+
+The same rule covers a model with no rate. The cost cell says `unpriced`, the
+totals are over the rest, and a line below says how much of the table the money
+covers and which models were left out. Note a session with no turns and no api
+calls is `$0.00` rather than `unpriced`: nothing was captured for it, so it
+moved no tokens and there is no rate it is missing. That has to agree with
+`spendOf`, which makes the same call — a cell reading `unpriced` under a note
+counting no unpriced sessions is a hole the reader can see and the report will
+not admit to.
+
+The cost-per-shipped-change line is omitted when nothing merged, rather than
+dividing by zero or printing a dash: a dash in a cost line reads as a figure
+somebody failed to compute, and the honest statement is that the week has no
+such figure. Its numerator is the whole week, not the merged sessions' own
+spend — money that went into attempts that never landed is part of what the
+changes that did land cost.
+
 ## Colour
 
 `render/palette.ts` is the only file that knows an escape code, and the only
@@ -483,7 +535,8 @@ built the other way the two could come to disagree about what a role wraps.
 
 - Small pure functions. Side effects only in `commands/` and `store.ts`.
 - Errors state what happened and what to do: `No scope set. Run session start before your agent.`
-- No emoji in CLI output. No spinners. No "Oops!". Colour only through
+- No emoji in CLI output. No spinners. No "Oops!". The one exception is the
+  tick in `--md`, which is not CLI output — see Markdown above. Colour only through
   `render/palette.ts`, and only ever as an addition to output that reads
   correctly without it — `!` still marks drift where colour cannot.
 - Never anthropomorphise the agent — it ran, it changed files, it cost money.

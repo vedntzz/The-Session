@@ -24,6 +24,7 @@ import {
   verifyPeers,
 } from "./commands/verify.js";
 import {
+  copyToClipboard,
   DEFAULT_DAYS,
   openInBrowser,
   parseDays,
@@ -35,6 +36,7 @@ import {
 import { parseOutcome } from "./outcome.js";
 import { loadRates } from "./pricing.js";
 import { renderWeek } from "./render/html.js";
+import { renderMarkdownWeek } from "./render/markdown.js";
 import {
   formatPeers,
   formatPull,
@@ -283,6 +285,8 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .option("--class [name]", "show the class column; with a name, only that class")
     .option("--intent <source>", "only sessions whose intent was declared, or captured by the hook")
     .option("--tokens", "show the raw token counts as well as the cost")
+    .option("--md", "emit Markdown, for pasting into notes, Slack, Notion or Confluence")
+    .option("--copy", "put that Markdown on the clipboard instead of printing it")
     .option("--open", "write the week as an HTML page and open it")
     .action(
       async (flags: {
@@ -293,6 +297,8 @@ export function buildProgram(options: ProgramOptions = {}): Command {
         class?: string | boolean;
         intent?: string;
         tokens?: boolean;
+        md?: boolean;
+        copy?: boolean;
         open?: boolean;
       }) => {
         const days = parseDays(flags.days);
@@ -311,6 +317,23 @@ export function buildProgram(options: ProgramOptions = {}): Command {
           tokens: flags.tokens,
           classes: flags.class !== undefined,
         };
+
+        // Markdown before HTML, and before the table: it is the most specific
+        // thing asked for. `--copy` implies it — a terminal table is not what
+        // anybody pastes into a page, so a bare `--copy` means the Markdown.
+        if (flags.md || flags.copy) {
+          const markdown = renderMarkdownWeek(sessions, days, view);
+          if (flags.copy) {
+            await copyToClipboard(markdown, options);
+            const count = sessions.length === 1 ? "1 session" : `${sessions.length} sessions`;
+            console.log(`  copied   ${count} as Markdown`);
+            return;
+          }
+          // One document, printed as one line: `renderMarkdownWeek` returns
+          // it whole, and console.log supplies the newline that ends it.
+          console.log(markdown);
+          return;
+        }
 
         if (!flags.open) {
           for (const line of formatWeek(sessions, days, palette, filter, view)) {

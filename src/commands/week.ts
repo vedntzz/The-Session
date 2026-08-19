@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -28,6 +28,8 @@ export interface WeekOptions extends StoreOptions {
   tmp?: string;
   /** How the page reaches the desktop. Injected so tests open no browsers. */
   launch?: (file: string) => Promise<void>;
+  /** How text reaches the clipboard. Injected so tests touch nobody's. */
+  copy?: (text: string) => Promise<void>;
 }
 
 /**
@@ -163,6 +165,47 @@ export async function writeWeekPage(html: string, options: WeekOptions = {}): Pr
   const file = path.join(options.tmp ?? tmpdir(), `session-week-${key}.html`);
   await writeFile(file, html, { encoding: "utf8", mode: 0o600 });
   return file;
+}
+
+/**
+ * Puts text on the system clipboard.
+ *
+ * Through the platform's own utility and its stdin, rather than a dependency:
+ * the whole of what this needs is a pipe into one of three programs, and a
+ * package that shells out to the same three would be a supply chain for it.
+ *
+ * A machine with no clipboard — a container, a bare ssh session — is the
+ * common case for the last of these, so the failure says what to do instead
+ * rather than reporting that a program is missing.
+ */
+export async function copyToClipboard(text: string, options: WeekOptions = {}): Promise<void> {
+  if (options.copy) {
+    return options.copy(text);
+  }
+
+  const [command, args]: [string, string[]] =
+    process.platform === "darwin"
+      ? ["pbcopy", []]
+      : process.platform === "win32"
+        ? ["clip", []]
+        : ["xclip", ["-selection", "clipboard"]];
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ["pipe", "ignore", "ignore"] });
+    const failed = (cause: unknown): void => {
+      reject(
+        new Error(
+          `Could not reach the clipboard with ${command}. Run without --copy and pipe the output instead.`,
+          { cause },
+        ),
+      );
+    };
+
+    child.on("error", failed);
+    child.on("close", (code) => (code === 0 ? resolve() : failed(`${command} exited ${code}`)));
+    child.stdin.on("error", failed);
+    child.stdin.end(text, "utf8");
+  });
 }
 
 /** Hands the file to whatever the desktop uses to open one. */

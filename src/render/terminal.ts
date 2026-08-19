@@ -29,7 +29,7 @@ const DRIFT_MARKER = "!";
  * distinction survives a pipe, a log file and a screenshot; the tables that
  * use it say what it means underneath.
  */
-const CAPTURED_MARKER = "~";
+export const CAPTURED_MARKER = "~";
 
 /** What `show` says about an intent nobody declared. */
 const CAPTURED_INTENT = "captured from the first prompt, not declared";

@@ -14,6 +14,8 @@ let root: string;
 let store: ProgramOptions;
 /** Files `--open` was asked to hand to the desktop. No browser is launched. */
 let opened: string[];
+/** What `--copy` was asked to put on the clipboard. Nobody's is touched. */
+let copied: string[];
 
 /**
  * A throwaway repo with one commit, so `start` has a HEAD to record and never
@@ -24,6 +26,7 @@ beforeEach(async () => {
   const cwd = path.join(root, "work");
   await mkdir(cwd, { recursive: true });
   opened = [];
+  copied = [];
   // `adapters: []` keeps these tests off the machine's real transcripts, and
   // `launch` keeps `--open` from opening a browser on whoever runs them.
   store = {
@@ -33,6 +36,9 @@ beforeEach(async () => {
     tmp: root,
     launch: async (file) => {
       opened.push(file);
+    },
+    copy: async (text) => {
+      copied.push(text);
     },
   };
 
@@ -404,6 +410,58 @@ describe("session", () => {
     await expect(run("peers")).resolves.toBeDefined();
     await expect(run("config", "show")).resolves.toBeDefined();
     await expect(run("key", "show")).resolves.toBeDefined();
+  });
+
+  it("week --md emits Markdown instead of the table", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    const document = (await run("week", "--md")).join("\n");
+
+    expect(document).toMatch(/^### AI-assisted work · /);
+    expect(document).toContain("| Date | Work | Outcome | Cost | Unplanned |");
+    expect(document).toContain("|---|---|---|---:|---:|");
+    expect(document).toContain("| **Total** |");
+    // The terminal table's furniture is not in it.
+    expect(document).not.toContain("started");
+  });
+
+  it("week --copy puts the Markdown on the clipboard instead of stdout", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    const printed = (await run("week", "--copy")).join("\n");
+
+    expect(copied).toHaveLength(1);
+    expect(copied[0]).toMatch(/^### AI-assisted work · /);
+    expect(copied[0]).toContain("| Date | Work | Outcome | Cost | Unplanned |");
+    // Only the confirmation reaches stdout.
+    expect(printed).toBe("  copied   1 session as Markdown");
+  });
+
+  it("week --copy means the Markdown, not the terminal table", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    // No `--md` beside it: a terminal table is not what anybody pastes.
+    await run("week", "--copy");
+
+    expect(copied[0]).not.toContain("started");
+  });
+
+  it("week --md escapes a pipe in an intent end to end", async () => {
+    await run("start", "fix grep foo | wc -l", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    const document = (await run("week", "--md")).join("\n");
+    const row = document.split("\n").find((line) => line.includes("grep foo")) as string;
+
+    expect(row).toContain("grep foo \\| wc -l");
+    expect(row.split(/(?<!\\)\|/)).toHaveLength(7);
   });
 
   it("registers exactly the sixteen subcommands", () => {
@@ -1033,6 +1091,21 @@ describe("passive capture, end to end", () => {
       '  Your first prompt was "why does /orders 500", and you declared nothing up front.',
     );
     expect(lines[2]).toContain("session start --scope");
+  });
+
+  it("week --md honours the filters, so a pasted table is the one asked for", async () => {
+    await run("start", "declared it", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+    await run("start", "--passive");
+    await prompt("never said a word");
+    await writeFile(path.join(store.cwd as string, "b.txt"), "written", "utf8");
+    await run("stop", "--if-open");
+
+    const document = (await run("week", "--md", "--intent", "declared")).join("\n");
+
+    expect(document).toContain("declared it");
+    expect(document).not.toContain("never said a word");
   });
 
   it("week --intent keeps one kind and says which", async () => {

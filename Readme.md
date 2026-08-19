@@ -70,6 +70,8 @@ Without it there is one entry in the ledger — what the machine produced — an
 | `session estimate "<intent>"` | What sessions like this one have cost before. |
 | `session estimate "<intent>" --scope src/api/` | The same, classified on the paths you expect rather than the words. `--class api` settles it outright. |
 | `session week --open` | The same week as an HTML page, in your browser. |
+| `session week --md` | The same week as Markdown, for meeting notes, Slack, Notion or Confluence. |
+| `session week --copy` | That Markdown on your clipboard instead of stdout. |
 | `session estimate "<intent>" --since 30d` | Only the history since then. Also a date: `--since 2026-05-20`. |
 | `session settle` | Write down where every finished session ended up, as a signed observation. |
 | `session mark <id> merged` | Say where one went, when the repo cannot know. Also `abandoned`. |
@@ -324,6 +326,37 @@ $ session estimate "restyle the header component"
 ```
 
 A median of two is a number that looks like knowledge. The drift column is the part worth reading twice: those are the files your api sessions keep wandering into, and they are the ones to put in `--scope` this time.
+
+## Handing the week to someone else
+
+`session week --md` writes the same window as Markdown, for the places other people read:
+
+```
+$ session week --md
+
+### AI-assisted work · 12–18 Aug
+
+**$47.10 spent · 6 changes shipped · 9 files touched outside plan**
+
+| Date | Work | Outcome | Cost | Unplanned |
+|---|---|---|---:|---:|
+| 12 Aug | add rate limiting to /orders | ✅ | $4.12 | 0 |
+| 13 Aug | ~ why does /orders 500 when the cart is empty |  | $0.45 | 0 |
+| 15 Aug | migrate the orders table to the new schema | ✅ | $11.90 | 4 |
+| **Total** | **9 sessions** | **6 ✅** | **$47.10** | **9** |
+
+2 sessions changed no files and are not in the table, costing $0.61.
+
+~ 1 session recorded by the editor hook: intent captured from the first prompt, no scope declared.
+
+**$7.85 per shipped change.**
+```
+
+`--copy` puts it on your clipboard instead of printing it, and implies `--md` — a terminal table is not what anybody pastes into a page. Every `week` filter still applies, so `session week --md --client Acme --days 30` is the month's invoice line.
+
+The tick is the only emoji this tool emits anywhere, and it is here because this output is read in Notion and Slack rather than in a terminal.
+
+Three things it will not do. It will not print a total that quietly omits sessions: when a model has no rate, the cost cell says `unpriced` and a line below says how much of the table the money covers. It will not fold the sessions that changed no files into the figures: they are named below the table with what they cost, so the total row is a total of the rows above it. And it will not print a cost per shipped change when nothing shipped — no dash, no zero, the line is simply absent.
 
 ## Who the work was for
 
