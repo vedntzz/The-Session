@@ -289,6 +289,7 @@ describe("matchesFilter", () => {
     expect(isEmptyFilter({})).toBe(true);
     expect(isEmptyFilter({ client: "Acme" })).toBe(false);
     expect(isEmptyFilter({ class: "ui" })).toBe(false);
+    expect(isEmptyFilter({ intent: "captured" })).toBe(false);
   });
 
   it("matches on the class the session recorded", () => {
@@ -301,5 +302,34 @@ describe("matchesFilter", () => {
     const old = { reality: ["src/api/orders.ts"] } as Session;
     expect(matchesFilter(old, { class: "api" })).toBe(true);
     expect(matchesFilter(old, { class: "ui" })).toBe(false);
+  });
+
+  it("matches on where the intent came from", () => {
+    const captured = { intentSource: "captured" } as Session;
+    const declared = { intentSource: "declared" } as Session;
+
+    expect(matchesFilter(captured, { intent: "captured" })).toBe(true);
+    expect(matchesFilter(captured, { intent: "declared" })).toBe(false);
+    expect(matchesFilter(declared, { intent: "declared" })).toBe(true);
+    expect(matchesFilter(declared, { intent: "captured" })).toBe(false);
+  });
+
+  it("counts a session recorded before intentSource existed as declared", () => {
+    // Nothing but `session start` could have written an intent then, so the
+    // absent field is a fact about the record rather than a gap in it.
+    const old = {} as Session;
+
+    expect(matchesFilter(old, { intent: "declared" })).toBe(true);
+    expect(matchesFilter(old, { intent: "captured" })).toBe(false);
+  });
+
+  it("narrows on the intent source alongside everything else", () => {
+    const acme = {
+      attribution: { client: "Acme" },
+      intentSource: "captured",
+    } as unknown as Session;
+
+    expect(matchesFilter(acme, { client: "Acme", intent: "captured" })).toBe(true);
+    expect(matchesFilter(acme, { client: "Acme", intent: "declared" })).toBe(false);
   });
 });

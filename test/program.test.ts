@@ -236,7 +236,10 @@ describe("session", () => {
 
     expect(lines[1]).toBe("  estimate  rate limit the /orders endpoint");
     expect(lines[2]).toBe("  class     api         from the intent");
-    expect(lines[3]).toBe("  like it   0 sessions");
+    // Both blocks, both empty. Neither is dropped: a missing block would leave
+    // the other reading as the whole answer.
+    expect(lines).toContain("  declared  none — nothing like this was declared before it ran");
+    expect(lines).toContain("  captured  none — the hook recorded nothing like this");
   });
 
   it("estimate prefers --scope over the words of the intent", async () => {
@@ -253,8 +256,8 @@ describe("session", () => {
     // a.txt is docs by the path rules, which is why --class says so here.
     const lines = await run("estimate", "touch it again", "--class", "docs");
 
-    expect(lines[3]).toBe("  like it   1 session");
-    expect(lines[4]).toContain("fewer than 5 sessions");
+    expect(lines).toContain("  declared  1 session   intent written at session start");
+    expect(lines.join("\n")).toContain("fewer than 5 sessions");
     expect(lines.join("\n")).not.toContain("median");
   });
 
@@ -883,6 +886,50 @@ describe("passive capture, end to end", () => {
     expect(lines.some((text) => text.includes("captured from the first prompt"))).toBe(true);
     expect(lines.some((text) => text.includes("makes drift visible"))).toBe(true);
     expect(lines.some((text) => text.trimStart().startsWith("outside"))).toBe(false);
+  });
+
+  it("week --intent keeps one kind and says which", async () => {
+    await run("start", "declared it first", "--scope", "a.txt");
+    await run("stop");
+    await run("start", "--passive");
+    await prompt("never said a word");
+    await run("stop", "--if-open");
+
+    const captured = await run("week", "--intent", "captured");
+    expect(captured[1]).toBe("  only captured intents");
+    expect(captured.join("\n")).toContain("never said a word");
+    expect(captured.join("\n")).not.toContain("declared it first");
+
+    const declared = await run("week", "--intent", "declared");
+    expect(declared[1]).toBe("  only declared intents");
+    expect(declared.join("\n")).toContain("declared it first");
+    expect(declared.join("\n")).not.toContain("never said a word");
+  });
+
+  it("week --intent says what it takes when given something else", async () => {
+    await expect(run("week", "--intent", "hook")).rejects.toThrow(
+      /Use one of: declared, captured/,
+    );
+  });
+
+  it("estimate reports the two apart rather than pooling them", async () => {
+    await run("start", "touch a.txt", "--scope", "a.txt");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    // A different file, because a.txt is still dirty from the session above and
+    // would land in this one's baseline rather than its reality.
+    await run("start", "--passive");
+    await prompt("touch b.txt as well");
+    await writeFile(path.join(store.cwd as string, "b.txt"), "written", "utf8");
+    await run("stop", "--if-open");
+
+    // a.txt is docs by the path rules, so both sessions land in the same class
+    // — which is exactly where pooling them would have gone unnoticed.
+    const lines = await run("estimate", "touch it again", "--class", "docs");
+
+    expect(lines).toContain("  declared  1 session   intent written at session start");
+    expect(lines).toContain("  captured  1 session   intent taken from the first prompt");
   });
 
   it("start with neither an intent nor --passive still says what to type", async () => {

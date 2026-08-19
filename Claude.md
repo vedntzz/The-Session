@@ -33,7 +33,7 @@
 src/
   cli.ts           command registration
   commands/        start.ts stop.ts show.ts week.ts verify.ts key.ts config.ts
-                   settle.ts estimate.ts
+                   settle.ts estimate.ts intent.ts
   capture/         hook.ts, adapters/claude-code.ts
   store.ts         JSONL read/append
   config.ts        .session.json at the repo root — attribution, checked in
@@ -57,6 +57,10 @@ type Session = {
   id: string
   repo: string
   intent: string          // immutable
+  intentSource?: IntentSource  // 'declared' | 'captured' — where the words came
+                          // from. Fixed when the session opens; absent on
+                          // records written before passive capture, where it
+                          // reads as declared.
   scope: string[]         // declared, may be empty
   baseline: string[]      // already dirty at start, subtracted from reality
   reality: string[]       // observed from git diff, less baseline
@@ -193,6 +197,30 @@ comes from one table or the other, and the command says which.
 Inside invariant 3: regular expressions over path strings. Nothing is asked what
 the code does.
 
+## Intent source
+
+`declared` was typed at `session start`, before the agent ran. `captured` was
+taken off the first prompt of a session the hook opened. Both are written
+before anything happened and neither can be edited afterwards, so invariant 1
+holds for both — but only one of them was ever a promise, and a reader
+comparing intent to reality is owed that.
+
+Decided when the session opens and fixed there. `captureIntent` fills in a
+passive session's words later; it does not change what kind of intent they
+are, and `updateSession` refuses the field outright. A session opened with no
+intent is `captured` by construction — recording it as `declared` would be a
+claim that somebody typed it — and `appendSession` refuses the combination.
+
+Absent on records written before passive capture existed, where it reads as
+`declared`: nothing but `session start` could have written an intent then, so
+that is a fact about those records rather than a guess about them. Same shape
+as `classOf` — every reader goes through `intentSourceOf`, never the raw
+field, so those records land in `--intent declared` rather than in neither
+half.
+
+`show` names it, `week` marks the row and filters on it, and `estimate`
+reports the two apart. Nothing pools them.
+
 ## Estimate
 
 `session estimate "<intent>"` answers it with past sessions of the same class:
@@ -207,6 +235,28 @@ ran, which is also why the sample is printed above the figures and why fewer
 than five sessions reports the count and nothing else — a median of two looks
 like knowledge and is not.
 
+The answer is two blocks, one per intent source, and never a total. Declared
+and captured sessions are different evidence and on most logs they do not cost
+the same or land at the same rate; a pooled median describes neither, and it
+would move whenever the mix moved with nothing in the output to say that was
+what changed. Teams adopting the hook record far more captured sessions than
+declared ones, so the pool would be dragged wherever the hook happened to
+point.
+
+`MIN_SESSIONS` therefore applies to each block on its own. Six declared and
+six captured sessions are not twelve of anything, and a threshold that let
+them add up would be the pool again under another name. A block holding
+nothing still prints — dropping it would leave the other reading as the whole
+answer, which is the pooled reading this exists to prevent.
+
+Drift is finally counted over a plain denominator, because every session
+behind the declared block declared a scope. The captured block says outright
+that there was nothing to drift from rather than printing no drift line: a
+missing line there reads as captured sessions never drifting.
+
+`--since` is printed once, above both blocks. Twice would suggest the two
+could have been cut at different dates.
+
 The percentile is nearest-rank: p90 is an amount some session was actually
 billed, not one interpolated between two of them. "First time" means the first
 terminal observation on the record, or the outcome computed now for a session
@@ -214,7 +264,9 @@ nobody has settled — a session abandoned and revived a month later merged, but
 it did not merge the first time.
 
 Sessions that changed no files come out before anything is counted, and the
-count of them is printed beside the sample. They are not instances of the work
+count of them is printed beside the sample of the block they came from — how
+often a session comes to nothing is not the same question for work somebody
+declared and work the hook happened to catch. They are not instances of the work
 being asked about: they would drag the median below anything anyone was billed
 for doing it, and sit in the merge rate's denominator as failures to merge
 when there was nothing to merge. Note they mostly land in `other`, since a

@@ -752,10 +752,30 @@ describe("a filtered week", () => {
     expect(formatWeek(week(), 7, plainPalette, {}, priced)[1]).not.toContain("only");
   });
 
+  it("names an intent-source filter, which nothing else in the table would say", () => {
+    // A table of nothing but declared sessions carries no marker on any row,
+    // which reads exactly like an unfiltered week.
+    const lines = formatWeek(week(), 7, plainPalette, { intent: "declared" }, priced);
+
+    expect(lines[1]).toBe("  only declared intents");
+  });
+
+  it("names it beside the others when both were given", () => {
+    const lines = formatWeek(week(), 7, plainPalette, { client: "Acme", intent: "captured" }, priced);
+
+    expect(lines[1]).toBe("  only client Acme, captured intents");
+  });
+
   it("says which filter came up empty rather than just 'no sessions'", () => {
     const lines = formatWeek([], 7, plainPalette, { client: "Initech" }, priced);
 
     expect(lines).toEqual(["", "  No sessions in the last 7 days for client Initech"]);
+  });
+
+  it("says so for an intent-source filter that found nothing too", () => {
+    const lines = formatWeek([], 7, plainPalette, { intent: "captured" }, priced);
+
+    expect(lines).toEqual(["", "  No sessions in the last 7 days for captured intents"]);
   });
 
   it("still says the plain thing when an unfiltered week is empty", () => {

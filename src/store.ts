@@ -108,6 +108,20 @@ export type SessionOutcome = "open" | "merged" | "abandoned" | "empty";
  */
 export type IntentSource = "declared" | "captured";
 
+/**
+ * Reads an intent source off the command line.
+ *
+ * The two words are the two the record uses, so what `week --intent` takes is
+ * what the field says — a reader who has seen one has seen the other.
+ */
+export function parseIntentSource(value: string): IntentSource {
+  const wanted = value.trim().toLowerCase();
+  if (wanted === "declared" || wanted === "captured") {
+    return wanted;
+  }
+  throw new Error(`${value} is not an intent source. Use one of: declared, captured.`);
+}
+
 export interface Session {
   id: string;
   /** Normalized repo identity, e.g. `remote:github.com/acme/tool`. */

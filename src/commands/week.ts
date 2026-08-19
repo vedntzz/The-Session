@@ -6,8 +6,10 @@ import { promisify } from "node:util";
 import { classOf, type SessionClass } from "../classify.js";
 import { withOutcomes } from "../observe.js";
 import {
+  intentSourceOf,
   readSessions,
   repoKey,
+  type IntentSource,
   type Session,
   type SessionOutcome,
   type StoreOptions,
@@ -55,6 +57,17 @@ export interface SessionFilter {
   outcome?: SessionOutcome;
   /** What was being worked on. See `classify.ts`. */
   class?: SessionClass;
+  /**
+   * Where the intent came from: declared at `session start`, or captured from
+   * the first prompt of a session the hook opened.
+   *
+   * Worth filtering on because the two are different evidence, and a week that
+   * mixes them answers two questions at once. `--intent declared` is the work
+   * somebody committed to in advance; `--intent captured` is everything that
+   * happened without anyone saying so first, which is the pile most teams do
+   * not know the size of.
+   */
+  intent?: IntentSource;
 }
 
 /** True when nothing is being filtered on. */
@@ -63,7 +76,8 @@ export function isEmptyFilter(filter: SessionFilter): boolean {
     filter.client === undefined &&
     filter.project === undefined &&
     filter.outcome === undefined &&
-    filter.class === undefined
+    filter.class === undefined &&
+    filter.intent === undefined
   );
 }
 
@@ -100,6 +114,14 @@ export function matchesFilter(session: Session, filter: SessionFilter): boolean 
   // `classOf` rather than the stored field, so a session recorded before the
   // class existed is matched on its paths rather than dropped from the week.
   if (filter.class !== undefined && classOf(session) !== filter.class) {
+    return false;
+  }
+  // `intentSourceOf` rather than the stored field, for the same reason as
+  // `classOf` above: a record written before passive capture existed carries
+  // no field, and nothing but `session start` could have written it, so it is
+  // declared. Reading the field raw would drop those from `--intent declared`,
+  // which is the filter they most obviously belong to.
+  if (filter.intent !== undefined && intentSourceOf(session) !== filter.intent) {
     return false;
   }
   return true;

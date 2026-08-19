@@ -51,6 +51,7 @@ Without it there is one entry in the ledger — what the machine produced — an
 | `session week --outcome merged` | Only the sessions that ended up there. Also `abandoned`, `open`, `empty`. |
 | `session week --class` | Add a column saying what each session was working on. |
 | `session week --class ui` | Only the sessions that were. Also `schema`, `api`, `test`, `config`, `docs`, `build`, `other`. |
+| `session week --intent declared` | Only the sessions you declared before the agent ran. `--intent captured` for the ones the hook recorded. |
 | `session estimate "<intent>"` | What sessions like this one have cost before. |
 | `session estimate "<intent>" --scope src/api/` | The same, classified on the paths you expect rather than the words. `--class api` settles it outright. |
 | `session week --open` | The same week as an HTML page, in your browser. |
@@ -73,6 +74,7 @@ Without it there is one entry in the ledger — what the machine produced — an
 Eight fields. Everything else is a query over them.
 
 - **intent** — what you said you were doing, in your own words. Written once, never editable.
+- **intentSource** — where those words came from: **declared** if you typed them at `session start`, **captured** if the hook took them off your first prompt. Fixed when the session opens, like the intent itself.
 - **scope** — the files you expected to change. Path prefixes, matched at directory boundaries: `api/middleware/` covers everything beneath it, `api/order` never covers `api/orders.py`.
 - **baseline** — what was already modified when the session opened, so you are not billed for work that was sitting there before it.
 - **reality** — the files that actually changed, less the baseline.
@@ -239,29 +241,43 @@ $ session estimate "rate limit the /orders endpoint"
 
   estimate  rate limit the /orders endpoint
   class     api         from the intent
-  like it   9 sessions
 
+  declared  9 sessions  intent written at session start
   median    $7.43
   p90       $14.85
   merged    6 of 8 first time (75%), 1 still open
-  drift     src/store.ts      5 of 9
-            rates.json        2 of 9
+  drift     src/store.ts  5 of 9
+            rates.json    2 of 9
   unpriced  1 session ran on a model with no rate; the money above is the other 8
+
+  captured  6 sessions  intent taken from the first prompt
+  median    $2.25
+  p90       $9.00
+  merged    1 of 5 first time (20%), 1 still open
+  drift     nothing was declared to drift from, so none is counted
 ```
+
+**Two blocks, never a total.** A session you declared is a commitment you made before the agent ran; one the hook caught is a transcript of a prompt. They are not the same kind of evidence, and on most logs they do not cost the same or land at the same rate — look at the two medians and the two merge rates above. Pooled, those fifteen sessions would report one median somewhere in the gap, describing neither side, and it would move whenever the mix moved with nothing on the page to say that was what changed. Teams that adopt the hook record far more captured sessions than declared ones, so the pooled figure drifts towards whatever the hook happened to catch.
+
+The five-session floor applies to each block on its own, for the same reason: six declared and six captured sessions are not twelve of anything. A block with nothing in it still prints, so the other one is never mistaken for the whole answer.
 
 *First time* is the first time anyone looked: the first observation `settle` wrote, or the answer computed now for a session nobody has settled yet. A session that was abandoned, picked up again and landed a month later merged — but it did not merge the first time, and a rate that pretended otherwise would flatter every class in the table.
 
 The class is read off the words unless you say better: `--scope src/api/` classifies on the paths you expect, which is the more reliable signal, and `--class api` settles it outright. Narrow the history with `--since 30d` or `--since 2026-05-20`.
 
-Nothing here is a projection. It is nine sessions that already ran, restated — which is why fewer than five of them prints the count and no figures at all:
+Nothing here is a projection. It is sessions that already ran, restated — which is why a block with fewer than five of them prints the count and no figures at all:
 
 ```
 $ session estimate "restyle the header component"
 
   estimate  restyle the header component
   class     ui          from the intent
-  like it   3 sessions
+
+  declared  3 sessions  intent written at session start
   too few   nothing is estimated from fewer than 5 sessions
+
+  captured  none — the hook recorded nothing like this
+
             widen --since, or say --class if these were the wrong ones
 ```
 

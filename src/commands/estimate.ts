@@ -8,8 +8,9 @@ import { withOutcomes } from "../observe.js";
 import { isTerminal, observations } from "../outcome.js";
 import { formatUsd, isPriced, priceSession, type RateTable } from "../pricing.js";
 import {
-  isCaptured,
+  intentSourceOf,
   readSessions,
+  type IntentSource,
   type Session,
   type SessionOutcome,
   type StoreOptions,
@@ -77,15 +78,40 @@ export interface EstimateFigures {
   decided: number;
   /** Matched sessions still in flight, which no rate can be asked about yet. */
   open: number;
-  /**
-   * Matched sessions that declared a scope to drift from — the denominator of
-   * the drift counts, and not the same as `matched` once the hook is
-   * recording sessions nobody declared. Those cannot drift, so counting them
-   * in would report a path as rarer than it was.
-   */
-  declared: number;
   /** The paths that most often turned up as drift, commonest first. */
   drift: DriftCount[];
+}
+
+/**
+ * One side of the sample: the sessions of this class whose intent came from
+ * one place, and what they came to.
+ *
+ * The two are never pooled. A declared session is a commitment made before the
+ * work — somebody wrote down what they were about to do and then did it — and
+ * a captured one is a transcript of a prompt. Averaging them produces a figure
+ * about neither: teams that adopt the hook record far more captured sessions
+ * than declared ones, so a pooled median would drift towards whatever the hook
+ * happened to catch and would move whenever the mix did, with nothing in the
+ * output to say that was what changed.
+ *
+ * Which is also why `MIN_SESSIONS` applies to each side on its own. Six
+ * declared and six captured sessions are not twelve of anything, and a
+ * threshold that let them add up would be a way of reintroducing the pool
+ * under a different name.
+ */
+export interface EstimateGroup {
+  source: IntentSource;
+  /** How many past sessions of this class and source — the empty ones aside. */
+  matched: number;
+  /**
+   * Sessions of this class and source that changed no files, left out of
+   * everything above. Counted and printed rather than silently dropped: how
+   * often a session comes to nothing is worth knowing, and a sample that
+   * quietly shrank would be a sample nobody could check.
+   */
+  empty: number;
+  /** Absent when `matched` is under `MIN_SESSIONS`. */
+  figures?: EstimateFigures;
 }
 
 export interface Estimate {
@@ -95,17 +121,10 @@ export interface Estimate {
   source: ClassSource;
   /** The cutoff as a date, when `--since` set one. */
   since?: string;
-  /** How many past sessions of this class were found — the empty ones aside. */
-  matched: number;
-  /**
-   * Sessions of this class that changed no files, left out of everything
-   * above. Counted and printed rather than silently dropped: how often a
-   * session comes to nothing is worth knowing, and a sample that quietly
-   * shrank would be a sample nobody could check.
-   */
-  empty: number;
-  /** Absent when `matched` is under `MIN_SESSIONS`. */
-  figures?: EstimateFigures;
+  /** Sessions whose intent was written at `session start`, before the agent ran. */
+  declared: EstimateGroup;
+  /** Sessions whose intent was taken from the first prompt by the hook. */
+  captured: EstimateGroup;
 }
 
 // --- reading the question ------------------------------------------------
@@ -224,10 +243,13 @@ export function driftPaths(
 }
 
 /**
- * The figures over a set of matched sessions. Pure; the rates come from above.
+ * The figures over one group's matched sessions. Pure; the rates come from
+ * above.
  *
- * Expects the empty sessions to be out already — `estimateFor` removes them
- * before anything here counts anything.
+ * Expects one intent source and no empty sessions — `groupFor` splits and
+ * filters before anything here counts anything. It does not check either:
+ * a summary of a mixed set is a summary of nothing in particular, and the
+ * caller is the only thing that knows which set it handed over.
  */
 export function summarize(
   sessions: readonly Session[],
@@ -249,7 +271,6 @@ export function summarize(
     mergedFirstTime: decided.filter((outcome) => outcome === "merged").length,
     decided: decided.length,
     open: sessions.length - decided.length,
-    declared: sessions.filter((session) => !isCaptured(session)).length,
     drift: driftPaths(sessions),
   };
 }
@@ -257,7 +278,32 @@ export function summarize(
 // --- reading the log -----------------------------------------------------
 
 /**
- * Past sessions of the class this intent reads as, and what they came to.
+ * One group's counts and figures.
+ *
+ * The empty sessions come out here rather than before the split, so that each
+ * side reports the ones that were its own. How often a session comes to
+ * nothing is not the same question for work somebody declared and work the
+ * hook happened to catch, and a single pooled count of empties would hide
+ * exactly that difference.
+ */
+function groupFor(
+  source: IntentSource,
+  sessions: readonly Session[],
+  rates: RateTable,
+): EstimateGroup {
+  const matched = sessions.filter((session) => session.outcome !== "empty");
+
+  return {
+    source,
+    matched: matched.length,
+    empty: sessions.length - matched.length,
+    ...(matched.length >= MIN_SESSIONS ? { figures: summarize(matched, rates) } : {}),
+  };
+}
+
+/**
+ * Past sessions of the class this intent reads as, and what they came to,
+ * split by where their intent came from.
  *
  * Only sessions that stopped: an open one has no cost worth quoting and no end
  * to have merged. Outcomes are resolved for the matches alone — which class a
@@ -271,6 +317,10 @@ export function summarize(
  * denominator as a session that failed to merge when there was nothing to
  * merge. What it did cost is real, which is why it is still reported — as its
  * own count, in its own words.
+ *
+ * The split is on `intentSourceOf`, not the stored field, so a session
+ * recorded before passive capture existed lands in `declared` rather than in
+ * neither. See `EstimateGroup` for why the two are never added up.
  */
 export async function estimateFor(
   request: EstimateRequest,
@@ -287,7 +337,8 @@ export async function estimateFor(
       classOf(session) === choice.class,
   );
   const resolved = await withOutcomes(past, options.cwd ?? process.cwd());
-  const matched = resolved.filter((session) => session.outcome !== "empty");
+  const bySource = (source: IntentSource): Session[] =>
+    resolved.filter((session) => intentSourceOf(session) === source);
 
   return {
     intent: request.intent,
@@ -296,9 +347,8 @@ export async function estimateFor(
     ...(request.since === undefined
       ? {}
       : { since: new Date(request.since).toISOString().slice(0, 10) }),
-    matched: matched.length,
-    empty: resolved.length - matched.length,
-    ...(matched.length >= MIN_SESSIONS ? { figures: summarize(matched, rates) } : {}),
+    declared: groupFor("declared", bySource("declared"), rates),
+    captured: groupFor("captured", bySource("captured"), rates),
   };
 }
 
@@ -327,48 +377,54 @@ function percent(part: number, whole: number): string {
   return `${Math.round((part / whole) * 100)}%`;
 }
 
-/**
- * The estimate as `session estimate` prints it.
- *
- * The sample comes before the figures, in that order on purpose: what the
- * numbers are made of decides how much to believe them, and a median with no
- * count beside it is a number pretending to be an answer.
- */
-export function formatEstimate(estimate: Estimate): string[] {
-  const window = estimate.since === undefined ? "" : ` since ${estimate.since}`;
-  const sample = `${plural(estimate.matched, "session", "sessions")}${window}`;
+/** What each group is, said once per block so the counts are not read as one. */
+const GROUPS: Record<IntentSource, string> = {
+  declared: "intent written at session start",
+  captured: "intent taken from the first prompt",
+};
 
-  const lines = [
-    "",
-    line("estimate", estimate.intent),
-    line("class", `${estimate.class.padEnd(NOTE_COLUMN)}${SOURCES[estimate.source]}`),
-    line("like it", sample),
-  ];
+/** What a block says when the log holds none of that kind. */
+const NONE: Record<IntentSource, string> = {
+  declared: "none — nothing like this was declared before it ran",
+  captured: "none — the hook recorded nothing like this",
+};
+
+/**
+ * One group's block: what it is made of, then what it came to.
+ *
+ * Printed even when it is empty. A block that disappears for want of sessions
+ * would leave the other one looking like the whole answer, which is the pooled
+ * reading this is here to prevent — and "no declared sessions like this" is
+ * itself worth knowing, since it says the figures below come entirely from
+ * work nobody wrote down in advance.
+ */
+function formatGroup(group: EstimateGroup): string[] {
+  if (group.matched === 0 && group.empty === 0) {
+    return [line(group.source, NONE[group.source])];
+  }
+
+  const sample = plural(group.matched, "session", "sessions");
+  const lines = [line(group.source, `${sample.padEnd(NOTE_COLUMN)}${GROUPS[group.source]}`)];
 
   // Beside the sample, not after the figures: it says what the sample is not,
   // and that belongs where the reader is deciding how much to believe it.
-  if (estimate.empty > 0) {
+  if (group.empty > 0) {
     lines.push(
       line(
         "left out",
-        `${plural(estimate.empty, "session", "sessions")} changed no files — nothing ` +
+        `${plural(group.empty, "session", "sessions")} changed no files — nothing ` +
           `was attempted, so there is nothing to estimate from`,
       ),
     );
   }
 
-  const figures = estimate.figures;
+  const figures = group.figures;
   if (!figures) {
-    // What was found and what would make it enough. The alternative is a
-    // median of two, which is the kind of number that ends up in a quote.
-    lines.push(
-      line("too few", `nothing is estimated from fewer than ${MIN_SESSIONS} sessions`),
-      line("", "widen --since, or say --class if these were the wrong ones"),
-    );
+    // What was found, and nothing else. The alternative is a median of two,
+    // which is the kind of number that ends up in a quote.
+    lines.push(line("too few", `nothing is estimated from fewer than ${MIN_SESSIONS} sessions`));
     return lines;
   }
-
-  lines.push("");
 
   if (figures.priced > 0) {
     lines.push(line("median", formatUsd(figures.median)));
@@ -390,26 +446,21 @@ export function formatEstimate(estimate: Estimate): string[] {
   // The paths under a column of their own, so a list of five can be read down
   // rather than across. Only the first line carries the label.
   //
-  // Counted over the sessions that declared a scope rather than over the whole
-  // sample: a session the hook recorded had nothing to drift from, and putting
-  // it in the denominator would report a path as turning up in a smaller share
-  // of the work than it did.
+  // Counted over this group alone, which is the whole of why the denominator
+  // is finally a plain one: every session behind it declared a scope, so
+  // "3 of 9" is three of the nine sessions that could have drifted.
   const width = figures.drift.reduce((widest, entry) => Math.max(widest, entry.path.length), 0);
   for (const [index, entry] of figures.drift.entries()) {
-    const count = `${entry.sessions} of ${figures.declared}`;
+    const count = `${entry.sessions} of ${group.matched}`;
     lines.push(line(index === 0 ? "drift" : "", `${entry.path.padEnd(width + 2)}${count}`));
   }
 
-  // Said whenever the two differ, because "2 of 7" under a sample of twelve is
-  // a figure the reader would otherwise have to reconcile on their own.
-  if (figures.declared < estimate.matched) {
-    lines.push(
-      line(
-        figures.drift.length > 0 ? "" : "drift",
-        `${plural(estimate.matched - figures.declared, "session", "sessions")} here declared no ` +
-          `scope, so nothing they changed counts as drift`,
-      ),
-    );
+  // Said outright rather than left as a missing line. A captured session had
+  // no scope to drift from, so there is nothing here to count — and a reader
+  // comparing this block against the declared one above would otherwise read
+  // the silence as these sessions never having drifted.
+  if (figures.drift.length === 0 && group.source === "captured") {
+    lines.push(line("drift", "nothing was declared to drift from, so none is counted"));
   }
 
   if (figures.unpriced > 0) {
@@ -421,6 +472,49 @@ export function formatEstimate(estimate: Estimate): string[] {
           `the money above is the other ${figures.priced}`,
       ),
     );
+  }
+
+  return lines;
+}
+
+/**
+ * The estimate as `session estimate` prints it: the question, then one block
+ * per intent source.
+ *
+ * Two blocks, never a total. The sample comes before the figures inside each,
+ * in that order on purpose: what the numbers are made of decides how much to
+ * believe them, and a median with no count beside it is a number pretending to
+ * be an answer.
+ *
+ * Declared first because it is the stronger evidence — somebody said what they
+ * were going to do before the agent ran — not because it is the larger sample.
+ * On most logs it is the smaller one.
+ */
+export function formatEstimate(estimate: Estimate): string[] {
+  const lines = [
+    "",
+    line("estimate", estimate.intent),
+    line("class", `${estimate.class.padEnd(NOTE_COLUMN)}${SOURCES[estimate.source]}`),
+  ];
+
+  // On its own line rather than beside each sample: the window is one fact
+  // about the question, and printing it twice would suggest the two blocks
+  // could have been cut at different dates.
+  if (estimate.since !== undefined) {
+    lines.push(line("since", estimate.since));
+  }
+
+  const groups = [estimate.declared, estimate.captured];
+  for (const group of groups) {
+    lines.push("", ...formatGroup(group));
+  }
+
+  // Once, at the end, and only when something was thin. It is advice about the
+  // question rather than about either block — widening the window or naming a
+  // different class changes both — so repeating it under each would read as
+  // two separate problems.
+  if (groups.some((group) => group.figures === undefined && group.matched > 0)) {
+    lines.push("", line("", "widen --since, or say --class if these were the wrong ones"));
   }
 
   return lines;

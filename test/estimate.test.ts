@@ -14,6 +14,7 @@ import {
   percentile,
   summarize,
   type Estimate,
+  type EstimateGroup,
 } from "../src/commands/estimate.js";
 import type { Observation } from "../src/outcome.js";
 import type { RateTable } from "../src/pricing.js";
@@ -21,6 +22,7 @@ import {
   appendSession,
   updateSession,
   zeroCost,
+  type IntentSource,
   type Session,
   type SessionOutcome,
   type StoreOptions,
@@ -56,6 +58,8 @@ interface Past {
   units?: number;
   model?: string;
   daysAgo?: number;
+  /** Where the intent came from. Declared unless the hook is being imitated. */
+  source?: IntentSource;
 }
 
 /** Records one finished session. */
@@ -64,6 +68,7 @@ async function record(intent: string, past: Past = {}): Promise<Session> {
   const session = await appendSession(
     {
       intent,
+      intentSource: past.source ?? "declared",
       startedAt,
       endedAt: new Date(Date.parse(startedAt) + 60_000).toISOString(),
       startCommit: "abc1234",
@@ -89,9 +94,9 @@ async function record(intent: string, past: Past = {}): Promise<Session> {
 }
 
 /** `count` api sessions, each costing a different whole number of units. */
-async function recordApiSessions(count: number): Promise<void> {
+async function recordApiSessions(count: number, source: IntentSource = "declared"): Promise<void> {
   for (let unit = 1; unit <= count; unit += 1) {
-    await record(`api work ${unit}`, { units: unit });
+    await record(`api work ${unit}`, { units: unit, source });
   }
 }
 
@@ -261,22 +266,6 @@ describe("summarize", () => {
     expect(figures.median).toBe(1.5);
   });
 
-  it("counts the sessions that declared a scope apart from the sample", () => {
-    const figures = summarize(
-      [
-        session({ drift: ["src/store.ts"] }),
-        session({ intentSource: "captured", scope: [] }),
-        session({ intentSource: "captured", scope: [] }),
-      ],
-      RATES,
-    );
-
-    // All three are work like this and belong in the money. Only one of them
-    // could have drifted.
-    expect(figures.declared).toBe(1);
-    expect(figures.drift).toEqual([{ path: "src/store.ts", sessions: 1 }]);
-  });
-
   it("counts the open sessions apart from the decided ones", () => {
     const figures = summarize(
       [session({ outcome: "merged" }), session({ outcome: "abandoned" }), session({ outcome: "open" })],
@@ -291,7 +280,9 @@ describe("estimateFor", () => {
   it("says how the class was arrived at", async () => {
     const estimate = await estimateFor({ intent: "rate limit the /orders endpoint" }, RATES, options);
 
-    expect(estimate).toMatchObject({ class: "api", source: "intent", matched: 0 });
+    expect(estimate).toMatchObject({ class: "api", source: "intent" });
+    expect(estimate.declared.matched).toBe(0);
+    expect(estimate.captured.matched).toBe(0);
   });
 
   it("reports nothing but the count below the threshold", async () => {
@@ -299,8 +290,8 @@ describe("estimateFor", () => {
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.matched).toBe(4);
-    expect(estimate.figures).toBeUndefined();
+    expect(estimate.declared.matched).toBe(4);
+    expect(estimate.declared.figures).toBeUndefined();
   });
 
   it("reports the figures once there are enough", async () => {
@@ -310,15 +301,17 @@ describe("estimateFor", () => {
 
     // Nine sessions at $1.50 through $13.50: the middle is the fifth, and
     // nearest-rank p90 is the ninth.
-    expect(estimate.matched).toBe(9);
-    expect(estimate.figures).toMatchObject({ median: 7.5, p90: 13.5, priced: 9 });
+    expect(estimate.declared.matched).toBe(9);
+    expect(estimate.declared.figures).toMatchObject({ median: 7.5, p90: 13.5, priced: 9 });
   });
 
   it("counts only sessions of the class being asked about", async () => {
     await recordApiSessions(6);
     await record("restyle", { reality: ["src/components/Header.tsx"] });
 
-    expect((await estimateFor({ intent: "another endpoint" }, RATES, options)).matched).toBe(6);
+    const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
+
+    expect(estimate.declared.matched).toBe(6);
   });
 
   it("leaves out sessions that have not stopped", async () => {
@@ -333,7 +326,7 @@ describe("estimateFor", () => {
       options,
     );
 
-    expect((await estimateFor({ intent: "another endpoint" }, RATES, options)).matched).toBe(5);
+    expect((await estimateFor({ intent: "another endpoint" }, RATES, options)).declared.matched).toBe(5);
   });
 
   it("honours --since", async () => {
@@ -343,7 +336,7 @@ describe("estimateFor", () => {
     const since = Date.now() - 30 * DAY_MS;
     const estimate = await estimateFor({ intent: "another endpoint", since }, RATES, options);
 
-    expect(estimate.matched).toBe(5);
+    expect(estimate.declared.matched).toBe(5);
     expect(estimate.since).toBe(new Date(since).toISOString().slice(0, 10));
   });
 
@@ -357,7 +350,8 @@ describe("estimateFor", () => {
       options,
     );
 
-    expect(estimate).toMatchObject({ class: "docs", source: "declared", matched: 2 });
+    expect(estimate).toMatchObject({ class: "docs", source: "declared" });
+    expect(estimate.declared.matched).toBe(2);
   });
 
   it("classifies past sessions on their paths, not on their words", async () => {
@@ -366,7 +360,9 @@ describe("estimateFor", () => {
       reality: ["src/components/Table.tsx"],
     });
 
-    expect((await estimateFor({ intent: "restyle a component" }, RATES, options)).matched).toBe(1);
+    const estimate = await estimateFor({ intent: "restyle a component" }, RATES, options);
+
+    expect(estimate.declared.matched).toBe(1);
   });
 
   it("takes the first look at each session, not the latest one", async () => {
@@ -379,7 +375,121 @@ describe("estimateFor", () => {
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.figures).toMatchObject({ mergedFirstTime: 0, decided: 5 });
+    expect(estimate.declared.figures).toMatchObject({ mergedFirstTime: 0, decided: 5 });
+  });
+});
+
+describe("declared and captured, kept apart", () => {
+  /**
+   * Six declared api sessions costing $1.50 to $9.00, and six the hook
+   * recorded costing $15.00 to $90.00. Pooled they would report a median of
+   * $12.00, which is a figure describing neither: no declared session cost
+   * anything like it, and no captured one did either.
+   */
+  async function bothKinds(): Promise<void> {
+    for (let unit = 1; unit <= 6; unit += 1) {
+      await record(`declared api work ${unit}`, { units: unit });
+    }
+    for (let unit = 1; unit <= 6; unit += 1) {
+      await record(`captured api work ${unit}`, { units: unit * 10, source: "captured" });
+    }
+  }
+
+  it("splits the sample rather than pooling it", async () => {
+    await bothKinds();
+
+    const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
+
+    expect(estimate.declared.matched).toBe(6);
+    expect(estimate.captured.matched).toBe(6);
+  });
+
+  it("gives each side its own money, and neither the median of the pile", async () => {
+    await bothKinds();
+
+    const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
+
+    // Six values each: the median is the mean of the third and fourth.
+    expect(estimate.declared.figures).toMatchObject({ median: 5.25, p90: 9 });
+    expect(estimate.captured.figures).toMatchObject({ median: 52.5, p90: 90 });
+  });
+
+  it("gives each side its own merge rate", async () => {
+    for (let n = 0; n < 5; n += 1) {
+      await record(`declared ${n}`, { outcome: "merged" });
+    }
+    for (let n = 0; n < 5; n += 1) {
+      await record(`captured ${n}`, { outcome: "abandoned", source: "captured" });
+    }
+
+    const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
+
+    expect(estimate.declared.figures).toMatchObject({ mergedFirstTime: 5, decided: 5 });
+    expect(estimate.captured.figures).toMatchObject({ mergedFirstTime: 0, decided: 5 });
+  });
+
+  it("counts each side's empty sessions against that side alone", async () => {
+    // Empty sessions have no paths to read a class off, so they all land in
+    // `other`, which is the class this asks about.
+    for (let unit = 1; unit <= 5; unit += 1) {
+      await record(`odd job ${unit}`, { reality: ["src/thing.ts"], units: unit });
+    }
+    await record("declared and came to nothing", { reality: [] });
+    for (let n = 0; n < 2; n += 1) {
+      await record(`captured and came to nothing ${n}`, { reality: [], source: "captured" });
+    }
+
+    const estimate = await estimateFor({ intent: "an odd job", class: "other" }, RATES, options);
+
+    // One empty on each side of the line, and each is counted where it came
+    // from. Pooled, three empties would say nothing about which kind of
+    // session keeps coming to nothing.
+    expect(estimate.declared).toMatchObject({ matched: 5, empty: 1 });
+    expect(estimate.captured).toMatchObject({ matched: 0, empty: 2 });
+  });
+
+  it("holds each side to the threshold on its own, so neither borrows the other's count", async () => {
+    // Four and four. Pooled that is eight, which would be over the line; apart
+    // it is two samples of four, and neither says anything.
+    await recordApiSessions(4);
+    for (let unit = 1; unit <= 4; unit += 1) {
+      await record(`captured api work ${unit}`, { units: unit, source: "captured" });
+    }
+
+    const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
+
+    expect(estimate.declared.matched).toBe(4);
+    expect(estimate.declared.figures).toBeUndefined();
+    expect(estimate.captured.matched).toBe(4);
+    expect(estimate.captured.figures).toBeUndefined();
+  });
+
+  it("counts a record written before intentSource existed as declared", async () => {
+    for (let unit = 1; unit <= 5; unit += 1) {
+      const past = await record(`api work ${unit}`, { units: unit });
+      expect(past.intentSource).toBe("declared");
+    }
+
+    // The same shape as an old record: nothing but `session start` could have
+    // written one, so it belongs on the declared side rather than in neither.
+    const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
+
+    expect(estimate.declared.matched).toBe(5);
+    expect(estimate.captured.matched).toBe(0);
+  });
+
+  it("keeps drift on the side that could have drifted", async () => {
+    for (let unit = 1; unit <= 5; unit += 1) {
+      await record(`declared ${unit}`, { units: unit, drift: ["src/store.ts"] });
+    }
+    for (let unit = 1; unit <= 5; unit += 1) {
+      await record(`captured ${unit}`, { units: unit, source: "captured" });
+    }
+
+    const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
+
+    expect(estimate.declared.figures?.drift).toEqual([{ path: "src/store.ts", sessions: 5 }]);
+    expect(estimate.captured.figures?.drift).toEqual([]);
   });
 });
 
@@ -409,8 +519,7 @@ describe("sessions that changed nothing", () => {
 
     const estimate = await estimateFor(asking, RATES, options);
 
-    expect(estimate.matched).toBe(5);
-    expect(estimate.empty).toBe(3);
+    expect(estimate.declared).toMatchObject({ matched: 5, empty: 3 });
   });
 
   it("leaves them out of the distribution", async () => {
@@ -421,7 +530,7 @@ describe("sessions that changed nothing", () => {
     // The five that did something: median $4.50, p90 $7.50. With the three
     // empties in the sample the median would be $2.25 — a figure describing
     // sessions that did no work.
-    expect(estimate.figures).toMatchObject({ priced: 5, median: 4.5, p90: 7.5 });
+    expect(estimate.declared.figures).toMatchObject({ priced: 5, median: 4.5, p90: 7.5 });
   });
 
   it("leaves them out of the first-time merge rate, top and bottom", async () => {
@@ -431,7 +540,7 @@ describe("sessions that changed nothing", () => {
 
     // Five decided, five merged. The empties are in neither half: they did not
     // fail to merge, they never had anything to merge.
-    expect(estimate.figures).toMatchObject({ mergedFirstTime: 5, decided: 5, open: 0 });
+    expect(estimate.declared.figures).toMatchObject({ mergedFirstTime: 5, decided: 5, open: 0 });
   });
 
   it("leaves their drift out too — a session that changed nothing drifted nowhere", async () => {
@@ -442,7 +551,7 @@ describe("sessions that changed nothing", () => {
 
     const estimate = await estimateFor(asking, RATES, options);
 
-    expect(estimate.figures?.drift).toEqual([]);
+    expect(estimate.declared.figures?.drift).toEqual([]);
   });
 
   it("cannot be counted towards the threshold by them", async () => {
@@ -457,17 +566,14 @@ describe("sessions that changed nothing", () => {
 
     const estimate = await estimateFor(asking, RATES, options);
 
-    expect(estimate.matched).toBe(4);
-    expect(estimate.empty).toBe(4);
-    expect(estimate.figures).toBeUndefined();
+    expect(estimate.declared).toMatchObject({ matched: 4, empty: 4 });
+    expect(estimate.declared.figures).toBeUndefined();
   });
 });
 
 describe("formatEstimate", () => {
-  const base: Estimate = {
-    intent: "rate limit the /orders endpoint",
-    class: "api",
-    source: "intent",
+  const declared: EstimateGroup = {
+    source: "declared",
     matched: 9,
     empty: 0,
     figures: {
@@ -478,7 +584,6 @@ describe("formatEstimate", () => {
       mergedFirstTime: 6,
       decided: 8,
       open: 1,
-      declared: 9,
       drift: [
         { path: "src/store.ts", sessions: 5 },
         { path: "rates.json", sessions: 2 },
@@ -486,106 +591,182 @@ describe("formatEstimate", () => {
     },
   };
 
-  it("says what it left out, beside the sample rather than after the figures", () => {
-    const lines = formatEstimate({ ...base, empty: 3 });
+  const captured: EstimateGroup = {
+    source: "captured",
+    matched: 6,
+    empty: 0,
+    figures: {
+      priced: 6,
+      unpriced: 0,
+      median: 2.25,
+      p90: 9,
+      mergedFirstTime: 1,
+      decided: 5,
+      open: 1,
+      drift: [],
+    },
+  };
 
-    expect(lines[4]).toBe(
-      "  left out  3 sessions changed no files — nothing was attempted, so there is " +
-        "nothing to estimate from",
-    );
-  });
-
-  it("counts drift over the sessions that declared a scope, not the whole sample", () => {
-    // Four of the twelve were recorded by the hook and declared nothing, so
-    // they had nothing to drift from. Counting them in would report the path
-    // as turning up in a smaller share of the work than it did.
-    const lines = formatEstimate({
-      ...base,
-      matched: 12,
-      figures: { ...base.figures!, declared: 8 },
-    });
-
-    expect(lines).toContain("  drift     src/store.ts  5 of 8");
-    expect(lines).toContain(
-      "            4 sessions here declared no scope, so nothing they changed counts as drift",
-    );
-  });
-
-  it("says so under the drift label when nothing in the sample declared a scope", () => {
-    const lines = formatEstimate({
-      ...base,
-      matched: 9,
-      figures: { ...base.figures!, declared: 0, drift: [] },
-    });
-
-    expect(lines).toContain(
-      "  drift     9 sessions here declared no scope, so nothing they changed counts as drift",
-    );
-  });
-
-  it("says nothing of the sort when every session in the sample declared one", () => {
-    expect(formatEstimate(base).join("\n")).not.toContain("declared no scope");
-  });
-
-  it("says nothing about empties when there were none", () => {
-    expect(formatEstimate(base).join("\n")).not.toContain("left out");
-  });
+  const base: Estimate = {
+    intent: "rate limit the /orders endpoint",
+    class: "api",
+    source: "intent",
+    declared,
+    captured,
+  };
 
   it("leads with the question and where the class came from", () => {
     const lines = formatEstimate(base);
 
     expect(lines[1]).toBe("  estimate  rate limit the /orders endpoint");
     expect(lines[2]).toBe("  class     api         from the intent");
-    expect(lines[3]).toBe("  like it   9 sessions");
   });
 
-  it("prints the money and the merge rate", () => {
+  it("heads each block with its own count and what that count is", () => {
     const lines = formatEstimate(base);
 
-    expect(lines).toContain("  median    $7.50");
-    expect(lines).toContain("  p90       $13.50");
-    expect(lines).toContain("  merged    6 of 8 first time (75%), 1 still open");
+    expect(lines).toContain("  declared  9 sessions  intent written at session start");
+    expect(lines).toContain("  captured  6 sessions  intent taken from the first prompt");
   });
 
-  it("lists the drift under one label, in a column", () => {
+  it("prints two medians and never a third that pools them", () => {
+    const lines = formatEstimate(base).join("\n");
+
+    // $7.50 and $2.25 are what the two sides cost. A pooled median over the
+    // fifteen sessions would be a number neither side has and nobody was
+    // billed, so nothing here prints one.
+    expect(lines).toContain("  median    $7.50");
+    expect(lines).toContain("  median    $2.25");
+    expect(lines.match(/median/g)).toHaveLength(2);
+    expect(lines).not.toContain("like it");
+  });
+
+  it("gives each block its own merge rate", () => {
+    const lines = formatEstimate(base);
+
+    expect(lines).toContain("  merged    6 of 8 first time (75%), 1 still open");
+    expect(lines).toContain("  merged    1 of 5 first time (20%), 1 still open");
+  });
+
+  it("lists the drift under one label, in a column, counted over its own block", () => {
     const lines = formatEstimate(base);
 
     expect(lines).toContain("  drift     src/store.ts  5 of 9");
     expect(lines).toContain("            rates.json    2 of 9");
   });
 
-  it("says the window when there was one", () => {
-    expect(formatEstimate({ ...base, since: "2026-05-20" })[3]).toBe(
-      "  like it   9 sessions since 2026-05-20",
+  it("says why the captured block has no drift rather than leaving the line out", () => {
+    // An absent line here would read as captured sessions never drifting. They
+    // declared no scope, so there was nothing for them to drift from.
+    expect(formatEstimate(base)).toContain(
+      "  drift     nothing was declared to drift from, so none is counted",
     );
   });
 
-  it("gives a count and no figures when the sample is too thin", () => {
-    const lines = formatEstimate({ ...base, matched: 3, figures: undefined });
+  it("says what each block left out, beside that block's sample", () => {
+    const lines = formatEstimate({
+      ...base,
+      declared: { ...declared, empty: 3 },
+      captured: { ...captured, empty: 1 },
+    });
 
-    expect(lines[3]).toBe("  like it   3 sessions");
-    expect(lines[4]).toBe("  too few   nothing is estimated from fewer than 5 sessions");
-    expect(lines[5]).toBe("            widen --since, or say --class if these were the wrong ones");
-    expect(lines.join("\n")).not.toContain("median");
+    expect(lines).toContain(
+      "  left out  3 sessions changed no files — nothing was attempted, so there is " +
+        "nothing to estimate from",
+    );
+    expect(lines).toContain(
+      "  left out  1 session changed no files — nothing was attempted, so there is " +
+        "nothing to estimate from",
+    );
+  });
+
+  it("says nothing about empties when there were none", () => {
+    expect(formatEstimate(base).join("\n")).not.toContain("left out");
+  });
+
+  it("says the window once, not once per block", () => {
+    const lines = formatEstimate({ ...base, since: "2026-05-20" });
+
+    expect(lines[3]).toBe("  since     2026-05-20");
+    expect(lines.join("\n").match(/2026-05-20/g)).toHaveLength(1);
+  });
+
+  it("prints a block that holds nothing rather than dropping it", () => {
+    // Dropping it would leave the captured figures looking like the whole
+    // answer, which is the pooled reading the split exists to prevent.
+    const lines = formatEstimate({
+      ...base,
+      declared: { source: "declared", matched: 0, empty: 0 },
+    });
+
+    expect(lines).toContain("  declared  none — nothing like this was declared before it ran");
+    expect(lines.join("\n")).not.toContain("$7.50");
+  });
+
+  it("says the same of a captured block with nothing in it", () => {
+    const lines = formatEstimate({
+      ...base,
+      captured: { source: "captured", matched: 0, empty: 0 },
+    });
+
+    expect(lines).toContain("  captured  none — the hook recorded nothing like this");
+  });
+
+  it("gives a count and no figures for whichever block is too thin", () => {
+    const lines = formatEstimate({
+      ...base,
+      captured: { source: "captured", matched: 3, empty: 0 },
+    });
+
+    expect(lines).toContain("  captured  3 sessions  intent taken from the first prompt");
+    expect(lines).toContain("  too few   nothing is estimated from fewer than 5 sessions");
+    // The other block is untouched by its neighbour being thin.
+    expect(lines).toContain("  median    $7.50");
+  });
+
+  it("gives the advice once when both blocks are thin, not once each", () => {
+    const lines = formatEstimate({
+      ...base,
+      declared: { source: "declared", matched: 3, empty: 0 },
+      captured: { source: "captured", matched: 2, empty: 0 },
+    });
+
+    expect(lines.filter((line) => line.includes("too few"))).toHaveLength(2);
+    expect(
+      lines.filter((line) => line.includes("widen --since")),
+    ).toHaveLength(1);
+  });
+
+  it("keeps the advice off a page where nothing was thin", () => {
+    expect(formatEstimate(base).join("\n")).not.toContain("widen --since");
+  });
+
+  it("does not call an empty block too thin", () => {
+    // Nothing was found, so there is no sample to widen towards. "too few"
+    // there would be an answer to a question nobody could have asked.
+    const lines = formatEstimate({
+      ...base,
+      declared: { source: "declared", matched: 0, empty: 0 },
+    });
+
+    expect(lines.filter((line) => line.includes("too few"))).toHaveLength(0);
   });
 
   it("admits an unpriced tail rather than folding it into the money", () => {
     const lines = formatEstimate({
       ...base,
-      figures: { ...(base.figures as NonNullable<Estimate["figures"]>), priced: 7, unpriced: 2 },
+      declared: { ...declared, figures: { ...declared.figures!, priced: 7, unpriced: 2 } },
     });
 
-    expect(lines.at(-1)).toContain("2 sessions ran on a model with no rate");
+    expect(lines.join("\n")).toContain("2 sessions ran on a model with no rate");
   });
 
   it("says so rather than printing a rate nothing has settled", () => {
     const lines = formatEstimate({
       ...base,
-      figures: {
-        ...(base.figures as NonNullable<Estimate["figures"]>),
-        mergedFirstTime: 0,
-        decided: 0,
-        open: 9,
+      declared: {
+        ...declared,
+        figures: { ...declared.figures!, mergedFirstTime: 0, decided: 0, open: 9 },
       },
     });
 

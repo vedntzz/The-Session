@@ -44,7 +44,7 @@ import {
 } from "./sync.js";
 import { paletteFor, type Palette } from "./render/palette.js";
 import { formatSession, formatWeek } from "./render/terminal.js";
-import { storeHome } from "./store.js";
+import { parseIntentSource, storeHome } from "./store.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
 export type ProgramOptions = StopOptions &
@@ -183,6 +183,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     // asked twice: `--class` shows what each session was working on, and
     // `--class ui` keeps the ones that were working on the same thing.
     .option("--class [name]", "show the class column; with a name, only that class")
+    .option("--intent <source>", "only sessions whose intent was declared, or captured by the hook")
     .option("--tokens", "show the raw token counts as well as the cost")
     .option("--open", "write the week as an HTML page and open it")
     .action(
@@ -192,6 +193,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
         project?: string;
         outcome?: string;
         class?: string | boolean;
+        intent?: string;
         tokens?: boolean;
         open?: boolean;
       }) => {
@@ -203,6 +205,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
           // A bare `--class` arrives as true: it asked for the column, not for
           // a class, so nothing is filtered on.
           class: typeof flags.class === "string" ? parseClass(flags.class) : undefined,
+          intent: flags.intent === undefined ? undefined : parseIntentSource(flags.intent),
         };
         const sessions = await weekSessions(days, options, filter);
         const view = {

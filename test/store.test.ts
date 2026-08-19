@@ -10,6 +10,7 @@ import {
   getOpenSession,
   intentSourceOf,
   isCaptured,
+  parseIntentSource,
   normalizeRemoteUrl,
   readLog,
   readSessions,
@@ -283,6 +284,26 @@ describe("intentSource", () => {
     const written = await appendSession(opened(), options);
 
     await expect(readSessions(options)).resolves.toEqual([written]);
+  });
+});
+
+describe("parseIntentSource", () => {
+  it("takes the two words the record uses", () => {
+    expect(parseIntentSource("declared")).toBe("declared");
+    expect(parseIntentSource("captured")).toBe("captured");
+  });
+
+  it("tolerates case and surrounding space", () => {
+    expect(parseIntentSource(" Captured ")).toBe("captured");
+  });
+
+  it("names both when it is given neither", () => {
+    expect(() => parseIntentSource("hook")).toThrow(/Use one of: declared, captured/);
+  });
+
+  it("refuses the words of an intent, which is the likely typo", () => {
+    // `--intent` takes a source, not the intent itself.
+    expect(() => parseIntentSource("fix the login redirect")).toThrow(/is not an intent source/);
   });
 });
 

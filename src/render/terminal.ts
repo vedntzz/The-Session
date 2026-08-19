@@ -485,6 +485,12 @@ export function describeFilter(filter: SessionFilter): string | undefined {
   if (filter.class !== undefined) {
     parts.push(`${filter.class} sessions`);
   }
+  // Named because nothing else in the table would say so: the marker beside a
+  // row marks a captured intent, and a table of nothing but declared ones
+  // carries no mark at all — which reads exactly like an unfiltered week.
+  if (filter.intent !== undefined) {
+    parts.push(`${filter.intent} intents`);
+  }
   return parts.length > 0 ? parts.join(", ") : undefined;
 }
 
