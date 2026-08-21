@@ -940,6 +940,32 @@ describe("session, priced", () => {
     expect(lines.at(-2)).toContain("1 session unpriced: some-model-nobody-has-priced");
   });
 
+  it("week --md says the cost is unavailable rather than totalling it at $0.00", async () => {
+    // End to end, because the rule is only worth having if the command routes
+    // through the renderer that obeys it. A window nobody can price must not
+    // reach a meeting note as a week that cost nothing.
+    await spent("some-model-nobody-has-priced");
+    const lines = await run("week", "--md");
+    const document = lines.join("\n");
+
+    expect(document).toContain("cost unavailable — no rate for some-model-nobody-has-priced");
+    expect(document).not.toContain("$0.00");
+    expect(document).toContain("| — |");
+  });
+
+  it("week --md still totals a week that genuinely cost nothing at $0.00", async () => {
+    // The other half, through the same command: nothing was captured, so no
+    // rate is missing and the nought is a figure somebody measured.
+    await run("start", "cost nothing at all");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    const document = (await run("week", "--md")).join("\n");
+
+    expect(document).toContain("$0.00 spent");
+    expect(document).not.toContain("cost unavailable");
+  });
+
   it("prices an unknown model once rates.json in the store names it", async () => {
     await spent("some-model-nobody-has-priced");
     await mkdir(store.home as string, { recursive: true });

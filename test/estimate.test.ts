@@ -253,6 +253,21 @@ describe("driftPaths", () => {
 });
 
 describe("summarize", () => {
+  it("counts a session that genuinely cost nothing as priced, not as a hole", () => {
+    // A known model that moved no tokens. `priced` is what the view reads to
+    // decide whether a median of nought is a figure or an absence, so a
+    // session with a rate behind it has to land on the priced side of that
+    // count even when the rate multiplies out to zero.
+    const free = session({ cost: { ...zeroCost(), model: "claude-opus-4-1" } });
+
+    expect(summarize([free, free, free], RATES)).toMatchObject({
+      priced: 3,
+      unpriced: 0,
+      median: 0,
+      p90: 0,
+    });
+  });
+
   it("prices what it can and counts what it cannot", () => {
     const sessions = [
       session({ cost: { ...zeroCost(), inputTokens: 100_000, model: "claude-opus-4-1" } }),
@@ -773,6 +788,24 @@ describe("formatEstimate", () => {
     expect(lines).toContain(
       "  cost      no price for any of these models — see ~/.session/rates.json",
     );
+  });
+
+  it("keeps $0.00 as the median when the sessions were priced and cost nothing", () => {
+    // The other half of the rule, and the reason the test is `priced === 0`
+    // rather than `median === 0`. These nine sessions had a rate behind them
+    // and it came to nought, so nought is what they cost — printing the "no
+    // price" line here would report an absence over a figure somebody measured.
+    const lines = formatEstimate({
+      ...base,
+      declared: {
+        ...declared,
+        figures: { ...declared.figures!, priced: 9, unpriced: 0, median: 0, p90: 0 },
+      },
+    });
+
+    expect(lines).toContain("  median    $0.00");
+    expect(lines).toContain("  p90       $0.00");
+    expect(lines.join("\n")).not.toContain("no price for any of these models");
   });
 
   it("says so rather than printing a rate nothing has settled", () => {
