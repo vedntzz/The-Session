@@ -23,7 +23,9 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "rates.json",
-    "PRACTICES.md"
+    "PRACTICES.md",
+    "CHANGELOG.md",
+    "docs/*.md"
   ],
   "repository": {
     "type": "git",

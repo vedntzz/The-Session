@@ -113,41 +113,78 @@ export async function settleSessions(options: StoreOptions = {}): Promise<Settle
   };
 
   for (const session of sessions) {
-    if (session.endedAt === null) {
-      result.stillOpen += 1;
-      continue;
+    const settlement = await settleOne(session, facts, options);
+    if ("skipped" in settlement) {
+      result[settlement.skipped] += 1;
+    } else {
+      result.settled.push(settlement.settled);
     }
-    // Nothing to write down: `empty` is read off `reality` every time it is
-    // asked, so an observation saying so would be a copy of a field that is
-    // already on the record and can never disagree with it.
-    if (attemptedNothing(session)) {
-      result.empty += 1;
-      continue;
-    }
-    if (!facts || session.endState === undefined) {
-      result.undecidable += 1;
-      continue;
-    }
-
-    const outcome = effectiveOutcome(session, facts);
-    if (!isTerminal(outcome)) {
-      result.stillOpen += 1;
-      continue;
-    }
-
-    const settled: Settled = {
-      session,
-      outcome,
-      verdict: judge(session, facts),
-      recorded: !alreadySaid(session, outcome),
-    };
-    if (settled.recorded) {
-      settled.session = await record(session, observe(outcome, facts, "computed"), options);
-    }
-    result.settled.push(settled);
   }
 
   return result;
+}
+
+/** The counters on `SettleResult` that stand for a session nothing was said about. */
+type Skipped = "stillOpen" | "empty" | "undecidable";
+
+/** Either what was written down about a session, or why nothing could be. */
+type Settlement = { settled: Settled } | { skipped: Skipped };
+
+/**
+ * Where one session ended up.
+ *
+ * Only terminal outcomes are written: a session still in flight has not ended
+ * up anywhere yet, and recording `open` would be recording the absence of an
+ * answer.
+ */
+async function settleOne(
+  session: Session,
+  facts: RepoFacts | undefined,
+  options: StoreOptions,
+): Promise<Settlement> {
+  if (session.endedAt === null) {
+    return { skipped: "stillOpen" };
+  }
+  // Nothing to write down: `empty` is read off `reality` every time it is
+  // asked, so an observation saying so would be a copy of a field that is
+  // already on the record and can never disagree with it.
+  if (attemptedNothing(session)) {
+    return { skipped: "empty" };
+  }
+  if (!facts || session.endState === undefined) {
+    return { skipped: "undecidable" };
+  }
+
+  const outcome = effectiveOutcome(session, facts);
+  if (!isTerminal(outcome)) {
+    return { skipped: "stillOpen" };
+  }
+  return { settled: await recordOutcome(session, outcome, facts, options) };
+}
+
+/**
+ * Writes the observation, unless the record already says this.
+ *
+ * Re-running is harmless — a session whose recorded outcome still matches is
+ * left alone — but a session that has since changed gets a second observation
+ * rather than an edited first one, so the log shows that it moved and when.
+ */
+async function recordOutcome(
+  session: Session,
+  outcome: SessionOutcome,
+  facts: RepoFacts,
+  options: StoreOptions,
+): Promise<Settled> {
+  const settled: Settled = {
+    session,
+    outcome,
+    verdict: judge(session, facts),
+    recorded: !alreadySaid(session, outcome),
+  };
+  if (settled.recorded) {
+    settled.session = await record(session, observe(outcome, facts, "computed"), options);
+  }
+  return settled;
 }
 
 /**
@@ -166,7 +203,23 @@ export async function markSession(
 ): Promise<Settled> {
   const sessions = await readSessions(options);
   const session = findSession(sessions, id);
+  refuseUnmarkable(session, outcome);
 
+  // A mark stands whether or not the repo agrees, so the branch is recorded as
+  // context rather than as grounds. Where there is none, the observation says
+  // so plainly instead of pretending to a commit it never checked.
+  const facts = await factsFor([session], options.cwd ?? process.cwd());
+  const against = facts ?? { branch: "not checked", tip: "" };
+
+  return {
+    session: await record(session, observe(outcome, against, "manual"), options),
+    outcome,
+    recorded: true,
+  };
+}
+
+/** The three things a mark cannot say, each refused in the words of its case. */
+function refuseUnmarkable(session: Session, outcome: SessionOutcome): void {
   if (outcome === "empty") {
     throw new Error(
       `empty is not a mark. Whether a session changed anything is read off what it ` +
@@ -192,18 +245,6 @@ export async function markSession(
         `the record of what it changed that is wrong, and a mark cannot fix that.`,
     );
   }
-
-  // A mark stands whether or not the repo agrees, so the branch is recorded as
-  // context rather than as grounds. Where there is none, the observation says
-  // so plainly instead of pretending to a commit it never checked.
-  const facts = await factsFor([session], options.cwd ?? process.cwd());
-  const against = facts ?? { branch: "not checked", tip: "" };
-
-  return {
-    session: await record(session, observe(outcome, against, "manual"), options),
-    outcome,
-    recorded: true,
-  };
 }
 
 const LABEL_WIDTH = 9;
@@ -240,41 +281,39 @@ export function formatSettle(result: SettleResult): string[] {
     ];
   }
 
-  const lines = [line("branch", result.branch)];
-
-  for (const settled of result.settled) {
-    const mark = settled.recorded ? settled.outcome : `${settled.outcome} (already)`;
-    lines.push(
-      line(
-        settled.session.id.slice(0, 8),
-        `${mark.padEnd(20)}${settled.verdict ? because(settled.verdict) : ""}`.trimEnd(),
-      ),
-    );
-  }
-
   const wrote = result.settled.filter((settled) => settled.recorded).length;
-  lines.push(line("settled", `${plural(wrote, "session", "sessions")} recorded`));
+  return [
+    line("branch", result.branch),
+    ...result.settled.map(settledLine),
+    line("settled", `${plural(wrote, "session", "sessions")} recorded`),
+    ...skippedLines(result),
+  ];
+}
 
+/** One session's row: what it was called, and a short account of why. */
+function settledLine(settled: Settled): string {
+  const mark = settled.recorded ? settled.outcome : `${settled.outcome} (already)`;
+  const why = settled.verdict ? because(settled.verdict) : "";
+  return line(settled.session.id.slice(0, 8), `${mark.padEnd(20)}${why}`.trimEnd());
+}
+
+/** The sessions nothing was written down about, and why there was nothing. */
+function skippedLines(result: SettleResult): string[] {
+  const lines: string[] = [];
   if (result.stillOpen > 0) {
     lines.push(line("open", `${plural(result.stillOpen, "session", "sessions")}, still in flight`));
   }
   if (result.empty > 0) {
-    lines.push(
-      line(
-        "empty",
-        `${plural(result.empty, "session", "sessions")} changed no files, so there is ` +
-          `nothing to have ended up anywhere`,
-      ),
-    );
+    const why =
+      `${plural(result.empty, "session", "sessions")} changed no files, so there is ` +
+      `nothing to have ended up anywhere`;
+    lines.push(line("empty", why));
   }
   if (result.undecidable > 0) {
-    lines.push(
-      line(
-        "unknown",
-        `${plural(result.undecidable, "session", "sessions")} stopped before end states ` +
-          `were recorded, so there is nothing to look for`,
-      ),
-    );
+    const why =
+      `${plural(result.undecidable, "session", "sessions")} stopped before end states ` +
+      `were recorded, so there is nothing to look for`;
+    lines.push(line("unknown", why));
   }
   return lines;
 }

@@ -1,4 +1,11 @@
-import { formatUsd, priceSession, spendOf, type RateTable } from "../pricing.js";
+import {
+  formatUsd,
+  priceSession,
+  spendOf,
+  unpricedThroughout,
+  type RateTable,
+  type Spend,
+} from "../pricing.js";
 import { isCaptured, type Session } from "../store.js";
 import { CAPTURED_MARKER, intentOf, type View } from "./terminal.js";
 
@@ -44,6 +51,12 @@ const WORK_WIDTH = 60;
 
 /** Stands in for the part of an intent that did not fit. */
 const ELLIPSIS = "…";
+
+/** Stands in for a figure there is no rate to work out. */
+const NO_COST = "—";
+
+/** Where a reader who wants these sessions priced is sent. */
+const RATES_HINT = "~/.session/rates.json";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -158,72 +171,91 @@ export function renderMarkdownWeek(
   const shown = sessions.filter((session) => session.outcome !== "empty");
   const empties = sessions.filter((session) => session.outcome === "empty");
 
-  const blocks: string[] = [heading];
-
   if (shown.length === 0) {
-    blocks.push("No sessions with any changes in them were recorded in this window.");
-    const note = emptyNote(empties, rates);
-    if (note) {
-      blocks.push(note);
-    }
-    return blocks.join("\n\n");
+    const nothing = "No sessions with any changes in them were recorded in this window.";
+    return blocksOf([heading, nothing, emptyNote(empties, rates)]);
   }
 
   const spend = spendOf(shown, rates);
   const merged = shown.filter((session) => session.outcome === "merged").length;
   const unplanned = shown.reduce((soFar, session) => soFar + session.drift.length, 0);
 
-  // Every figure in the document is over `shown`, so the table adds up to its
-  // own total row. A headline counting sessions the table does not list would
-  // send the reader looking for rows that are not there.
-  blocks.push(
-    `**${formatUsd(spend.usd)} spent · ${plural(merged, "change", "changes")} shipped · ` +
-      `${plural(unplanned, "file", "files")} touched outside plan**`,
-  );
-
-  const body = shown.map((session) =>
-    row([
-      monthDay(new Date(session.startedAt)),
-      workCell(session),
-      session.outcome === "merged" ? MERGED_MARK : "",
-      priced(session, rates),
-      String(session.drift.length),
-    ]),
-  );
-
-  blocks.push(
-    [
-      row(["Date", "Work", "Outcome", "Cost", "Unplanned"]),
-      // Cost and Unplanned right-aligned: they are figures, and figures are
-      // compared down a column rather than read across a row.
-      "|---|---|---|---:|---:|",
-      ...body,
-      row([
-        "**Total**",
-        `**${plural(shown.length, "session", "sessions")}**`,
-        merged > 0 ? `**${merged} ${MERGED_MARK}**` : "",
-        `**${formatUsd(spend.usd)}**`,
-        `**${unplanned}**`,
-      ]),
-    ].join("\n"),
-  );
-
-  for (const note of [
+  return blocksOf([
+    heading,
+    headline(spend, merged, unplanned),
+    weekTable(shown, rates, spend, merged, unplanned),
     emptyNote(empties, rates),
     unpricedNote(spend, shown.length),
     capturedNote(shown),
-  ]) {
-    if (note) {
-      blocks.push(note);
-    }
-  }
+    costPerShippedChange(spend.usd, merged),
+  ]);
+}
 
-  const perChange = costPerShippedChange(spend.usd, merged);
-  if (perChange) {
-    blocks.push(perChange);
-  }
+/** Joins the blocks that have anything in them, one blank line between. */
+function blocksOf(blocks: readonly (string | undefined)[]): string {
+  return blocks.filter((block): block is string => Boolean(block)).join("\n\n");
+}
 
-  return blocks.join("\n\n");
+/**
+ * The line the document leads with.
+ *
+ * Every figure in it is over the sessions the table lists, so a headline never
+ * counts sessions the table does not — that would send the reader looking for
+ * rows that are not there.
+ *
+ * The money is the one figure here that can be absent rather than zero. The
+ * other two are counts of things that were observed, and nought of something
+ * observed is a fact.
+ */
+function headline(spend: Spend, merged: number, unplanned: number): string {
+  const money = unpricedThroughout(spend)
+    ? `cost unavailable — no rate for ${spend.unpricedModels.join(", ")}`
+    : `${formatUsd(spend.usd)} spent`;
+  return (
+    `**${money} · ${plural(merged, "change", "changes")} shipped · ` +
+    `${plural(unplanned, "file", "files")} touched outside plan**`
+  );
+}
+
+/** The table itself: headings, one row per session, then the total. */
+function weekTable(
+  shown: readonly Session[],
+  rates: RateTable,
+  spend: Spend,
+  merged: number,
+  unplanned: number,
+): string {
+  return [
+    row(["Date", "Work", "Outcome", "Cost", "Unplanned"]),
+    // Cost and Unplanned right-aligned: they are figures, and figures are
+    // compared down a column rather than read across a row.
+    "|---|---|---|---:|---:|",
+    ...shown.map((session) => sessionRow(session, rates)),
+    totalRow(shown.length, spend, merged, unplanned),
+  ].join("\n");
+}
+
+function sessionRow(session: Session, rates: RateTable): string {
+  return row([
+    monthDay(new Date(session.startedAt)),
+    workCell(session),
+    session.outcome === "merged" ? MERGED_MARK : "",
+    priced(session, rates),
+    String(session.drift.length),
+  ]);
+}
+
+/** The bottom row, which is a total of the column above it and nothing else. */
+function totalRow(count: number, spend: Spend, merged: number, unplanned: number): string {
+  return row([
+    "**Total**",
+    `**${plural(count, "session", "sessions")}**`,
+    merged > 0 ? `**${merged} ${MERGED_MARK}**` : "",
+    // An em dash, not a bolded nought. The row is a total of the column above
+    // it, and there is no total to put there.
+    unpricedThroughout(spend) ? NO_COST : `**${formatUsd(spend.usd)}**`,
+    `**${unplanned}**`,
+  ]);
 }
 
 /**
@@ -251,13 +283,25 @@ function priced(session: Session, rates: RateTable): string {
  * They are not in the table — nothing was attempted, so there is no row of
  * work to write — but the money was spent, and a report that dropped it would
  * be a report whose total is smaller than the bill.
+ *
+ * Three shapes, for the same reason the headline has two. These sessions are
+ * not in `shown`, so `unpricedNote` never counts them: this line is the only
+ * place the document can admit that some of the bill has no rate behind it,
+ * and staying silent would drop the money exactly where it cannot be totalled.
+ * A clause omitted because nothing was spent and a clause omitted because
+ * nothing could be priced would read the same, which is the confusion this
+ * whole rule exists to prevent.
  */
 function emptyNote(empties: readonly Session[], rates: RateTable): string | undefined {
   if (empties.length === 0) {
     return undefined;
   }
-  const spent = spendOf(empties, rates).usd;
-  const cost = spent > 0 ? `, costing ${formatUsd(spent)}` : "";
+  const spend = spendOf(empties, rates);
+  const cost = unpricedThroughout(spend)
+    ? `, costing an amount no rate covers (${spend.unpricedModels.join(", ")})`
+    : spend.usd > 0
+      ? `, costing ${formatUsd(spend.usd)}`
+      : "";
   return (
     `${plural(empties.length, "session", "sessions")} changed no files and ` +
     `${empties.length === 1 ? "is" : "are"} not in the table${cost}.`
@@ -271,20 +315,23 @@ function emptyNote(empties: readonly Session[], rates: RateTable): string | unde
  * sessions that could be priced, and a total with a silent hole in it is the
  * kind of number that ends up in an invoice — which is the whole reason
  * `pricing.ts` refuses to guess a rate in the first place.
+ *
+ * Two shapes, because "the cost above covers 0 of 2 sessions" points at a cost
+ * that is not there. When nothing could be priced the headline has already
+ * said so, and what is left to say is how many sessions that was and what to
+ * do about it.
  */
-function unpricedNote(
-  spend: ReturnType<typeof spendOf>,
-  shown: number,
-): string | undefined {
+function unpricedNote(spend: Spend, shown: number): string | undefined {
   if (spend.unpriced === 0) {
     return undefined;
   }
-  const covered = shown - spend.unpriced;
-  return (
-    `The cost above covers ${covered} of ${shown} sessions. ` +
-    `${plural(spend.unpriced, "session", "sessions")} ran on a model with no rate ` +
-    `(${spend.unpricedModels.join(", ")}).`
-  );
+  const models = spend.unpricedModels.join(", ");
+  const ran = `${plural(spend.unpriced, "session", "sessions")} ran on a model with no rate (${models})`;
+
+  if (unpricedThroughout(spend)) {
+    return `No cost could be worked out: ${ran}. Add one to ${RATES_HINT}.`;
+  }
+  return `The cost above covers ${shown - spend.unpriced} of ${shown} sessions. ${ran}.`;
 }
 
 /** The legend for the marker, and only when a row carries one. */

@@ -761,6 +761,20 @@ describe("formatEstimate", () => {
     expect(lines.join("\n")).toContain("2 sessions ran on a model with no rate");
   });
 
+  it("never gives a median of $0.00 when no session could be priced", () => {
+    // The same rule the week views follow: a nought that exists only because
+    // no rate was found is not a figure, so no figure is printed.
+    const lines = formatEstimate({
+      ...base,
+      declared: { ...declared, figures: { ...declared.figures!, priced: 0, unpriced: 9 } },
+    });
+
+    expect(lines.join("\n")).not.toContain("$0.00");
+    expect(lines).toContain(
+      "  cost      no price for any of these models — see ~/.session/rates.json",
+    );
+  });
+
   it("says so rather than printing a rate nothing has settled", () => {
     const lines = formatEstimate({
       ...base,

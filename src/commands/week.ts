@@ -183,15 +183,31 @@ export async function copyToClipboard(text: string, options: WeekOptions = {}): 
     return options.copy(text);
   }
 
-  const [command, args]: [string, string[]] =
-    process.platform === "darwin"
-      ? ["pbcopy", []]
-      : process.platform === "win32"
-        ? ["clip", []]
-        : ["xclip", ["-selection", "clipboard"]];
+  const [command, args] = clipboardCommand();
+  await pipeInto(command, args, text);
+}
 
+/** The one program on this platform that takes stdin and puts it on the board. */
+function clipboardCommand(): [string, string[]] {
+  if (process.platform === "darwin") {
+    return ["pbcopy", []];
+  }
+  if (process.platform === "win32") {
+    return ["clip", []];
+  }
+  return ["xclip", ["-selection", "clipboard"]];
+}
+
+/**
+ * Writes the text to the program's stdin and waits for it to exit cleanly.
+ *
+ * A machine with no clipboard — a container, a bare ssh session — is the
+ * common case for the last of these, so the failure says what to do instead
+ * rather than reporting that a program is missing.
+ */
+async function pipeInto(command: string, args: readonly string[], text: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["pipe", "ignore", "ignore"] });
+    const child = spawn(command, [...args], { stdio: ["pipe", "ignore", "ignore"] });
     const failed = (cause: unknown): void => {
       reject(
         new Error(

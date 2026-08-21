@@ -11,6 +11,7 @@ import {
   priceTokens,
   rateFor,
   spendOf,
+  unpricedThroughout,
   type ModelRate,
   type RateTable,
 } from "../src/pricing.js";
@@ -228,6 +229,42 @@ describe("spendOf", () => {
       unpriced: 0,
       unpricedModels: [],
     });
+  });
+});
+
+describe("unpricedThroughout", () => {
+  const spent = (model: string, tokens: number): Session =>
+    session({ cost: cost({ model, outputTokens: tokens, turns: 1, apiCalls: 1 }) });
+
+  it("is true where the total is nought only because no rate was found", () => {
+    const spend = spendOf([spent("claude-opus-5", 1_000_000)], rates);
+
+    expect(spend.usd).toBe(0);
+    expect(unpricedThroughout(spend)).toBe(true);
+  });
+
+  it("is false for a window that genuinely cost nothing", () => {
+    // Nothing captured, so no rate is missing and the nought is a fact. This
+    // is the half of the test that stops a view dashing out a real $0.00.
+    const spend = spendOf([session()], rates);
+
+    expect(spend.usd).toBe(0);
+    expect(unpricedThroughout(spend)).toBe(false);
+  });
+
+  it("is false as soon as one session could be priced", () => {
+    // A mixed window has a figure, even though it is a figure over part of
+    // the window — which is what the note beside it is for.
+    const spend = spendOf(
+      [spent("claude-opus-4-1", 1_000_000), spent("claude-opus-5", 1_000_000)],
+      rates,
+    );
+
+    expect(unpricedThroughout(spend)).toBe(false);
+  });
+
+  it("is false for an empty window", () => {
+    expect(unpricedThroughout(spendOf([], rates))).toBe(false);
   });
 });
 

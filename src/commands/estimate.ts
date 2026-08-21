@@ -329,13 +329,8 @@ export async function estimateFor(
 ): Promise<Estimate> {
   const choice = chooseClass(request);
   const sessions = await readSessions(options);
+  const past = sessions.filter((session) => comparable(session, request, choice.class));
 
-  const past = sessions.filter(
-    (session) =>
-      session.endedAt !== null &&
-      (request.since === undefined || Date.parse(session.startedAt) >= request.since) &&
-      classOf(session) === choice.class,
-  );
   const resolved = await withOutcomes(past, options.cwd ?? process.cwd());
   const bySource = (source: IntentSource): Session[] =>
     resolved.filter((session) => intentSourceOf(session) === source);
@@ -350,6 +345,19 @@ export async function estimateFor(
     declared: groupFor("declared", bySource("declared"), rates),
     captured: groupFor("captured", bySource("captured"), rates),
   };
+}
+
+/** True of a session this estimate can be made from: stopped, recent, alike. */
+function comparable(
+  session: Session,
+  request: EstimateRequest,
+  wanted: SessionClass,
+): boolean {
+  return (
+    session.endedAt !== null &&
+    (request.since === undefined || Date.parse(session.startedAt) >= request.since) &&
+    classOf(session) === wanted
+  );
 }
 
 // --- the view ------------------------------------------------------------
@@ -403,11 +411,34 @@ function formatGroup(group: EstimateGroup): string[] {
     return [line(group.source, NONE[group.source])];
   }
 
+  const lines = sampleLines(group);
+  const figures = group.figures;
+  if (!figures) {
+    // What was found, and nothing else. The alternative is a median of two,
+    // which is the kind of number that ends up in a quote.
+    lines.push(line("too few", `nothing is estimated from fewer than ${MIN_SESSIONS} sessions`));
+    return lines;
+  }
+
+  lines.push(
+    ...costLines(figures),
+    mergedLine(figures),
+    ...driftLines(figures, group),
+    ...unpricedLines(figures),
+  );
+  return lines;
+}
+
+/**
+ * What the block is made of.
+ *
+ * The sessions that changed no files are named beside the sample, not after
+ * the figures: that line says what the sample is not, and it belongs where the
+ * reader is deciding how much to believe it.
+ */
+function sampleLines(group: EstimateGroup): string[] {
   const sample = plural(group.matched, "session", "sessions");
   const lines = [line(group.source, `${sample.padEnd(NOTE_COLUMN)}${GROUPS[group.source]}`)];
-
-  // Beside the sample, not after the figures: it says what the sample is not,
-  // and that belongs where the reader is deciding how much to believe it.
   if (group.empty > 0) {
     lines.push(
       line(
@@ -417,64 +448,65 @@ function formatGroup(group: EstimateGroup): string[] {
       ),
     );
   }
-
-  const figures = group.figures;
-  if (!figures) {
-    // What was found, and nothing else. The alternative is a median of two,
-    // which is the kind of number that ends up in a quote.
-    lines.push(line("too few", `nothing is estimated from fewer than ${MIN_SESSIONS} sessions`));
-    return lines;
-  }
-
-  if (figures.priced > 0) {
-    lines.push(line("median", formatUsd(figures.median)));
-    lines.push(line("p90", formatUsd(figures.p90)));
-  } else {
-    lines.push(line("cost", "no price for any of these models — see ~/.session/rates.json"));
-  }
-
-  if (figures.decided > 0) {
-    const rate = percent(figures.mergedFirstTime, figures.decided);
-    const still = figures.open > 0 ? `, ${figures.open} still open` : "";
-    lines.push(
-      line("merged", `${figures.mergedFirstTime} of ${figures.decided} first time (${rate})${still}`),
-    );
-  } else {
-    lines.push(line("merged", `nothing has been settled yet, so there is no rate to give`));
-  }
-
-  // The paths under a column of their own, so a list of five can be read down
-  // rather than across. Only the first line carries the label.
-  //
-  // Counted over this group alone, which is the whole of why the denominator
-  // is finally a plain one: every session behind it declared a scope, so
-  // "3 of 9" is three of the nine sessions that could have drifted.
-  const width = figures.drift.reduce((widest, entry) => Math.max(widest, entry.path.length), 0);
-  for (const [index, entry] of figures.drift.entries()) {
-    const count = `${entry.sessions} of ${group.matched}`;
-    lines.push(line(index === 0 ? "drift" : "", `${entry.path.padEnd(width + 2)}${count}`));
-  }
-
-  // Said outright rather than left as a missing line. A captured session had
-  // no scope to drift from, so there is nothing here to count — and a reader
-  // comparing this block against the declared one above would otherwise read
-  // the silence as these sessions never having drifted.
-  if (figures.drift.length === 0 && group.source === "captured") {
-    lines.push(line("drift", "nothing was declared to drift from, so none is counted"));
-  }
-
-  if (figures.unpriced > 0) {
-    // Said out loud, because the figures above are over the rest.
-    lines.push(
-      line(
-        "unpriced",
-        `${plural(figures.unpriced, "session", "sessions")} ran on a model with no rate; ` +
-          `the money above is the other ${figures.priced}`,
-      ),
-    );
-  }
-
   return lines;
+}
+
+/** The median and the p90, or the admission that nothing here has a rate. */
+function costLines(figures: EstimateFigures): string[] {
+  if (figures.priced === 0) {
+    return [line("cost", "no price for any of these models — see ~/.session/rates.json")];
+  }
+  return [line("median", formatUsd(figures.median)), line("p90", formatUsd(figures.p90))];
+}
+
+/** How often these merged the first time anybody looked. */
+function mergedLine(figures: EstimateFigures): string {
+  if (figures.decided === 0) {
+    return line("merged", `nothing has been settled yet, so there is no rate to give`);
+  }
+  const rate = percent(figures.mergedFirstTime, figures.decided);
+  const still = figures.open > 0 ? `, ${figures.open} still open` : "";
+  const found = `${figures.mergedFirstTime} of ${figures.decided} first time (${rate})${still}`;
+  return line("merged", found);
+}
+
+/**
+ * The paths that kept turning up, under a column of their own so a list of
+ * five can be read down rather than across. Only the first line carries the
+ * label.
+ *
+ * Counted over this group alone, which is the whole of why the denominator is
+ * finally a plain one: every session behind the declared block declared a
+ * scope, so "3 of 9" is three of the nine that could have drifted.
+ *
+ * A captured block says outright that there was nothing to drift from rather
+ * than printing no line at all. A reader comparing it against the declared
+ * block above would otherwise read the silence as these sessions never having
+ * drifted.
+ */
+function driftLines(figures: EstimateFigures, group: EstimateGroup): string[] {
+  if (figures.drift.length === 0 && group.source === "captured") {
+    return [line("drift", "nothing was declared to drift from, so none is counted")];
+  }
+  const width = figures.drift.reduce((widest, entry) => Math.max(widest, entry.path.length), 0);
+  return figures.drift.map((entry, index) => {
+    const count = `${entry.sessions} of ${group.matched}`;
+    return line(index === 0 ? "drift" : "", `${entry.path.padEnd(width + 2)}${count}`);
+  });
+}
+
+/** Said out loud, because the figures above are over the rest. */
+function unpricedLines(figures: EstimateFigures): string[] {
+  if (figures.unpriced === 0) {
+    return [];
+  }
+  return [
+    line(
+      "unpriced",
+      `${plural(figures.unpriced, "session", "sessions")} ran on a model with no rate; ` +
+        `the money above is the other ${figures.priced}`,
+    ),
+  ];
 }
 
 /**

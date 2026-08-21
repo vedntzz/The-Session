@@ -179,21 +179,63 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .description("Record what an AI coding session declared, what it changed, and what it cost")
     .version("0.3.0");
 
-  // The bare screen. Commander would print the help here, which is a list of
-  // everything this tool can do — the right answer to "what is this" and the
-  // wrong one to "where am I". See `formatHome`.
-  program.action(async () => {
-    const view = { rates: await loadRates(storeHome(options)) };
-    for (const line of formatHome(await homeState(options), palette, view)) {
-      console.log(line);
-    }
-  });
-
+  registerHome(program, options, palette);
   // Commander adds its own `help [command]`, which would collide with the one
   // registered at the bottom of this function.
   program.helpCommand(false);
   configureHelp(program);
 
+  registerCommands(program, options, palette);
+
+  return program;
+}
+
+/**
+ * The rest of the tree, in the order `session help all` lists them — which is
+ * registration order, since that list is read off the tree itself.
+ */
+function registerCommands(program: Command, options: ProgramOptions, palette: Palette): void {
+  registerStart(program, options);
+  registerIntent(program, options);
+  registerStop(program, options);
+  registerShow(program, options, palette);
+  registerWeek(program, options, palette);
+  registerEstimate(program, options);
+  registerVerify(program, options);
+  registerSettle(program, options);
+  registerSync(program, options);
+  registerConfig(program, options);
+  registerKey(program, options);
+  registerHook(program, options);
+  // Registered last, so it comes last in the short list: it is where a reader
+  // goes when the two commands above are not the ones they wanted.
+  registerHelp(program, palette);
+}
+
+/**
+ * Prints a view. Every command below ends this way — a renderer returns the
+ * lines and the command puts them on stdout — so it is one function rather
+ * than the same loop written fifteen times.
+ */
+function printLines(lines: Iterable<string>): void {
+  for (const line of lines) {
+    console.log(line);
+  }
+}
+
+/**
+ * The bare screen. Commander would print the help here, which is a list of
+ * everything this tool can do — the right answer to "what is this" and the
+ * wrong one to "where am I". See `formatHome`.
+ */
+function registerHome(program: Command, options: ProgramOptions, palette: Palette): void {
+  program.action(async () => {
+    const view = { rates: await loadRates(storeHome(options)) };
+    printLines(formatHome(await homeState(options), palette, view));
+  });
+}
+
+function registerStart(program: Command, options: ProgramOptions): void {
   program
     .command("start")
     .description("Begin a new session")
@@ -212,34 +254,40 @@ export function buildProgram(options: ProgramOptions = {}): Command {
       if (intent === undefined) {
         throw new Error('No intent given. Run: session start "what you are about to do"');
       }
-      const session = await startSession(intent, { ...options, scope: flags.scope });
-      for (const line of formatStarted(session)) {
-        console.log(line);
-      }
+      printLines(formatStarted(await startSession(intent, { ...options, scope: flags.scope })));
     });
+}
 
+function registerIntent(program: Command, options: ProgramOptions): void {
   program
     .command("intent")
     .description("For the editor hook: record the first prompt as an undeclared session's intent")
     .requiredOption("--from-prompt", "read the Claude Code hook payload on stdin")
-    .action(async () => {
-      // Nothing is printed and nothing throws. This runs between a developer
-      // pressing enter and the agent starting: a UserPromptSubmit handler that
-      // exits non-zero blocks the prompt outright, and one that prints is
-      // adding text to it. A recorder that can eat a prompt is worse than no
-      // recorder.
-      try {
-        const payload = await readHookPayload(options.stdin ?? process.stdin);
-        const prompt = promptFromHook(payload);
-        if (prompt !== undefined) {
-          await captureFromPrompt(prompt, options);
-        }
-      } catch {
-        // The session keeps whatever it had, which is nothing, and the next
-        // prompt tries again.
-      }
-    });
+    .action(() => captureQuietly(options));
+}
 
+/**
+ * Records the prompt as an intent, and swallows everything.
+ *
+ * Nothing is printed and nothing throws. This runs between a developer
+ * pressing enter and the agent starting: a UserPromptSubmit handler that
+ * exits non-zero blocks the prompt outright, and one that prints is adding
+ * text to it. A recorder that can eat a prompt is worse than no recorder.
+ */
+async function captureQuietly(options: ProgramOptions): Promise<void> {
+  try {
+    const payload = await readHookPayload(options.stdin ?? process.stdin);
+    const prompt = promptFromHook(payload);
+    if (prompt !== undefined) {
+      await captureFromPrompt(prompt, options);
+    }
+  } catch {
+    // The session keeps whatever it had, which is nothing, and the next
+    // prompt tries again.
+  }
+}
+
+function registerStop(program: Command, options: ProgramOptions): void {
   program
     .command("stop")
     .description("End the active session")
@@ -249,11 +297,11 @@ export function buildProgram(options: ProgramOptions = {}): Command {
       if (!session) {
         return; // nothing was open, and --if-open says that is fine
       }
-      for (const line of formatStopped(session)) {
-        console.log(line);
-      }
+      printLines(formatStopped(session));
     });
+}
 
+function registerShow(program: Command, options: ProgramOptions, palette: Palette): void {
   program
     .command("show")
     .description("Show the last closed session")
@@ -267,11 +315,25 @@ export function buildProgram(options: ProgramOptions = {}): Command {
       // so it implies `--full` rather than being quietly ignored.
       const full = flags.full === true || flags.tokens === true;
       const render = full ? formatSession : formatBrief;
-      for (const line of render(session, palette, view)) {
-        console.log(line);
-      }
+      printLines(render(session, palette, view));
     });
+}
 
+/** What `session week` accepts, as commander hands it over. */
+type WeekFlags = {
+  days?: string;
+  client?: string;
+  project?: string;
+  outcome?: string;
+  class?: string | boolean;
+  intent?: string;
+  tokens?: boolean;
+  md?: boolean;
+  copy?: boolean;
+  open?: boolean;
+};
+
+function registerWeek(program: Command, options: ProgramOptions, palette: Palette): void {
   program
     .command("week")
     .description("Summarize recent sessions, one row each")
@@ -288,68 +350,84 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .option("--md", "emit Markdown, for pasting into notes, Slack, Notion or Confluence")
     .option("--copy", "put that Markdown on the clipboard instead of printing it")
     .option("--open", "write the week as an HTML page and open it")
-    .action(
-      async (flags: {
-        days?: string;
-        client?: string;
-        project?: string;
-        outcome?: string;
-        class?: string | boolean;
-        intent?: string;
-        tokens?: boolean;
-        md?: boolean;
-        copy?: boolean;
-        open?: boolean;
-      }) => {
-        const days = parseDays(flags.days);
-        const filter: SessionFilter = {
-          client: flags.client,
-          project: flags.project,
-          outcome: flags.outcome === undefined ? undefined : parseOutcome(flags.outcome),
-          // A bare `--class` arrives as true: it asked for the column, not for
-          // a class, so nothing is filtered on.
-          class: typeof flags.class === "string" ? parseClass(flags.class) : undefined,
-          intent: flags.intent === undefined ? undefined : parseIntentSource(flags.intent),
-        };
-        const sessions = await weekSessions(days, options, filter);
-        const view = {
-          rates: await loadRates(storeHome(options)),
-          tokens: flags.tokens,
-          classes: flags.class !== undefined,
-        };
+    .action((flags: WeekFlags) => emitWeek(flags, options, palette));
+}
 
-        // Markdown before HTML, and before the table: it is the most specific
-        // thing asked for. `--copy` implies it — a terminal table is not what
-        // anybody pastes into a page, so a bare `--copy` means the Markdown.
-        if (flags.md || flags.copy) {
-          const markdown = renderMarkdownWeek(sessions, days, view);
-          if (flags.copy) {
-            await copyToClipboard(markdown, options);
-            const count = sessions.length === 1 ? "1 session" : `${sessions.length} sessions`;
-            console.log(`  copied   ${count} as Markdown`);
-            return;
-          }
-          // One document, printed as one line: `renderMarkdownWeek` returns
-          // it whole, and console.log supplies the newline that ends it.
-          console.log(markdown);
-          return;
-        }
+/** Reads the filtering flags off `week` into the shape the store filters on. */
+function weekFilterFrom(flags: WeekFlags): SessionFilter {
+  return {
+    client: flags.client,
+    project: flags.project,
+    outcome: flags.outcome === undefined ? undefined : parseOutcome(flags.outcome),
+    // A bare `--class` arrives as true: it asked for the column, not for a
+    // class, so nothing is filtered on.
+    class: typeof flags.class === "string" ? parseClass(flags.class) : undefined,
+    intent: flags.intent === undefined ? undefined : parseIntentSource(flags.intent),
+  };
+}
 
-        if (!flags.open) {
-          for (const line of formatWeek(sessions, days, palette, filter, view)) {
-            console.log(line);
-          }
-          return;
-        }
+/**
+ * Gathers the week once, then hands it to whichever of the three renderings
+ * was asked for.
+ *
+ * Markdown before HTML, and before the table: it is the most specific thing
+ * asked for. `--copy` implies it — a terminal table is not what anybody pastes
+ * into a page, so a bare `--copy` means the Markdown.
+ */
+async function emitWeek(
+  flags: WeekFlags,
+  options: ProgramOptions,
+  palette: Palette,
+): Promise<void> {
+  const days = parseDays(flags.days);
+  const filter = weekFilterFrom(flags);
+  const sessions = await weekSessions(days, options, filter);
+  const view = {
+    rates: await loadRates(storeHome(options)),
+    tokens: flags.tokens,
+    classes: flags.class !== undefined,
+  };
 
-        // The path is printed before the browser is asked for, so a desktop
-        // that cannot open it still leaves the developer holding the page.
-        const file = await writeWeekPage(renderWeek(sessions, days, filter, view), options);
-        console.log(`  wrote    ${file}`);
-        await openInBrowser(file, options);
-      },
-    );
+  if (flags.md || flags.copy) {
+    await emitWeekMarkdown(renderMarkdownWeek(sessions, days, view), sessions.length, flags, options);
+    return;
+  }
+  if (flags.open) {
+    await emitWeekPage(renderWeek(sessions, days, filter, view), options);
+    return;
+  }
+  printLines(formatWeek(sessions, days, palette, filter, view));
+}
 
+/** Puts the Markdown on the clipboard, or on stdout. */
+async function emitWeekMarkdown(
+  markdown: string,
+  count: number,
+  flags: WeekFlags,
+  options: ProgramOptions,
+): Promise<void> {
+  if (flags.copy) {
+    await copyToClipboard(markdown, options);
+    console.log(`  copied   ${count === 1 ? "1 session" : `${count} sessions`} as Markdown`);
+    return;
+  }
+  // One document, printed as one line: `renderMarkdownWeek` returns it whole,
+  // and console.log supplies the newline that ends it.
+  console.log(markdown);
+}
+
+/**
+ * Writes the page and asks the desktop to open it. The path is printed before
+ * the browser is asked for, so a desktop that cannot open it still leaves the
+ * developer holding the page.
+ */
+async function emitWeekPage(html: string, options: ProgramOptions): Promise<void> {
+  const file = await writeWeekPage(html, options);
+  console.log(`  wrote    ${file}`);
+  await openInBrowser(file, options);
+}
+
+function registerEstimate(program: Command, options: ProgramOptions): void {
   program
     .command("estimate")
     .description("What sessions like this one have cost, from the ones already recorded")
@@ -366,55 +444,57 @@ export function buildProgram(options: ProgramOptions = {}): Command {
           since: flags.since === undefined ? undefined : parseSince(flags.since),
         };
         const rates = await loadRates(storeHome(options));
-        for (const line of formatEstimate(await estimateFor(request, rates, options))) {
-          console.log(line);
-        }
+        printLines(formatEstimate(await estimateFor(request, rates, options)));
       },
     );
+}
 
+function registerVerify(program: Command, options: ProgramOptions): void {
   program
     .command("verify")
     .description("Check a log's hash chain and signatures")
     .option("--log <path>", "a log file to check instead of this repo's own")
     .option("--key <path>", "the public key to check against: a key file, or the PEM itself")
     .option("--peers", "check every chain pulled into this repo, key by key")
+    // A broken log, an empty one, and a pulled chain that does not add up are
+    // findings, not crashes: the report is the point. The exit code is there
+    // so a script can gate on it.
     .action(async (flags: { log?: string; key?: string; peers?: boolean }) => {
-      // A broken log, an empty one, and a pulled chain that does not add up are
-      // findings, not crashes: the report is the point. The exit code is there
-      // so a script can gate on it.
       if (flags.peers) {
-        if (flags.log !== undefined) {
-          throw new Error(
-            "--peers checks the chains pulled into this repo; --log names one file. " +
-              "Pass one or the other.",
-          );
-        }
-        const result = await verifyPeers({ ...options, key: flags.key });
-        for (const line of formatVerifyPeers(result)) {
-          console.log(line);
-        }
-        if (peersFailed(result)) {
-          process.exitCode = 1;
-        }
+        await reportPeerChains(flags, options);
         return;
       }
-
       const result = await verifyLog({ ...options, log: flags.log, key: flags.key });
-      for (const line of formatVerify(result)) {
-        console.log(line);
-      }
+      printLines(formatVerify(result));
       if (verifyFailed(result)) {
         process.exitCode = 1;
       }
     });
+}
 
+async function reportPeerChains(
+  flags: { log?: string; key?: string },
+  options: ProgramOptions,
+): Promise<void> {
+  if (flags.log !== undefined) {
+    throw new Error(
+      "--peers checks the chains pulled into this repo; --log names one file. " +
+        "Pass one or the other.",
+    );
+  }
+  const result = await verifyPeers({ ...options, key: flags.key });
+  printLines(formatVerifyPeers(result));
+  if (peersFailed(result)) {
+    process.exitCode = 1;
+  }
+}
+
+function registerSettle(program: Command, options: ProgramOptions): void {
   program
     .command("settle")
     .description("Record where every finished session ended up, as a signed observation")
     .action(async () => {
-      for (const line of formatSettle(await settleSessions(options))) {
-        console.log(line);
-      }
+      printLines(formatSettle(await settleSessions(options)));
     });
 
   program
@@ -423,39 +503,34 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .argument("<id>", "a session id, or an unambiguous prefix of one")
     .argument("<outcome>", "merged or abandoned")
     .action(async (id: string, outcome: string) => {
-      const settled = await markSession(id, parseOutcome(outcome), options);
-      for (const line of formatMark(settled)) {
-        console.log(line);
-      }
+      printLines(formatMark(await markSession(id, parseOutcome(outcome), options)));
     });
+}
 
+function registerSync(program: Command, options: ProgramOptions): void {
   program
     .command("push")
     .description("Publish this machine's records to origin, on a ref of their own")
     .action(async () => {
-      for (const line of formatPush(await pushLog(options))) {
-        console.log(line);
-      }
+      printLines(formatPush(await pushLog(options)));
     });
 
   program
     .command("pull")
     .description("Fetch every key's records from origin. Nothing is merged into your log")
     .action(async () => {
-      for (const line of formatPull(await pullPeers(options))) {
-        console.log(line);
-      }
+      printLines(formatPull(await pullPeers(options)));
     });
 
   program
     .command("peers")
     .description("The keys whose records are on this machine, and what they hold")
     .action(async () => {
-      for (const line of formatPeers(await listPeers(options))) {
-        console.log(line);
-      }
+      printLines(formatPeers(await listPeers(options)));
     });
+}
 
+function registerConfig(program: Command, options: ProgramOptions): void {
   const config = program
     .command("config")
     .description("Attribution for this repo, in .session.json — checked in, shared by the team");
@@ -466,32 +541,29 @@ export function buildProgram(options: ProgramOptions = {}): Command {
     .argument("<key>", "client, project, sow, or billingCode")
     .argument("<value>", "what to record; an empty value clears the field")
     .action(async (key: string, value: string) => {
-      for (const line of formatConfig(await setConfig(key, value, options.cwd))) {
-        console.log(line);
-      }
+      printLines(formatConfig(await setConfig(key, value, options.cwd)));
     });
 
   config
     .command("show")
     .description("Print the attribution this repo declares")
     .action(async () => {
-      for (const line of formatConfig(await showConfig(options.cwd))) {
-        console.log(line);
-      }
+      printLines(formatConfig(await showConfig(options.cwd)));
     });
+}
 
+function registerKey(program: Command, options: ProgramOptions): void {
   const key = program.command("key").description("The signing key this machine writes with");
 
   key
     .command("show")
     .description("Print the public key, for anyone who wants to check the log")
     .action(async () => {
-      const keypair = await showKey(options);
-      for (const line of formatKey(keypair, options)) {
-        console.log(line);
-      }
+      printLines(formatKey(await showKey(options), options));
     });
+}
 
+function registerHook(program: Command, options: ProgramOptions): void {
   const hook = program.command("hook").description("Manage the editor hook that closes sessions");
 
   hook
@@ -513,13 +585,11 @@ export function buildProgram(options: ProgramOptions = {}): Command {
       const result = flags.uninstall
         ? await uninstallHook(options)
         : await installHook({ ...options, passive: flags.passive });
-      for (const line of formatHook(result)) {
-        console.log(line);
-      }
+      printLines(formatHook(result));
     });
+}
 
-  // Registered last, so it comes last in the short list: it is where a reader
-  // goes when the two commands above are not the ones they wanted.
+function registerHelp(program: Command, palette: Palette): void {
   program
     .command("help")
     .description("Every command, not just the ones above")
@@ -532,10 +602,6 @@ export function buildProgram(options: ProgramOptions = {}): Command {
       if (topic !== "all") {
         throw new Error(`No help topic ${topic}. The only one is: session help all.`);
       }
-      for (const line of formatCommands(commandEntries(program), palette)) {
-        console.log(line);
-      }
+      printLines(formatCommands(commandEntries(program), palette));
     });
-
-  return program;
 }

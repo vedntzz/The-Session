@@ -206,62 +206,90 @@ function verdict(check: ChainCheck): string {
  */
 export function formatVerify(result: VerifyResult): string[] {
   const { check } = result;
-  const out: string[] = [line("log", `${plural(check.total, "record", "records")}  ${result.file}`)];
+  const head = line("log", `${plural(check.total, "record", "records")}  ${result.file}`);
 
   if (isEmpty(check)) {
-    // The next step, but only for a log this machine is meant to be writing:
-    // a file handed over from elsewhere is empty for reasons nobody here can
-    // do anything about.
-    const next = result.keyFile ? " Run session start to record one." : "";
-    out.push(line("chain", `${verdict(check)}.${next}`));
-    if (check.truncatedTail) {
-      out.push(line("tail", "the only line in the file was cut short mid-write"));
-    }
-    if (result.otherChains > 0) {
-      out.push(otherChainsLine(result.otherChains));
-    }
-    return out;
+    return [head, ...emptyLogLines(result)];
   }
 
-  out.push(keyLine(result));
-
-  // Worth saying whenever it is not already on the key line: it is the one
-  // thing a holder of the log alone can act on.
-  if (check.claimedKey && check.claimedKey !== result.key?.fingerprint) {
-    out.push(line("claims", `${check.claimedKey} signed it — the key to ask for`));
-  }
-
-  if (check.unsigned > 0) {
-    const predate = check.unsigned === 1 ? "predates" : "predate";
-    out.push(
-      line(
-        "older",
-        `${plural(check.unsigned, "record", "records")} ${predate} signing, hashed only`,
-      ),
-    );
-  }
-
-  const broken = check.break;
-  if (!broken) {
-    out.push(line("chain", verdict(check)));
-  } else {
-    out.push(line("broken", `line ${broken.line} ${broken.detail}`));
-    if (broken.id) {
-      out.push(line("record", `${broken.id.slice(0, 8)}${broken.at ? `  ${broken.at}` : ""}`));
-    }
-    out.push(
-      line("chain", `${plural(check.verified, "record", "records")} verified before the break`),
-    );
-  }
-
+  const out = [
+    head,
+    keyLine(result),
+    ...claimLines(result),
+    ...unsignedLines(check),
+    ...chainLines(check),
+  ];
   if (check.truncatedTail) {
     out.push(line("tail", "the last line was cut short mid-write and was not checked"));
   }
-
   if (result.otherChains > 0) {
     out.push(otherChainsLine(result.otherChains));
   }
+  return out;
+}
 
+/**
+ * A log with no records in it, which gets neither a key line nor a verdict.
+ *
+ * There is nothing to hold a key against and nothing that checked out, so the
+ * key line is dropped rather than printed over an empty file: `verify` on an
+ * empty log has to read as the absence of evidence it is, not as a pass.
+ */
+function emptyLogLines(result: VerifyResult): string[] {
+  const { check } = result;
+  // The next step, but only for a log this machine is meant to be writing: a
+  // file handed over from elsewhere is empty for reasons nobody here can do
+  // anything about.
+  const next = result.keyFile ? " Run session start to record one." : "";
+  const out = [line("chain", `${verdict(check)}.${next}`)];
+  if (check.truncatedTail) {
+    out.push(line("tail", "the only line in the file was cut short mid-write"));
+  }
+  if (result.otherChains > 0) {
+    out.push(otherChainsLine(result.otherChains));
+  }
+  return out;
+}
+
+/**
+ * The fingerprint the log claims, whenever the key line does not already carry
+ * it. It is the one thing a holder of the log alone can act on.
+ */
+function claimLines(result: VerifyResult): string[] {
+  const claimed = result.check.claimedKey;
+  if (!claimed || claimed === result.key?.fingerprint) {
+    return [];
+  }
+  return [line("claims", `${claimed} signed it — the key to ask for`)];
+}
+
+/** Records from before the log was signed at all: counted, never blamed. */
+function unsignedLines(check: ChainCheck): string[] {
+  if (check.unsigned === 0) {
+    return [];
+  }
+  const predate = check.unsigned === 1 ? "predates" : "predate";
+  const found = `${plural(check.unsigned, "record", "records")} ${predate} signing, hashed only`;
+  return [line("older", found)];
+}
+
+/**
+ * The verdict, or the break and how much of the log stood up before it.
+ *
+ * Everything after a break is unproven, not proven bad, and the report should
+ * not blur the two — which is why the count is of what verified *before* it.
+ */
+function chainLines(check: ChainCheck): string[] {
+  const broken = check.break;
+  if (!broken) {
+    return [line("chain", verdict(check))];
+  }
+  const out = [line("broken", `line ${broken.line} ${broken.detail}`)];
+  if (broken.id) {
+    out.push(line("record", `${broken.id.slice(0, 8)}${broken.at ? `  ${broken.at}` : ""}`));
+  }
+  const before = `${plural(check.verified, "record", "records")} verified before the break`;
+  out.push(line("chain", before));
   return out;
 }
 
@@ -290,44 +318,55 @@ export function formatVerifyPeers(result: PeersResult): string[] {
     ];
   }
 
-  // One row per key: the fingerprint the row is about, then how its chain came
-  // out. `verdict` carries the count, and distinguishes the two kinds of pass
-  // — a chain whose key is not on this machine reports that its hashes check
-  // out and says nothing about signatures, which is exactly what happened to
-  // it.
-  const out = result.peers.map(
+  const out = [...peerRows(result.peers), ...peerBreakLines(result.peers)];
+  if (result.keyUnused) {
+    out.push(line("key", "the key you passed signed none of these chains — it checked nothing"));
+  }
+  out.push(chainsCheckedLine(result.peers));
+  return out;
+}
+
+/**
+ * One row per key: the fingerprint the row is about, then how its chain came
+ * out.
+ *
+ * `verdict` carries the count, and distinguishes the two kinds of pass — a
+ * chain whose key is not on this machine reports that its hashes check out and
+ * says nothing about signatures, which is exactly what happened to it.
+ */
+function peerRows(peers: readonly PeerVerify[]): string[] {
+  return peers.map(
     (peer) =>
       `  ${peer.fingerprint}  ${verdict(peer.check)}${peer.mine ? "  (this machine)" : ""}`,
   );
+}
 
-  // The detail sits under the rows rather than in them: a row is a line, and a
-  // chain break needs a sentence.
-  for (const peer of result.peers) {
+/**
+ * The detail, under the rows rather than in them: a row is a line, and a chain
+ * break needs a sentence.
+ */
+function peerBreakLines(peers: readonly PeerVerify[]): string[] {
+  return peers.flatMap((peer) => {
     const broken = peer.check.break;
-    if (broken) {
-      out.push(line("broken", `${peer.fingerprint} — line ${broken.line} ${broken.detail}`));
+    if (!broken) {
+      return [];
     }
-  }
+    return [line("broken", `${peer.fingerprint} — line ${broken.line} ${broken.detail}`)];
+  });
+}
 
-  if (result.keyUnused) {
-    out.push(
-      line("key", "the key you passed signed none of these chains — it checked nothing"),
-    );
-  }
-
-  const sound = result.peers.filter(
-    (peer) => isIntact(peer.check) && !isEmpty(peer.check),
-  ).length;
-  out.push(
-    line(
-      "chains",
-      sound === result.peers.length
-        ? `${plural(result.peers.length, "key", "keys")}, every chain checked`
-        : `${plural(result.peers.length, "key", "keys")}, ${result.peers.length - sound} not verified`,
-    ),
+/**
+ * How many stood up, and deliberately nothing beyond the count: "the peers
+ * verify" is not a thing anyone can say, and a summary line that implied it
+ * would be the vacuous pass this command exists to avoid.
+ */
+function chainsCheckedLine(peers: readonly PeerVerify[]): string {
+  const sound = peers.filter((peer) => isIntact(peer.check) && !isEmpty(peer.check)).length;
+  const keys = plural(peers.length, "key", "keys");
+  return line(
+    "chains",
+    sound === peers.length ? `${keys}, every chain checked` : `${keys}, ${peers.length - sound} not verified`,
   );
-
-  return out;
 }
 
 /**

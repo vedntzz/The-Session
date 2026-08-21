@@ -319,44 +319,80 @@ export interface PushResult {
 export async function pushLog(options: SyncOptions = {}): Promise<PushResult> {
   const root = await syncingRepo(options);
   const file = await resolveStoreFile(options);
+  const text = await readLogToPush(file);
 
-  let text: string;
+  const summary = summarizeLog(text);
+  refuseBrokenChain(summary.check);
+
+  const keypair = await loadOrCreateKeypair(storeHome(options));
+  const ref = refFor(keypair.fingerprint);
+  const published = await publishLocally(root, ref, text, summary.records);
+  await pushRef(root, ref);
+
+  return {
+    fingerprint: keypair.fingerprint,
+    ref,
+    file,
+    records: summary.records,
+    ...published,
+  };
+}
+
+/** The log this machine would publish, or why there is nothing to publish. */
+async function readLogToPush(file: string): Promise<string> {
   try {
-    text = await readFile(file, "utf8");
+    return await readFile(file, "utf8");
   } catch (error) {
     throw new Error(
       `No log to push for this repo (${file}). Run session start to record something first.`,
       { cause: error },
     );
   }
+}
 
-  const summary = summarizeLog(text);
-  if (!isIntact(summary.check)) {
-    const { line, detail } = summary.check.break as NonNullable<ChainCheck["break"]>;
-    throw new Error(
-      `The log does not verify: line ${line} ${detail}. Nothing was pushed — ` +
-        `run session verify. A chain you cannot stand behind is not one to publish.`,
-    );
+/** Stops a push that would publish a chain that does not add up. */
+function refuseBrokenChain(check: ChainCheck): void {
+  if (isIntact(check)) {
+    return;
   }
+  const { line, detail } = check.break as NonNullable<ChainCheck["break"]>;
+  throw new Error(
+    `The log does not verify: line ${line} ${detail}. Nothing was pushed — ` +
+      `run session verify. A chain you cannot stand behind is not one to publish.`,
+  );
+}
 
-  const keypair = await loadOrCreateKeypair(storeHome(options));
-  const ref = refFor(keypair.fingerprint);
+/**
+ * Writes the log into the ref's history on this machine.
+ *
+ * Nothing is committed where the ref already points at these exact bytes: an
+ * empty commit per push would fill that history with pushes that published
+ * nothing.
+ */
+async function publishLocally(
+  root: string,
+  ref: string,
+  text: string,
+  records: number,
+): Promise<{ commit: string; committed: boolean }> {
   const parent = await resolveRef(root, ref);
-
   const blob = await writeBlob(root, text);
   const tree = await writeTree(root, blob);
 
-  // Nothing new to say: the ref already points at these exact bytes. Push
-  // anyway, since the local ref can be ahead of origin.
   const unchanged = parent !== undefined && (await treeOf(root, parent)) === tree;
-  const commit = unchanged
-    ? (parent as string)
-    : await commitTree(root, tree, parent, `session log — ${summary.records} records`);
-
-  if (!unchanged) {
-    await updateRef(root, ref, commit, parent);
+  if (unchanged) {
+    return { commit: parent as string, committed: false };
   }
+  const commit = await commitTree(root, tree, parent, `session log — ${records} records`);
+  await updateRef(root, ref, commit, parent);
+  return { commit, committed: true };
+}
 
+/**
+ * Puts the ref on origin. Pushed even where nothing was committed, since the
+ * local ref can be ahead of origin.
+ */
+async function pushRef(root: string, ref: string): Promise<void> {
   try {
     await git(root, ["push", "origin", `${ref}:${ref}`]);
   } catch (error) {
@@ -373,15 +409,6 @@ export async function pushLog(options: SyncOptions = {}): Promise<PushResult> {
     }
     throw error;
   }
-
-  return {
-    fingerprint: keypair.fingerprint,
-    ref,
-    file,
-    records: summary.records,
-    commit,
-    committed: !unchanged,
-  };
 }
 
 /** One key's ref as `session pull` found it. */
@@ -410,38 +437,49 @@ export interface PullResult {
 export async function pullPeers(options: SyncOptions = {}): Promise<PullResult> {
   const root = await syncingRepo(options);
   const before = await localRefs(root);
-
-  // --no-tags because a tag arriving as a side effect would show up in a
-  // namespace this feature promised to stay out of. A remote that has never
-  // seen these refs matches nothing and succeeds quietly, which is the right
-  // answer to "what has everyone else recorded" before anyone has recorded
-  // anything.
-  await git(root, [
-    "fetch",
-    "--no-tags",
-    "origin",
-    `+${REF_PREFIX}*:${REF_PREFIX}*`,
-  ]);
-
+  await fetchSessionRefs(root);
   const after = await localRefs(root);
-  const fetched: Fetched[] = [];
 
+  const fetched: Fetched[] = [];
   for (const [ref, sha] of after) {
-    const fingerprint = fingerprintOf(ref);
-    if (fingerprint === undefined) {
-      continue; // not a ref this tool wrote; leave it alone
+    const one = await describeFetched(root, ref, sha, before);
+    if (one) {
+      fetched.push(one);
     }
-    const was = before.get(ref);
-    const text = (await readLogAt(root, ref)) ?? "";
-    fetched.push({
-      fingerprint,
-      ref,
-      state: was === undefined ? "new" : was === sha ? "unchanged" : "updated",
-      records: linesOf(text).length,
-    });
   }
 
   return { fetched: fetched.sort((a, b) => a.fingerprint.localeCompare(b.fingerprint)) };
+}
+
+/**
+ * `--no-tags` because a tag arriving as a side effect would show up in a
+ * namespace this feature promised to stay out of. A remote that has never seen
+ * these refs matches nothing and succeeds quietly, which is the right answer to
+ * "what has everyone else recorded" before anyone has recorded anything.
+ */
+async function fetchSessionRefs(root: string): Promise<void> {
+  await git(root, ["fetch", "--no-tags", "origin", `+${REF_PREFIX}*:${REF_PREFIX}*`]);
+}
+
+/** One ref as the fetch left it, or nothing where it is not one of ours. */
+async function describeFetched(
+  root: string,
+  ref: string,
+  sha: string,
+  before: ReadonlyMap<string, string>,
+): Promise<Fetched | undefined> {
+  const fingerprint = fingerprintOf(ref);
+  if (fingerprint === undefined) {
+    return undefined; // not a ref this tool wrote; leave it alone
+  }
+  const was = before.get(ref);
+  const text = (await readLogAt(root, ref)) ?? "";
+  return {
+    fingerprint,
+    ref,
+    state: was === undefined ? "new" : was === sha ? "unchanged" : "updated",
+    records: linesOf(text).length,
+  };
 }
 
 /** One published log as it sits on this machine, read but not yet judged. */

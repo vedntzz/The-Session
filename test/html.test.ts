@@ -553,3 +553,41 @@ describe("renderWeek: the figure columns", () => {
     expect(listed[0]).toContain('<span class="figure cost">—</span>');
   });
 });
+
+/** The page's one summary line, which is where the window's money goes. */
+function summaryOf(page: string): string {
+  return /<p class="summary">.*?<\/p>/u.exec(page)?.[0] ?? "";
+}
+
+describe("a page where nothing could be priced", () => {
+  const unpriced = session({
+    cost: cost({ model: "mystery-9", inputTokens: 100_000, turns: 3, apiCalls: 9 }),
+  });
+
+  it("shows no money rather than a nought the reader would believe", () => {
+    // The same rule `--md` and the terminal table follow: a total of nought
+    // that exists only because no rate was found is not a figure.
+    const page = renderWeek([unpriced], 7, {}, priced);
+
+    expect(page).not.toContain("$0.00");
+  });
+
+  it("puts a dash in the session's own cost cell", () => {
+    expect(renderWeek([unpriced], 7, {}, priced)).toContain("—");
+  });
+
+  it("leaves the money out of the summary rather than printing a nought", () => {
+    const summary = summaryOf(renderWeek([unpriced], 7, {}, priced));
+
+    expect(summary).not.toContain("$");
+  });
+
+  it("keeps $0.00 in the summary for a week that genuinely cost nothing", () => {
+    // Nothing was captured, so no rate is missing and the nought is what the
+    // week cost. Dropping it here would render an absence and a nought the
+    // same way, and the page would have no way to say which it meant.
+    const free = session({ cost: cost() });
+
+    expect(summaryOf(renderWeek([free], 7, {}, priced))).toContain("$0.00");
+  });
+});

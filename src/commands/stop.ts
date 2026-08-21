@@ -7,6 +7,8 @@ import {
   totalTokens,
   updateSession,
   type Session,
+  type SessionCost,
+  type SessionPatch,
   type StoreOptions,
 } from "../store.js";
 import { intentOf } from "../render/terminal.js";
@@ -89,18 +91,7 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
   }
 
   const cwd = options.cwd ?? process.cwd();
-  let changed: string[];
-  try {
-    changed = await changedFilesSince(open.startCommit, cwd);
-  } catch (error) {
-    throw new Error(
-      `Cannot diff against the commit this session started from ` +
-        `(${open.startCommit.slice(0, 7)}). If the history was rewritten, run ` +
-        `session stop from a checkout that still has that commit.`,
-      { cause: error },
-    );
-  }
-
+  const changed = await diffSince(open.startCommit, cwd);
   const reality = computeReality(changed, open.baseline);
   const endedAt = new Date().toISOString();
   const cost = await captureCost(
@@ -108,25 +99,46 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
     options.adapters ?? undefined,
   );
 
-  return updateSession(
-    open.id,
-    {
-      reality,
-      drift: driftOf(open, reality),
-      // Derived here rather than at display time so the log says what the
-      // session was about without anything having to re-run the rules over it.
-      // The rules are pure and the input is on the record, so a reader that
-      // does re-run them gets the same answer — see `classify.ts`.
-      class: classifyPaths(reality),
-      // What the session left at each path. Recorded now because it cannot be
-      // recovered later: this is what `settle` goes looking for in the default
-      // branch, and by then the working tree has moved on.
-      endState: await endStateOf(reality, cwd),
-      cost,
-      endedAt,
-    },
-    options,
-  );
+  return updateSession(open.id, await closingPatch(open, reality, cost, endedAt, cwd), options);
+}
+
+/** What changed since the session opened, or why that cannot be answered. */
+async function diffSince(startCommit: string, cwd: string): Promise<string[]> {
+  try {
+    return await changedFilesSince(startCommit, cwd);
+  } catch (error) {
+    throw new Error(
+      `Cannot diff against the commit this session started from ` +
+        `(${startCommit.slice(0, 7)}). If the history was rewritten, run ` +
+        `session stop from a checkout that still has that commit.`,
+      { cause: error },
+    );
+  }
+}
+
+/** Everything `stop` writes onto the record, gathered in one place. */
+async function closingPatch(
+  open: Session,
+  reality: string[],
+  cost: SessionCost,
+  endedAt: string,
+  cwd: string,
+): Promise<SessionPatch> {
+  return {
+    reality,
+    drift: driftOf(open, reality),
+    // Derived here rather than at display time so the log says what the
+    // session was about without anything having to re-run the rules over it.
+    // The rules are pure and the input is on the record, so a reader that
+    // does re-run them gets the same answer — see `classify.ts`.
+    class: classifyPaths(reality),
+    // What the session left at each path. Recorded now because it cannot be
+    // recovered later: this is what `settle` goes looking for in the default
+    // branch, and by then the working tree has moved on.
+    endState: await endStateOf(reality, cwd),
+    cost,
+    endedAt,
+  };
 }
 
 /**

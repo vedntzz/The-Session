@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { GENESIS, lineHash, recordHash, type SignedBody } from "./chain.js";
 import type { SessionClass } from "./classify.js";
 import { hasAttribution, type Attribution } from "./config.js";
-import { loadOrCreateKeypair, signHash } from "./keys.js";
+import { loadOrCreateKeypair, signHash, type Keypair } from "./keys.js";
 import type { Observation } from "./outcome.js";
 
 const execFileAsync = promisify(execFile);
@@ -457,36 +457,47 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  */
 async function withLock<T>(file: string, action: () => Promise<T>): Promise<T> {
   const lock = `${file}.lock`;
-  const deadline = Date.now() + LOCK_STALE_MS * 2;
-
-  for (;;) {
-    try {
-      const handle = await open(lock, "wx", 0o600);
-      await handle.close();
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-        throw error;
-      }
-      const held = await stat(lock).catch(() => undefined);
-      if (held && Date.now() - held.mtimeMs > LOCK_STALE_MS) {
-        await rm(lock, { force: true });
-        continue;
-      }
-      if (Date.now() > deadline) {
-        throw new Error(
-          `Timed out waiting for ${lock}. If no other session command is running, delete that file.`,
-        );
-      }
-      await sleep(LOCK_POLL_MS);
-    }
-  }
-
+  await acquireLock(lock);
   try {
     return await action();
   } finally {
     await rm(lock, { force: true });
   }
+}
+
+/** Blocks until the lock file is ours, or until waiting stops being reasonable. */
+async function acquireLock(lock: string): Promise<void> {
+  const deadline = Date.now() + LOCK_STALE_MS * 2;
+  for (;;) {
+    try {
+      const handle = await open(lock, "wx", 0o600);
+      await handle.close();
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+      await waitForLock(lock, deadline);
+    }
+  }
+}
+
+/**
+ * One turn of the wait: take over a lock a killed process left behind once it
+ * is older than `LOCK_STALE_MS`, give up at the deadline, otherwise sleep.
+ */
+async function waitForLock(lock: string, deadline: number): Promise<void> {
+  const held = await stat(lock).catch(() => undefined);
+  if (held && Date.now() - held.mtimeMs > LOCK_STALE_MS) {
+    await rm(lock, { force: true });
+    return;
+  }
+  if (Date.now() > deadline) {
+    throw new Error(
+      `Timed out waiting for ${lock}. If no other session command is running, delete that file.`,
+    );
+  }
+  await sleep(LOCK_POLL_MS);
 }
 
 /** The hash the next record must carry as its `prev`. */
@@ -505,16 +516,7 @@ async function writeRecord(id: string, set: RecordFields, options: StoreOptions)
 
   await withLock(file, async () => {
     const log = await readLog(options);
-    const body: SignedBody = {
-      v: RECORD_VERSION,
-      id,
-      at: new Date().toISOString(),
-      set,
-      prev: nextPrev(log),
-      key: keypair.fingerprint,
-    };
-    const hash = recordHash(body);
-    const record: LogRecord = { ...body, set, hash, sig: signHash(hash, keypair.privateKey) };
+    const record = signRecord(id, set, nextPrev(log), keypair);
 
     // A previous write cut short leaves a line with no newline on it. Starting
     // on a fresh line keeps that damage to the one line it happened on rather
@@ -527,6 +529,25 @@ async function writeRecord(id: string, set: RecordFields, options: StoreOptions)
       mode: 0o600,
     });
   });
+}
+
+/** One record: hashed over its own body, signed over the hash. */
+function signRecord(
+  id: string,
+  set: RecordFields,
+  prev: string,
+  keypair: Keypair,
+): LogRecord {
+  const body: SignedBody = {
+    v: RECORD_VERSION,
+    id,
+    at: new Date().toISOString(),
+    set,
+    prev,
+    key: keypair.fingerprint,
+  };
+  const hash = recordHash(body);
+  return { ...body, set, hash, sig: signHash(hash, keypair.privateKey) };
 }
 
 /**
@@ -596,19 +617,35 @@ export async function appendSession(
   if (input.endedAt != null) {
     assertTimestamp("endedAt", input.endedAt);
   }
+  const intentSource = intentSourceFor(input);
+  const repo = await repoIdentity(options.cwd ?? process.cwd());
 
-  // A session whose intent is null is one nobody declared: it was opened by
-  // the hook and is waiting for its first prompt. Recording that as
-  // `declared` would be a claim that somebody typed it.
-  const intentSource: IntentSource =
-    input.intentSource ?? (input.intent === null ? "captured" : "declared");
-  if (input.intent === null && intentSource !== "captured") {
+  const session = sessionFrom(input, repo, intentSource);
+  const { id, ...set } = session;
+  await writeRecord(id, set, options);
+  return session;
+}
+
+/**
+ * Where the intent came from, decided as the session opens and fixed there.
+ *
+ * A session whose intent is null is one nobody declared: it was opened by the
+ * hook and is waiting for its first prompt. Recording that as `declared` would
+ * be a claim that somebody typed it.
+ */
+function intentSourceFor(input: NewSession): IntentSource {
+  const source = input.intentSource ?? (input.intent === null ? "captured" : "declared");
+  if (input.intent === null && source !== "captured") {
     throw new Error("a session with no intent yet is a captured one, not a declared one");
   }
+  return source;
+}
 
-  const session: Session = {
+/** The record as it goes on disk, with every optional field defaulted. */
+function sessionFrom(input: NewSession, repo: string, intentSource: IntentSource): Session {
+  return {
     id: input.id ?? randomUUID(),
-    repo: await repoIdentity(options.cwd ?? process.cwd()),
+    repo,
     intent: input.intent,
     intentSource,
     scope: input.scope ?? [],
@@ -626,10 +663,6 @@ export async function appendSession(
       ? { attribution: input.attribution }
       : {}),
   };
-
-  const { id, ...set } = session;
-  await writeRecord(id, set, options);
-  return session;
 }
 
 /**
@@ -647,33 +680,45 @@ export async function readSessions(options: StoreOptions = {}): Promise<Session[
   const order = new Map<string, number>();
 
   for (const [index, line] of lines.entries()) {
-    const isFinalLine = index === lines.length - 1;
     let record: LogRecord;
     try {
       record = parseRecord(line.text, file, line.no);
     } catch (error) {
-      if (isFinalLine && !complete) {
+      if (index === lines.length - 1 && !complete) {
         break; // interrupted append; the rest of the log is intact
       }
       throw error;
     }
-
-    const existing = sessions.get(record.id);
-    const merged: Partial<Session> = { ...existing, ...record.set, ...keptIntent(existing, record) };
-    if (!isComplete(merged)) {
-      // A patch whose creating record is missing: nothing to anchor it to.
-      continue;
-    }
-    if (!existing) {
-      order.set(record.id, order.size);
-    }
-    sessions.set(record.id, { ...merged, id: record.id });
+    foldRecord(record, sessions, order);
   }
 
-  return [...sessions.values()].sort((a, b) => {
+  return [...sessions.values()].sort(byStartedAt(order));
+}
+
+/** Folds one patch onto the session it belongs to, in place. */
+function foldRecord(
+  record: LogRecord,
+  sessions: Map<string, Session>,
+  order: Map<string, number>,
+): void {
+  const existing = sessions.get(record.id);
+  const merged: Partial<Session> = { ...existing, ...record.set, ...keptIntent(existing, record) };
+  if (!isComplete(merged)) {
+    // A patch whose creating record is missing: nothing to anchor it to.
+    return;
+  }
+  if (!existing) {
+    order.set(record.id, order.size);
+  }
+  sessions.set(record.id, { ...merged, id: record.id });
+}
+
+/** Start time, ties broken by where the log first mentioned each session. */
+function byStartedAt(order: ReadonlyMap<string, number>): (a: Session, b: Session) => number {
+  return (a, b) => {
     const delta = Date.parse(a.startedAt) - Date.parse(b.startedAt);
     return delta !== 0 ? delta : (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
-  });
+  };
 }
 
 /**

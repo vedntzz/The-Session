@@ -1,5 +1,12 @@
 import type { SessionFilter } from "../commands/week.js";
-import { formatUsd, priceSession, spendOf, type RateTable } from "../pricing.js";
+import {
+  formatUsd,
+  priceSession,
+  spendOf,
+  unpricedThroughout,
+  type RateTable,
+  type Spend,
+} from "../pricing.js";
 import { isCaptured, totalTokens, type Session } from "../store.js";
 import { describeFilter, intentOf, stamp, type View } from "./terminal.js";
 
@@ -273,32 +280,63 @@ function renderBody(sessions: readonly Session[], window: string, view: View): s
 
   const rates = view.rates ?? new Map();
   const showTokens = view.tokens === true;
+  const spend = spendOf(sessions, rates);
 
+  return (
+    summaryLine(sessions, spend, showTokens) +
+    rowsBlock(sessions, rates, showTokens) +
+    footerBlock(sessions, spend)
+  );
+}
+
+/**
+ * The one line above the rows: how much of what, and how much of it went
+ * outside plan.
+ *
+ * The money is left out only where there is none to give — a window nothing
+ * could be priced in. A window that genuinely cost nothing carries `$0.00`,
+ * because that is what it cost; dropping it there would render an absence and
+ * a nought the same way, and the page would have no way to tell the reader
+ * which of the two it meant.
+ */
+function summaryLine(sessions: readonly Session[], spend: Spend, showTokens: boolean): string {
   const turns = sum(sessions, (session) => session.cost.turns);
-  const empty = sum(sessions, (session) => session.cost.emptyTurns);
-  const tokens = sum(sessions, (session) => totalTokens(session.cost));
   // Summed per session, so the rows add up to the total. A file that drifted
   // in two sessions drifted twice.
   const drift = sum(sessions, (session) => session.drift.length);
-  const spend = spendOf(sessions, rates);
-
-  const weights = weigh(sessions, rates);
-  const heaviest = Math.max(...weights);
-
+  const tokens = sum(sessions, (session) => totalTokens(session.cost));
   const counted = [
     plural(sessions.length, "session", "sessions"),
-    ...(spend.usd > 0 ? [formatUsd(spend.usd)] : []),
+    ...(unpricedThroughout(spend) ? [] : [formatUsd(spend.usd)]),
     plural(turns, "turn", "turns"),
     ...(showTokens ? [`${figure(tokens)} tokens`] : []),
   ]
     .map(escapeHtml)
     .join(" · ");
-  const summary =
+  return (
     `<p class="summary">${counted} · ` +
-    `<span class="${hue(drift)}">${escapeHtml(figure(drift))} outside</span></p>`;
+    `<span class="${hue(drift)}">${escapeHtml(figure(drift))} outside</span></p>`
+  );
+}
 
+/** The rows themselves, each as tall as its share of the money. */
+function rowsBlock(sessions: readonly Session[], rates: RateTable, showTokens: boolean): string {
+  const weights = weigh(sessions, rates);
+  const heaviest = Math.max(...weights);
+  const rows = sessions
+    .map((session, index) => renderRow(session, weights[index] ?? 0, heaviest, rates, showTokens))
+    .join("");
+  return `<ol class="week${showTokens ? " with-tokens" : ""}">${rows}</ol>`;
+}
+
+/** What the rows do not say: the split of the money, the waste, the marker. */
+function footerBlock(sessions: readonly Session[], spend: Spend): string {
+  const turns = sum(sessions, (session) => session.cost.turns);
+  const empty = sum(sessions, (session) => session.cost.emptyTurns);
   // Not in the waste hue. Red is for money that is definitely gone, and most
-  // of this figure is work that has simply not landed yet.
+  // of this figure is work that has simply not landed yet. Omitted where the
+  // total is nought, whether because nothing was spent or because nothing
+  // could be priced — the summary above carries that distinction.
   const spent =
     spend.usd > 0
       ? `<p>${escapeHtml(formatUsd(spend.usd))} spent, ` +
@@ -316,18 +354,7 @@ function renderBody(sessions: readonly Session[], window: string, view: View): s
       ? `<p>${escapeHtml(`~ ${plural(captured, "session", "sessions")}`)} recorded by the hook: ` +
         `intent captured from the first prompt, no scope declared</p>`
       : "";
-  const footer =
-    spent || wasted || recorded ? `<footer>${spent}${wasted}${recorded}</footer>` : "";
-
-  return (
-    summary +
-    `<ol class="week${showTokens ? " with-tokens" : ""}">` +
-    sessions
-      .map((session, index) => renderRow(session, weights[index] ?? 0, heaviest, rates, showTokens))
-      .join("") +
-    `</ol>` +
-    footer
-  );
+  return spent || wasted || recorded ? `<footer>${spent}${wasted}${recorded}</footer>` : "";
 }
 
 /** True when anything on the page is worth marking in the waste hue. */
@@ -355,17 +382,9 @@ export function renderWeek(
   const narrowed = describeFilter(filter);
   const suffix = narrowed ? `, ${narrowed}` : "";
   const heading = `The last ${window}${suffix}`;
-  const title = `session — the last ${window}${suffix}`;
 
   return [
-    "<!doctype html>",
-    '<html lang="en">',
-    "<head>",
-    '<meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    `<title>${escapeHtml(title)}</title>`,
-    `<style>${styleSheet(isWasteful(sessions))}</style>`,
-    "</head>",
+    ...documentHead(`session — the last ${window}${suffix}`, isWasteful(sessions)),
     "<body>",
     "<main>",
     `<h1>${escapeHtml(heading)}</h1>`,
@@ -375,4 +394,18 @@ export function renderWeek(
     "</html>",
     "",
   ].join("\n");
+}
+
+/** Everything above `<body>`: the meta tags and the sheet, inlined. */
+function documentHead(title: string, wasteful: boolean): string[] {
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>${escapeHtml(title)}</title>`,
+    `<style>${styleSheet(wasteful)}</style>`,
+    "</head>",
+  ];
 }

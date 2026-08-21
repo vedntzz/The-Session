@@ -100,11 +100,7 @@ export async function changedFilesSince(
   cwd: string = process.cwd(),
 ): Promise<string[]> {
   const root = await repoRoot(cwd);
-
-  const resolved = await tryGit(root, ["rev-parse", "--verify", "--end-of-options", `${commit}^{commit}`]);
-  if (resolved === undefined) {
-    throw new Error(`unknown commit: ${commit}`);
-  }
+  const resolved = await resolveCommit(root, commit);
 
   // --no-relative defeats a diff.relative config; -z avoids git's quoting of
   // paths containing spaces, newlines or non-ASCII bytes. The revision here is
@@ -114,7 +110,7 @@ export async function changedFilesSince(
     "--name-only",
     "--no-relative",
     "-z",
-    resolved.trim(),
+    resolved,
     "--",
   ]);
 
@@ -130,6 +126,16 @@ export async function changedFilesSince(
 
   const paths = new Set([...splitNulList(tracked), ...splitNulList(untracked)]);
   return [...paths].sort();
+}
+
+/** A commit as its 40-hex sha, so nothing downstream can read it as an option. */
+async function resolveCommit(root: string, commit: string): Promise<string> {
+  const args = ["rev-parse", "--verify", "--end-of-options", `${commit}^{commit}`];
+  const resolved = await tryGit(root, args);
+  if (resolved === undefined) {
+    throw new Error(`unknown commit: ${commit}`);
+  }
+  return resolved.trim();
 }
 
 // --- where the work went --------------------------------------------------
@@ -281,28 +287,44 @@ export async function gatherRepoFacts(
   }
 
   const wanted = [...new Set(paths)].sort();
-  const history = new Map<string, ReadonlySet<string>>();
-  for (const path of wanted) {
-    history.set(path, await historyOf(root, branch.name, path));
-  }
-
-  const absentAtTip = new Set<string>();
-  for (const batch of chunk(wanted, ARG_CHUNK)) {
-    const ids = await blobIds(root, batch.map((path) => `${branch.tip}:${path}`));
-    batch.forEach((path, index) => {
-      if (ids[index] === undefined) {
-        absentAtTip.add(path);
-      }
-    });
-  }
-
   return {
     branch: branch.name,
     tip: branch.tip,
-    history,
-    absentAtTip,
+    history: await historyFor(root, branch.name, wanted),
+    absentAtTip: await absentAt(root, branch.tip, wanted),
     working: await workingBlobs(root, wanted),
   };
+}
+
+/** Every blob each path has ever held on the branch, path by path. */
+async function historyFor(
+  root: string,
+  branch: string,
+  wanted: readonly string[],
+): Promise<Map<string, ReadonlySet<string>>> {
+  const history = new Map<string, ReadonlySet<string>>();
+  for (const path of wanted) {
+    history.set(path, await historyOf(root, branch, path));
+  }
+  return history;
+}
+
+/** The paths that are not in the branch's tree at all, asked in batches. */
+async function absentAt(
+  root: string,
+  tip: string,
+  wanted: readonly string[],
+): Promise<Set<string>> {
+  const absent = new Set<string>();
+  for (const batch of chunk(wanted, ARG_CHUNK)) {
+    const ids = await blobIds(root, batch.map((path) => `${tip}:${path}`));
+    batch.forEach((path, index) => {
+      if (ids[index] === undefined) {
+        absent.add(path);
+      }
+    });
+  }
+  return absent;
 }
 
 /**

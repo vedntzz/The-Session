@@ -242,14 +242,7 @@ function removeHook(settings: Settings, hook: HookSpec): Settings {
     return settings;
   }
 
-  const kept = groups.filter((group) => {
-    if (!isObject(group) || !Array.isArray(group["hooks"])) {
-      return true; // not a shape we put there; leave it alone
-    }
-    const entries: unknown[] = group["hooks"].filter((entry) => !isEntryFor(hook, entry));
-    group["hooks"] = entries;
-    return entries.length > 0;
-  });
+  const kept = groups.filter((group) => keepsAnything(group, hook));
 
   if (kept.length > 0) {
     hooks[hook.event] = kept;
@@ -262,6 +255,19 @@ function removeHook(settings: Settings, hook: HookSpec): Settings {
     delete settings["hooks"];
   }
   return settings;
+}
+
+/**
+ * Takes our entries out of one group, in place, and says whether anything is
+ * left in it. A group that is not the shape we write is left alone.
+ */
+function keepsAnything(group: unknown, hook: HookSpec): boolean {
+  if (!isObject(group) || !Array.isArray(group["hooks"])) {
+    return true; // not a shape we put there; leave it alone
+  }
+  const entries: unknown[] = group["hooks"].filter((entry) => !isEntryFor(hook, entry));
+  group["hooks"] = entries;
+  return entries.length > 0;
 }
 
 /**

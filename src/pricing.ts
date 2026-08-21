@@ -169,6 +169,31 @@ export function spendOf(sessions: readonly Session[], rates: RateTable): Spend {
 }
 
 /**
+ * True when the money in a window is not a figure at all.
+ *
+ * `spendOf` totals the sessions it can price and counts the ones it cannot, so
+ * a window where nothing could be priced comes back as `usd: 0` with a count
+ * beside it. Rendering that as `$0.00` is the worst kind of wrong: it has the
+ * shape of an answer, it goes into somebody's meeting notes or invoice, and it
+ * says a week cost nothing when what happened is that nobody knows what it
+ * cost. Nought is a claim; unpriced is an absence, and no view may render the
+ * first when it means the second.
+ *
+ * The test is both halves, never `usd === 0` alone. A window that genuinely
+ * cost nothing — nothing captured, so no rate is missing — reads `$0.00`,
+ * correctly, and that is the case the second half protects. A view that got
+ * this the other way round would print an em dash over a column of noughts,
+ * which is a table that visibly does not add up.
+ *
+ * It lives here rather than in any one renderer because every view that shows
+ * a total obeys it, and three copies of a two-clause test are three chances
+ * for the views to come to disagree about what a week cost.
+ */
+export function unpricedThroughout(spend: Spend): boolean {
+  return spend.usd === 0 && spend.unpriced > 0;
+}
+
+/**
  * Money, as a line of a report reads it.
  *
  * Always two decimal places, so a column of them lines up on the point. A

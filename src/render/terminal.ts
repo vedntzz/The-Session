@@ -1,7 +1,15 @@
 import { classOf } from "../classify.js";
 import type { SessionFilter } from "../commands/week.js";
 import { attributionEntries } from "../config.js";
-import { formatUsd, priceSession, spendOf, type Price, type RateTable } from "../pricing.js";
+import {
+  formatUsd,
+  priceSession,
+  spendOf,
+  unpricedThroughout,
+  type Price,
+  type RateTable,
+  type Spend,
+} from "../pricing.js";
 import {
   isCaptured,
   totalTokens,
@@ -193,102 +201,161 @@ export function formatSession(
   palette: Palette = plainPalette,
   view: View = {},
 ): string[] {
-  const lines: string[] = [""];
+  return [
+    "",
+    headingLine(session, palette),
+    "",
+    ...capturedIntentLines(session, palette),
+    declaredLine(session, palette),
+    ...changedLines(session, palette),
+    ...outsideLines(session, palette),
+    "",
+    ...costLines(session, palette, view),
+    ...attributionLines(session, palette),
+    outcomeLine(session, palette),
+  ];
+}
 
+/** The intent, with the times it ran between out in the gutter. */
+function headingLine(session: Session, palette: Palette): string {
   // Inked and measured separately: `gap` counts the characters a reader sees,
   // and an escape code is not one of them.
   const intent = intentOf(session);
   const heading = `${INDENT}${intent}`;
   const ended = session.endedAt === null ? "still running" : clock(session.endedAt);
   const times = `${clock(session.startedAt)} → ${ended}`;
-  lines.push(`${INDENT}${palette.intent(intent)}${gap(heading)}${palette.meta(times)}`);
-  lines.push("");
+  return `${INDENT}${palette.intent(intent)}${gap(heading)}${palette.meta(times)}`;
+}
 
-  // Said outright, and only when it applies. A declared intent is the ordinary
-  // case and says so by having no line here; a captured one is a different
-  // kind of evidence and a reader comparing it to the paths below is owed the
-  // difference.
-  if (isCaptured(session)) {
-    lines.push(`${INDENT}${palette.meta(label("intent"))}${palette.meta(CAPTURED_INTENT)}`);
+/**
+ * Said outright, and only when it applies. A declared intent is the ordinary
+ * case and says so by having no line here; a captured one is a different kind
+ * of evidence and a reader comparing it to the paths below is owed the
+ * difference.
+ */
+function capturedIntentLines(session: Session, palette: Palette): string[] {
+  if (!isCaptured(session)) {
+    return [];
   }
+  return [`${INDENT}${palette.meta(label("intent"))}${palette.meta(CAPTURED_INTENT)}`];
+}
 
-  // A passive session has an empty scope because nobody was asked for one, not
-  // because somebody declared that nothing would change. Printing "none
-  // declared" there would read as a developer who declared nothing; printing
-  // an empty drift line under it would read as a session that stayed inside a
-  // scope. Neither happened, so the line says what did — and says what to do
-  // about it, since declaring a scope is the whole of how drift becomes
-  // visible.
+/**
+ * What was declared, or why nothing was.
+ *
+ * A passive session has an empty scope because nobody was asked for one, not
+ * because somebody declared that nothing would change. Printing "none
+ * declared" there would read as a developer who declared nothing; printing an
+ * empty drift line under it would read as a session that stayed inside a
+ * scope. Neither happened, so the line says what did — and says what to do
+ * about it, since declaring a scope is the whole of how drift becomes visible.
+ */
+function declaredLine(session: Session, palette: Palette): string {
   if (isCaptured(session)) {
     const bare = `${INDENT}${label("declared")}${NO_SCOPE}`;
-    lines.push(
+    return (
       `${INDENT}${palette.meta(label("declared"))}${palette.meta(NO_SCOPE)}` +
-        `${gap(bare)}${palette.meta(SCOPE_HINT)}`,
+      `${gap(bare)}${palette.meta(SCOPE_HINT)}`
     );
-  } else {
-    const declared = session.scope.length > 0 ? session.scope.join("  ") : "none declared";
-    lines.push(`${INDENT}${palette.meta(label("declared"))}${palette.path(declared)}`);
   }
+  const declared = session.scope.length > 0 ? session.scope.join("  ") : "none declared";
+  return `${INDENT}${palette.meta(label("declared"))}${palette.path(declared)}`;
+}
 
+/**
+ * The paths that landed inside the declared scope.
+ *
+ * With `outsideLines` below this partitions what actually changed, so reading
+ * both gives back `reality` exactly, with no path listed twice. Where every
+ * changed path drifted there is no line: the `outside` line accounts for all
+ * of them.
+ */
+function changedLines(session: Session, palette: Palette): string[] {
   const drifted = new Set(session.drift);
   const inScope = session.reality.filter((path) => !drifted.has(path));
   if (inScope.length > 0) {
-    lines.push(`${INDENT}${palette.meta(label("changed"))}${palette.path(inScope.join("  "))}`);
-  } else if (session.reality.length === 0) {
-    lines.push(`${INDENT}${palette.meta(label("changed"))}${palette.path("nothing")}`);
+    return [`${INDENT}${palette.meta(label("changed"))}${palette.path(inScope.join("  "))}`];
   }
-  // Otherwise every changed path drifted, and the `outside` line below already
-  // accounts for all of them.
-
-  if (session.drift.length > 0) {
-    const marked = session.drift.map((path) => `${DRIFT_MARKER} ${path}`).join("  ");
-    const bare = `${INDENT}${label("outside")}${marked}`;
-    const note = `← you did not declare ${session.drift.length === 1 ? "this" : "these"}`;
-    lines.push(
-      `${INDENT}${palette.meta(label("outside"))}${palette.drift(marked)}` +
-        `${gap(bare)}${palette.meta(note)}`,
-    );
+  if (session.reality.length === 0) {
+    return [`${INDENT}${palette.meta(label("changed"))}${palette.path("nothing")}`];
   }
+  return [];
+}
 
-  lines.push("");
-
-  // Money first, counts in the gutter beside it: what the session cost is the
-  // question, and the counters are how it got there.
-  const { turns, emptyTurns, apiCalls, callsWithoutEdits } = session.cost;
-  if (turns > 0 || apiCalls > 0) {
-    const price = priceSession(session.cost, view.rates ?? NO_RATES);
-
-    // The cost itself is left in the terminal's own colour. It is the figure
-    // that is always there, and colouring what is always there says nothing.
-    const cell = costCell(session.cost, price);
-    const spent = `${INDENT}${label("cost")}${cell}`;
-    lines.push(
-      `${INDENT}${palette.meta(label("cost"))}${cell}` +
-        `${gap(spent)}${palette.meta(`${plural(turns, "turn", "turns")}, ${emptyTurns} without edits`)}`,
-    );
-
-    const waste = wasteCell(session.cost, price);
-    const wasted = `${INDENT}${label("no edits")}${waste.text}`;
-    lines.push(
-      `${INDENT}${palette.meta(label("no edits"))}${waste.spent ? palette.waste(waste.text) : waste.text}` +
-        `${gap(wasted)}` +
-        palette.meta(`${plural(apiCalls, "api call", "api calls")}, ${callsWithoutEdits} without edits`),
-    );
-
-    if (view.tokens) {
-      lines.push(`${INDENT}${palette.meta(label("tokens"))}${palette.meta(breakdown(session.cost))}`);
-    }
+/** The paths that went outside what was declared, marked and counted. */
+function outsideLines(session: Session, palette: Palette): string[] {
+  if (session.drift.length === 0) {
+    return [];
   }
-  // Who it was for, one field per line rather than run together: `sow` and
-  // `billingCode` are strings of characters nobody can tell apart on sight,
-  // and an unlabelled pair of them would be unreadable.
-  for (const [key, value] of attributionEntries(session.attribution)) {
-    lines.push(`${INDENT}${palette.meta(label(key))}${palette.meta(value)}`);
+  const marked = session.drift.map((path) => `${DRIFT_MARKER} ${path}`).join("  ");
+  const bare = `${INDENT}${label("outside")}${marked}`;
+  const note = `← you did not declare ${session.drift.length === 1 ? "this" : "these"}`;
+  return [
+    `${INDENT}${palette.meta(label("outside"))}${palette.drift(marked)}` +
+      `${gap(bare)}${palette.meta(note)}`,
+  ];
+}
+
+/**
+ * Money first, counts in the gutter beside it: what the session cost is the
+ * question, and the counters are how it got there. Nothing is printed for a
+ * session no transcript was captured for.
+ */
+function costLines(session: Session, palette: Palette, view: View): string[] {
+  const { turns, apiCalls } = session.cost;
+  if (turns === 0 && apiCalls === 0) {
+    return [];
   }
-
-  lines.push(`${INDENT}${palette.meta(label("outcome"))}${outcomeInk(palette, session.outcome)(session.outcome)}`);
-
+  const price = priceSession(session.cost, view.rates ?? NO_RATES);
+  const lines = [spentLine(session, palette, price), wasteLine(session, palette, price)];
+  if (view.tokens) {
+    lines.push(`${INDENT}${palette.meta(label("tokens"))}${palette.meta(breakdown(session.cost))}`);
+  }
   return lines;
+}
+
+/**
+ * What it cost, with the turns beside it. The cost itself is left in the
+ * terminal's own colour: it is the figure that is always there, and colouring
+ * what is always there says nothing.
+ */
+function spentLine(session: Session, palette: Palette, price: Price): string {
+  const { turns, emptyTurns } = session.cost;
+  const cell = costCell(session.cost, price);
+  const spent = `${INDENT}${label("cost")}${cell}`;
+  const counts = `${plural(turns, "turn", "turns")}, ${emptyTurns} without edits`;
+  return (
+    `${INDENT}${palette.meta(label("cost"))}${cell}` + `${gap(spent)}${palette.meta(counts)}`
+  );
+}
+
+/** What the turns that wrote nothing cost, with the api calls beside it. */
+function wasteLine(session: Session, palette: Palette, price: Price): string {
+  const { apiCalls, callsWithoutEdits } = session.cost;
+  const waste = wasteCell(session.cost, price);
+  const wasted = `${INDENT}${label("no edits")}${waste.text}`;
+  const counts = `${plural(apiCalls, "api call", "api calls")}, ${callsWithoutEdits} without edits`;
+  return (
+    `${INDENT}${palette.meta(label("no edits"))}${waste.spent ? palette.waste(waste.text) : waste.text}` +
+    `${gap(wasted)}` +
+    palette.meta(counts)
+  );
+}
+
+/**
+ * Who it was for, one field per line rather than run together: `sow` and
+ * `billingCode` are strings of characters nobody can tell apart on sight, and
+ * an unlabelled pair of them would be unreadable.
+ */
+function attributionLines(session: Session, palette: Palette): string[] {
+  return attributionEntries(session.attribution).map(
+    ([key, value]) => `${INDENT}${palette.meta(label(key))}${palette.meta(value)}`,
+  );
+}
+
+function outcomeLine(session: Session, palette: Palette): string {
+  const ink = outcomeInk(palette, session.outcome);
+  return `${INDENT}${palette.meta(label("outcome"))}${ink(session.outcome)}`;
 }
 
 // --- the brief views -----------------------------------------------------
@@ -486,32 +553,52 @@ export function formatHome(
   return lines;
 }
 
-function homeText(home: Home, rates: RateTable): { sentence: string; suggestions: Suggestion[] } {
+/** The sentence and the two commands, chosen by which state the repo is in. */
+function homeText(home: Home, rates: RateTable): HomeText {
   if (home.running) {
-    const since = clock(home.running.startedAt);
-    const what = home.running.intent === null ? "nothing asked yet" : home.running.intent;
-    return {
-      sentence: `Recording since ${since}: ${what}.`,
-      suggestions: [
-        { command: "session stop", why: "close it and record what changed" },
-        { command: "session week", why: "the sessions before this one" },
-      ],
-    };
+    return whileRecording(home.running);
   }
-
   if (home.last) {
-    const price = priceSession(home.last.cost, rates);
-    const cost = price.priced ? `, costing ${formatUsd(price.usd)}` : "";
-    const ended = home.last.endedAt === null ? "" : ` at ${clock(home.last.endedAt)}`;
-    return {
-      sentence: `Nothing is recording. The last session ended${ended}${cost}.`,
-      suggestions: [
-        { command: "session show", why: "what that session asked for and changed" },
-        { command: 'session start "…"', why: "declare the next one before the agent runs" },
-      ],
-    };
+    return afterLastSession(home.last, rates);
   }
+  return beforeAnySession();
+}
 
+/** One sentence and at most two commands. See `formatHome`. */
+interface HomeText {
+  sentence: string;
+  suggestions: Suggestion[];
+}
+
+/** A session is open: what it asked for, and how to close it. */
+function whileRecording(running: Session): HomeText {
+  const since = clock(running.startedAt);
+  const what = running.intent === null ? "nothing asked yet" : running.intent;
+  return {
+    sentence: `Recording since ${since}: ${what}.`,
+    suggestions: [
+      { command: "session stop", why: "close it and record what changed" },
+      { command: "session week", why: "the sessions before this one" },
+    ],
+  };
+}
+
+/** Nothing is open: when the last one ended and what it cost. */
+function afterLastSession(last: Session, rates: RateTable): HomeText {
+  const price = priceSession(last.cost, rates);
+  const cost = price.priced ? `, costing ${formatUsd(price.usd)}` : "";
+  const ended = last.endedAt === null ? "" : ` at ${clock(last.endedAt)}`;
+  return {
+    sentence: `Nothing is recording. The last session ended${ended}${cost}.`,
+    suggestions: [
+      { command: "session show", why: "what that session asked for and changed" },
+      { command: 'session start "…"', why: "declare the next one before the agent runs" },
+    ],
+  };
+}
+
+/** An empty log: the two ways to start recording at all. */
+function beforeAnySession(): HomeText {
   return {
     sentence: "No sessions recorded in this repo yet.",
     suggestions: [
@@ -771,7 +858,6 @@ export function formatWeek(
   // A filtered table with nothing saying so is a table that lies by omission:
   // the totals are a subset, and nothing on the page admits it.
   const narrowed = describeFilter(filter);
-
   if (sessions.length === 0) {
     const window = `No sessions in the last ${plural(days, "day", "days")}`;
     return ["", `${INDENT}${window}${narrowed ? ` for ${narrowed}` : ""}`];
@@ -779,50 +865,77 @@ export function formatWeek(
 
   const rates = view.rates ?? NO_RATES;
   const show: Columns = { tokens: view.tokens === true, classes: view.classes === true };
-
   const rows = sessions.map((session) => cellsFor(session, rates));
-  const turns = sum(sessions, (session) => session.cost.turns);
-  const empty = sum(sessions, (session) => session.cost.emptyTurns);
   const spend = spendOf(sessions, rates);
-  const totals: WeekCells = {
+  const totals = weekTotals(sessions, spend);
+  const widths = measure(rows, totals);
+
+  return [
+    "",
+    ...(narrowed ? [palette.meta(`${INDENT}only ${narrowed}`)] : []),
+    palette.meta(sessionRow(HEADINGS, widths, show)),
+    ...sessionRows(sessions, rows, widths, show, palette),
+    "",
+    totalsRow(totals, widths, show),
+    ...spendNotes(spend, palette),
+    ...turnNotes(sessions, palette),
+  ];
+}
+
+/** The bottom row: a total of every column that has one. */
+function weekTotals(sessions: readonly Session[], spend: Spend): WeekCells {
+  return {
     when: plural(sessions.length, "session", "sessions"),
     intent: "",
     class: "",
-    cost: spend.usd > 0 ? formatUsd(spend.usd) : NO_PRICE,
-    turns: figure(turns),
+    // A dash only where there is no total to give. A week that genuinely cost
+    // nothing reads `$0.00` like the rows above it — dashing that out would
+    // put an absence over a column of noughts, and the reader can see the
+    // column.
+    cost: unpricedThroughout(spend) ? NO_PRICE : formatUsd(spend.usd),
+    turns: figure(sum(sessions, (session) => session.cost.turns)),
     tokens: figure(sum(sessions, (session) => totalTokens(session.cost))),
-    empty: figure(empty),
+    empty: figure(sum(sessions, (session) => session.cost.emptyTurns)),
     outcome: "",
   };
+}
 
-  const widths = measure(rows, totals);
-  const lines = [""];
-  if (narrowed) {
-    lines.push(palette.meta(`${INDENT}only ${narrowed}`));
-  }
-  lines.push(palette.meta(sessionRow(HEADINGS, widths, show)));
-
-  for (const [index, session] of sessions.entries()) {
+/** One row per session, inked by what the session came to. */
+function sessionRows(
+  sessions: readonly Session[],
+  rows: readonly WeekCells[],
+  widths: Widths,
+  show: Columns,
+  palette: Palette,
+): string[] {
+  return sessions.map((session, index) => {
     const cells = rows[index] as WeekCells;
     // An abandoned row takes one ink and no other: the whole row is written
     // off, and brightening its intent inside the strike would argue with it.
     if (session.outcome === "abandoned") {
-      lines.push(palette.abandoned(sessionRow(cells, widths, show)));
-      continue;
+      return palette.abandoned(sessionRow(cells, widths, show));
     }
-    lines.push(
-      sessionRow(cells, widths, show, {
-        intent: (text) => palette.intent(text),
-        outcome: outcomeInk(palette, session.outcome),
-      }),
-    );
-  }
+    return sessionRow(cells, widths, show, {
+      intent: (text) => palette.intent(text),
+      outcome: outcomeInk(palette, session.outcome),
+    });
+  });
+}
 
-  lines.push("", totalsRow(totals, widths, show));
-
-  // The sentence the table is for. Everything that did not merge is money
-  // still owed an outcome, which is a different question from the turn counts
-  // below it — a productive session that nobody shipped wasted all of itself.
+/**
+ * The sentence the table is for, and what the total leaves out.
+ *
+ * Everything that did not merge is money still owed an outcome, which is a
+ * different question from the turn counts below it — a productive session that
+ * nobody shipped wasted all of itself.
+ *
+ * The sentence is omitted where nothing could be priced: it would read "$0.00
+ * spent" about a week nobody can put a figure on, and the unpriced line says
+ * why instead. Omitted too where the week genuinely cost nothing, which the
+ * total row has already said in full.
+ */
+function spendNotes(spend: Spend, palette: Palette): string[] {
+  const lines: string[] = [];
   if (spend.usd > 0) {
     lines.push(
       `${INDENT}${formatUsd(spend.usd)} spent, ${formatUsd(spend.unmerged)} of it on ` +
@@ -838,9 +951,17 @@ export function formatWeek(
       ),
     );
   }
+  return lines;
+}
+
+/** How much of the week produced nothing, and what the marker in it means. */
+function turnNotes(sessions: readonly Session[], palette: Palette): string[] {
+  const lines: string[] = [];
+  const turns = sum(sessions, (session) => session.cost.turns);
   if (turns > 0) {
+    const empty = figure(sum(sessions, (session) => session.cost.emptyTurns));
     lines.push(
-      palette.meta(`${INDENT}${figure(empty)} of ${plural(turns, "turn", "turns")} changed no files`),
+      palette.meta(`${INDENT}${empty} of ${plural(turns, "turn", "turns")} changed no files`),
     );
   }
   // Only when a row carries one. A legend for a marker nobody used is a line

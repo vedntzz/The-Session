@@ -45,9 +45,14 @@ export function settingsFile(options: HookOptions = {}): string {
 }
 
 async function readSettings(file: string): Promise<Settings> {
-  let text: string;
+  const text = await readSettingsText(file);
+  return text.trim() === "" ? {} : parseSettings(text, file);
+}
+
+/** The file's contents, or what to do about a machine that has none. */
+async function readSettingsText(file: string): Promise<string> {
   try {
-    text = await readFile(file, "utf8");
+    return await readFile(file, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new Error(
@@ -58,11 +63,14 @@ async function readSettings(file: string): Promise<Settings> {
     }
     throw error;
   }
+}
 
-  if (text.trim() === "") {
-    return {};
-  }
-
+/**
+ * The settings as an object, or a refusal naming the file. Nothing is repaired
+ * here: this is the one file `session` writes that it does not own, and
+ * guessing at what somebody meant by it would be the way to lose their setup.
+ */
+function parseSettings(text: string, file: string): Settings {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

@@ -39,17 +39,11 @@ export function mergeCosts(costs: readonly SessionCost[]): SessionCost {
   const empty = total.emptyTurnTokens as TokenCounts;
 
   for (const cost of costs) {
-    total.inputTokens += cost.inputTokens;
-    total.cacheReadTokens += cost.cacheReadTokens;
-    total.cacheCreationTokens += cost.cacheCreationTokens;
-    total.outputTokens += cost.outputTokens;
+    addTokens(total, cost);
     // An adapter too old to report the split contributes nothing to it, rather
     // than having a share of its total invented on its behalf.
     if (cost.emptyTurnTokens) {
-      empty.inputTokens += cost.emptyTurnTokens.inputTokens;
-      empty.cacheReadTokens += cost.emptyTurnTokens.cacheReadTokens;
-      empty.cacheCreationTokens += cost.emptyTurnTokens.cacheCreationTokens;
-      empty.outputTokens += cost.emptyTurnTokens.outputTokens;
+      addTokens(empty, cost.emptyTurnTokens);
     }
     total.turns += cost.turns;
     total.emptyTurns += cost.emptyTurns;
@@ -62,6 +56,20 @@ export function mergeCosts(costs: readonly SessionCost[]): SessionCost {
 
   total.model = dominant(callsByModel);
   return total;
+}
+
+/**
+ * Adds one set of the four counters onto a running total.
+ *
+ * Four, never one sum: each bills at a different rate, so a total cannot be
+ * converted back into money. Shared with the adapters, which add calls up the
+ * same way.
+ */
+export function addTokens(total: TokenCounts, part: TokenCounts): void {
+  total.inputTokens += part.inputTokens;
+  total.cacheReadTokens += part.cacheReadTokens;
+  total.cacheCreationTokens += part.cacheCreationTokens;
+  total.outputTokens += part.outputTokens;
 }
 
 /** The key with the highest count, ties broken by name. "" when empty. */

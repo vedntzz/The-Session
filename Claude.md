@@ -490,6 +490,58 @@ moved no tokens and there is no rate it is missing. That has to agree with
 counting no unpriced sessions is a hole the reader can see and the report will
 not admit to.
 
+## A total nobody can work out
+
+**Nought is not the same as unknown, and no view may print the first when it
+means the second.** `spendOf` totals what it can price and counts what it
+cannot, so a window where nothing could be priced comes back as `usd: 0` with a
+count beside it. Rendering that as `$0.00` is the worst kind of wrong: it has
+the shape of an answer, it goes into somebody's meeting notes or invoice, and
+it says a week cost nothing when what happened is that nobody knows what it
+cost.
+
+The test is `usd === 0 && unpriced > 0`, never `usd === 0` alone. A window that
+genuinely cost nothing — nothing captured, so no rate missing — reads `$0.00`,
+correctly, and that is the case the second half of the test protects. Getting
+it the other way round is the same defect inverted: an em dash written over a
+column of noughts is a total the reader can see does not add up.
+
+It is one function, `unpricedThroughout` in `pricing.ts`, and every view calls
+it rather than spelling the two clauses out again. A two-clause test copied
+into three renderers is three chances for them to come to disagree about what a
+week cost, and the half that gets dropped in the copying is always the second
+one.
+
+Every view that renders a total obeys this, and each has a test pinning both
+halves — the window nobody can price, and the window that genuinely cost
+nothing:
+
+- `--md` says `cost unavailable — no rate for <model>` where the headline would
+  have carried the money, and an em dash in the total row where the figure
+  would have gone. The note below drops its "the cost above covers…" wording
+  in this case, since it would point at a figure the document deliberately did
+  not print, and says how many sessions and what to do instead.
+- `week` in the terminal puts `NO_PRICE` in the total row and omits the
+  `… spent` line entirely, leaving the `N sessions unpriced: <models>` line to
+  say why. A week that genuinely cost nothing totals `$0.00` there, like the
+  rows above it.
+- `week --open` leaves the money out of the page's summary rather than
+  printing a nought into it — and keeps `$0.00` in the summary for a week that
+  genuinely cost nothing, since a page that dropped the figure in both cases
+  would render the absence and the nought identically and have no way left to
+  say which it meant.
+- `estimate` prints `no price for any of these models` in place of the median
+  and p90.
+- `--md`'s note about the sessions that changed no files says `costing an
+  amount no rate covers (<model>)` rather than dropping the clause. Those
+  sessions are not in the table, so the unpriced note above never counts them
+  — this line is the only place the document can admit that part of the bill
+  has no rate behind it, and a clause dropped because nothing was spent would
+  read the same as one dropped because nothing could be priced.
+
+The cost-per-shipped-change line in `--md` falls out of the same rule for free:
+its guard is `usd === 0`, so a window nobody can price has no ratio either.
+
 The cost-per-shipped-change line is omitted when nothing merged, rather than
 dividing by zero or printing a dash: a dash in a cost line reads as a figure
 somebody failed to compute, and the honest statement is that the week has no

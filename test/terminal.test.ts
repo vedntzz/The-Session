@@ -790,6 +790,62 @@ describe("a filtered week", () => {
   });
 });
 
+describe("a week where nothing could be priced", () => {
+  const unpriced = cost({ model: "mystery-9", inputTokens: 100_000, turns: 3, apiCalls: 9 });
+
+  it("puts a dash in the total row rather than a nought", () => {
+    const lines = formatWeek([session({ cost: unpriced })], 7, plainPalette, {}, priced);
+    const totals = lines.find((line) => line.includes("1 session")) as string;
+
+    expect(totals).toContain("—");
+    expect(totals).not.toContain("$0.00");
+  });
+
+  it("says nothing was spent rather than that nothing cost anything", () => {
+    // The rule `--md` follows: a total of nought that exists only because no
+    // rate was found is not a figure, so no figure is printed.
+    const rendered = formatWeek([session({ cost: unpriced })], 7, plainPalette, {}, priced).join("\n");
+
+    expect(rendered).not.toContain("$0.00 spent");
+    expect(rendered).toContain("1 session unpriced: mystery-9");
+  });
+
+  it("says nothing about rates for a week that genuinely cost nothing", () => {
+    // Nothing was captured, so no rate is missing and there is no gap to
+    // report — the distinction `--md` draws with the same two counters.
+    const free = formatWeek([session({ cost: cost() })], 7, plainPalette, {}, priced);
+
+    expect(free.join("\n")).not.toContain("unpriced");
+  });
+
+  it("totals a week that genuinely cost nothing at $0.00, not a dash", () => {
+    // The other half of the rule. The rows above read $0.00, so a dash in the
+    // total row is an absence written over a column of noughts the reader can
+    // see — a table that visibly does not add up.
+    const free = formatWeek([session({ cost: cost() })], 7, plainPalette, {}, priced);
+    const totals = free.find((line) => line.includes("1 session")) as string;
+
+    expect(totals).toContain("$0.00");
+    expect(totals).not.toContain("—");
+  });
+
+  it("dashes the total when the only priced session cost nothing", () => {
+    // One session with a rate and no tokens, one with tokens and no rate.
+    // The sum is nought and it is not what the week cost, so no figure.
+    const mixed = formatWeek(
+      [session({ cost: cost() }), session({ cost: unpriced })],
+      7,
+      plainPalette,
+      {},
+      priced,
+    );
+    const totals = mixed.find((line) => line.includes("2 sessions")) as string;
+
+    expect(totals).toContain("—");
+    expect(totals).not.toContain("$0.00");
+  });
+});
+
 describe("formatBrief", () => {
   /** Renders the short `show` with no colour, which is the contract. */
   function brief(overrides: Partial<Session> = {}, view: View = priced): string[] {

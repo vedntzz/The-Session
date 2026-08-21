@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { zeroCost, type SessionCost, type TokenCounts } from "../../store.js";
-import { dominant, NO_COST, type Adapter, type CaptureWindow } from "../adapter.js";
+import { addTokens, dominant, NO_COST, type Adapter, type CaptureWindow } from "../adapter.js";
 
 /** Claude Code keeps one JSONL transcript per session, grouped by project. */
 function defaultRoot(): string {
@@ -115,40 +115,44 @@ function relatedPaths(a: string, b: string): boolean {
 
 /** Transcript files that could hold activity in the window, newest first. */
 async function transcriptsTouchedIn(root: string, from: number): Promise<string[]> {
-  let projects: string[];
+  const found: string[] = [];
+  for (const project of await listDir(root)) {
+    found.push(...(await transcriptsIn(path.join(root, project), from)));
+  }
+  return found;
+}
+
+/** What a directory holds, or nothing where there is no directory to read. */
+async function listDir(dir: string): Promise<string[]> {
   try {
-    projects = await readdir(root);
+    return await readdir(dir);
   } catch {
     return []; // Claude Code has never run here
   }
+}
 
+/** One project's transcripts, less the ones written before the window opened. */
+async function transcriptsIn(dir: string, from: number): Promise<string[]> {
   const found: string[] = [];
-  for (const project of projects) {
-    const dir = path.join(root, project);
-    let names: string[];
-    try {
-      names = await readdir(dir);
-    } catch {
-      continue;
-    }
-    for (const name of names) {
-      if (!name.endsWith(".jsonl")) {
-        continue;
-      }
-      const file = path.join(dir, name);
-      try {
-        // A file last written before the window opened cannot contain
-        // anything inside it, so this skips most history cheaply.
-        const info = await stat(file);
-        if (info.mtimeMs >= from) {
-          found.push(file);
-        }
-      } catch {
-        continue;
-      }
+  for (const name of await listDir(dir)) {
+    const file = path.join(dir, name);
+    if (name.endsWith(".jsonl") && (await touchedSince(file, from))) {
+      found.push(file);
     }
   }
   return found;
+}
+
+/**
+ * True when the file was last written inside the window. A file older than
+ * that cannot contain anything inside it, so this skips most history cheaply.
+ */
+async function touchedSince(file: string, from: number): Promise<boolean> {
+  try {
+    return (await stat(file)).mtimeMs >= from;
+  } catch {
+    return false;
+  }
 }
 
 /** Parses a transcript into timestamped entries, dropping what we cannot read. */
@@ -202,42 +206,58 @@ function foldTranscript(text: string, window: CaptureWindow, fold: Fold): void {
       turn = fold.nextTurn++;
       continue;
     }
-    if (entry["type"] !== "assistant") {
-      continue;
+    if (at >= from && at <= to) {
+      recordCall(entry, turn, window, fold);
     }
-
-    const requestId = entry["requestId"];
-    if (typeof requestId !== "string" || at < from || at > to) {
-      continue;
-    }
-    if (window.cwd !== undefined) {
-      const entryCwd = entry["cwd"];
-      if (typeof entryCwd === "string" && !relatedPaths(entryCwd, window.cwd)) {
-        continue; // another repo's work, running at the same time
-      }
-    }
-
-    const message = entry["message"];
-    if (!isObject(message)) {
-      continue;
-    }
-    const edited = touchesFiles(message);
-
-    const existing = fold.calls.get(requestId);
-    if (existing) {
-      // Same call, another fragment: usage is already counted, but a later
-      // fragment may be the one carrying the tool call.
-      existing.edited ||= edited;
-      continue;
-    }
-
-    fold.calls.set(requestId, {
-      ...readUsage(message["usage"]),
-      model: typeof message["model"] === "string" ? message["model"] : "",
-      edited,
-      turn,
-    });
   }
+}
+
+/**
+ * Records one entry as a call, or merges it into the call it is another
+ * fragment of. Anything that is not an assistant reply this repo made is
+ * dropped.
+ */
+function recordCall(
+  entry: Record<string, unknown>,
+  turn: number,
+  window: CaptureWindow,
+  fold: Fold,
+): void {
+  if (entry["type"] !== "assistant") {
+    return;
+  }
+  const requestId = entry["requestId"];
+  if (typeof requestId !== "string" || inAnotherRepo(entry, window)) {
+    return;
+  }
+  const message = entry["message"];
+  if (!isObject(message)) {
+    return;
+  }
+  const edited = touchesFiles(message);
+
+  const existing = fold.calls.get(requestId);
+  if (existing) {
+    // Same call, another fragment: usage is already counted, but a later
+    // fragment may be the one carrying the tool call.
+    existing.edited ||= edited;
+    return;
+  }
+  fold.calls.set(requestId, {
+    ...readUsage(message["usage"]),
+    model: typeof message["model"] === "string" ? message["model"] : "",
+    edited,
+    turn,
+  });
+}
+
+/** True when the entry is another repo's work, running at the same time. */
+function inAnotherRepo(entry: Record<string, unknown>, window: CaptureWindow): boolean {
+  if (window.cwd === undefined) {
+    return false;
+  }
+  const entryCwd = entry["cwd"];
+  return typeof entryCwd === "string" && !relatedPaths(entryCwd, window.cwd);
 }
 
 export interface ClaudeCodeOptions {
@@ -258,74 +278,79 @@ export function createClaudeCodeAdapter(options: ClaudeCodeOptions = {}): Adapte
 
   return {
     name: "claude-code",
-
-    async isAvailable(): Promise<boolean> {
-      try {
-        return (await stat(root)).isDirectory();
-      } catch {
-        return false;
-      }
-    },
-
-    async capture(window: CaptureWindow): Promise<SessionCost> {
-      const from = Date.parse(window.from);
-      if (Number.isNaN(from) || Number.isNaN(Date.parse(window.to))) {
-        return NO_COST;
-      }
-
-      const files = await transcriptsTouchedIn(root, from);
-      const fold: Fold = { calls: new Map(), nextTurn: 0 };
-
-      for (const file of files) {
-        let text: string;
-        try {
-          text = await readFile(file, "utf8");
-        } catch {
-          continue;
-        }
-        foldTranscript(text, window, fold);
-      }
-
-      const callsByModel = new Map<string, number>();
-      // A turn counts once it has a call in the window, and edits anywhere in
-      // it make the whole turn productive. Settled before anything is added up,
-      // because whether a call belongs to a wasted turn depends on calls that
-      // may come after it.
-      const turnEdited = new Map<number, boolean>();
-      const calls = [...fold.calls.values()];
-      for (const call of calls) {
-        turnEdited.set(call.turn, (turnEdited.get(call.turn) ?? false) || call.edited);
-      }
-
-      const cost = zeroCost();
-      const empty = cost.emptyTurnTokens as TokenCounts;
-
-      for (const call of calls) {
-        cost.inputTokens += call.inputTokens;
-        cost.cacheReadTokens += call.cacheReadTokens;
-        cost.cacheCreationTokens += call.cacheCreationTokens;
-        cost.outputTokens += call.outputTokens;
-        if (turnEdited.get(call.turn) === false) {
-          // Every token this call moved was spent inside a turn that ended with
-          // nothing written. That is what the waste figure is made of.
-          empty.inputTokens += call.inputTokens;
-          empty.cacheReadTokens += call.cacheReadTokens;
-          empty.cacheCreationTokens += call.cacheCreationTokens;
-          empty.outputTokens += call.outputTokens;
-        }
-        if (!call.edited) {
-          cost.callsWithoutEdits += 1;
-        }
-        if (call.model !== "") {
-          callsByModel.set(call.model, (callsByModel.get(call.model) ?? 0) + 1);
-        }
-      }
-
-      cost.apiCalls = fold.calls.size;
-      cost.turns = turnEdited.size;
-      cost.emptyTurns = [...turnEdited.values()].filter((edited) => !edited).length;
-      cost.model = dominant(callsByModel);
-      return cost;
-    },
+    isAvailable: () => isDirectory(root),
+    capture: (window) => captureWindow(root, window),
   };
+}
+
+async function isDirectory(dir: string): Promise<boolean> {
+  try {
+    return (await stat(dir)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Every call any transcript reports inside the window, added up. */
+async function captureWindow(root: string, window: CaptureWindow): Promise<SessionCost> {
+  const from = Date.parse(window.from);
+  if (Number.isNaN(from) || Number.isNaN(Date.parse(window.to))) {
+    return NO_COST;
+  }
+
+  const fold: Fold = { calls: new Map(), nextTurn: 0 };
+  for (const file of await transcriptsTouchedIn(root, from)) {
+    const text = await readText(file);
+    if (text !== undefined) {
+      foldTranscript(text, window, fold);
+    }
+  }
+  return costOf([...fold.calls.values()]);
+}
+
+/** A file's contents, or nothing where it could not be read. */
+async function readText(file: string): Promise<string | undefined> {
+  try {
+    return await readFile(file, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Adds the calls up into one session's cost.
+ *
+ * Which turns produced nothing is settled first, before anything is counted: a
+ * turn counts once it has a call in the window, edits anywhere in it make the
+ * whole turn productive, and whether a call belongs to a wasted turn therefore
+ * depends on calls that may come after it.
+ */
+function costOf(calls: readonly Call[]): SessionCost {
+  const turnEdited = new Map<number, boolean>();
+  for (const call of calls) {
+    turnEdited.set(call.turn, (turnEdited.get(call.turn) ?? false) || call.edited);
+  }
+
+  const cost = zeroCost();
+  const callsByModel = new Map<string, number>();
+  for (const call of calls) {
+    addTokens(cost, call);
+    if (turnEdited.get(call.turn) === false) {
+      // Every token this call moved was spent inside a turn that ended with
+      // nothing written. That is what the waste figure is made of.
+      addTokens(cost.emptyTurnTokens as TokenCounts, call);
+    }
+    if (!call.edited) {
+      cost.callsWithoutEdits += 1;
+    }
+    if (call.model !== "") {
+      callsByModel.set(call.model, (callsByModel.get(call.model) ?? 0) + 1);
+    }
+  }
+
+  cost.apiCalls = calls.length;
+  cost.turns = turnEdited.size;
+  cost.emptyTurns = [...turnEdited.values()].filter((edited) => !edited).length;
+  cost.model = dominant(callsByModel);
+  return cost;
 }

@@ -253,6 +253,84 @@ describe("a week with sessions no rate covers", () => {
   });
 });
 
+describe("a week where nothing could be priced", () => {
+  const unpriced = (day: number, over: Partial<Session> = {}): Session =>
+    session({
+      startedAt: on(day),
+      cost: cost({ model: "mystery-9", inputTokens: 100_000 }),
+      ...over,
+    });
+
+  it("says the cost is unavailable rather than claiming the week cost nothing", () => {
+    const week = [unpriced(12), unpriced(13, { outcome: "open" })];
+
+    expect(lines(week)[2]).toBe(
+      "**cost unavailable — no rate for mystery-9 · 1 change shipped · 0 files touched outside plan**",
+    );
+  });
+
+  it("never puts $0.00 in the headline", () => {
+    expect(renderMarkdownWeek([unpriced(12)], 7, priced, NOW)).not.toContain("$0.00 spent");
+  });
+
+  it("names every model it has no rate for", () => {
+    const week = [unpriced(12), unpriced(13, { cost: cost({ model: "other-7", inputTokens: 5000 }) })];
+
+    expect(lines(week)[2]).toContain("no rate for mystery-9, other-7");
+  });
+
+  it("puts an em dash in the total row rather than a bolded nought", () => {
+    const week = [unpriced(12), unpriced(13)];
+
+    expect(lines(week).find((line) => line.includes("**Total**"))).toBe(
+      "| **Total** | **2 sessions** | **2 ✅** | — | **0** |",
+    );
+  });
+
+  it("says how many sessions that was, and what to do about it", () => {
+    const week = [unpriced(12), unpriced(13)];
+
+    expect(lines(week).find((line) => line.startsWith("No cost"))).toBe(
+      "No cost could be worked out: 2 sessions ran on a model with no rate (mystery-9). " +
+        "Add one to ~/.session/rates.json.",
+    );
+  });
+
+  it("does not point at a cost above that is not there", () => {
+    // The other shape of this note reads "The cost above covers 0 of 2
+    // sessions", which sends the reader looking for a figure the document
+    // deliberately did not print.
+    const document = renderMarkdownWeek([unpriced(12), unpriced(13)], 7, priced, NOW);
+
+    expect(document).not.toContain("The cost above");
+  });
+
+  it("still omits the cost per shipped change", () => {
+    expect(renderMarkdownWeek([unpriced(12)], 7, priced, NOW)).not.toContain("per shipped change");
+  });
+
+  it("leaves a week that genuinely cost nothing reading $0.00", () => {
+    // Nothing was captured, so no rate is missing and the nought is a fact.
+    // This is why the test is not simply `usd === 0`.
+    const free = session({ cost: zeroCost() });
+    const document = renderMarkdownWeek([free], 7, priced, NOW);
+
+    expect(document).toContain("**$0.00 spent ·");
+    expect(document).toContain("**$0.00**");
+    expect(document).not.toContain("cost unavailable");
+  });
+
+  it("says cost unavailable when the only priced session cost nothing", () => {
+    // One session with a rate and no tokens, one with tokens and no rate. The
+    // total is $0.00 and it is not the week's cost, so it is not printed.
+    const free = session({ startedAt: on(12), cost: zeroCost() });
+    const document = renderMarkdownWeek([free, unpriced(13)], 7, priced, NOW);
+
+    expect(document).toContain("cost unavailable — no rate for mystery-9");
+    expect(document).not.toContain("$0.00 spent");
+  });
+});
+
 describe("sessions that changed nothing", () => {
   const week = [
     session({ startedAt: on(12) }),
@@ -297,6 +375,25 @@ describe("sessions that changed nothing", () => {
     const document = renderMarkdownWeek([session(), free], 7, priced, NOW);
 
     expect(document).toContain("1 session changed no files and is not in the table.");
+  });
+
+  it("says the cost is uncoverable rather than dropping it, when no rate covers it", () => {
+    // These sessions are not in the table, so the unpriced note above never
+    // counts them: this line is the only place the document can admit that
+    // some of the bill has no rate behind it. Silence here would read exactly
+    // like the free session above.
+    const mystery = session({
+      outcome: "empty",
+      reality: [],
+      cost: cost({ model: "mystery-9", inputTokens: 100_000, turns: 3, apiCalls: 9 }),
+    });
+    const document = renderMarkdownWeek([session(), mystery], 7, priced, NOW);
+
+    expect(document).toContain(
+      "1 session changed no files and is not in the table, " +
+        "costing an amount no rate covers (mystery-9).",
+    );
+    expect(document).not.toContain("costing $0.00");
   });
 });
 
