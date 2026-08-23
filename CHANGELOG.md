@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command tree rather than a hand-kept list.
 - `session week --md`, a Markdown table for meeting notes, Slack, Notion or
   Confluence, and `--copy` to put it on the clipboard instead of stdout.
+- Bundled prices for the current Claude and OpenAI models, beside the older
+  ones already in `rates.json`. The file now records the date its prices were
+  checked and where to check them again.
+- A model no rate covers now prints a complete `~/.session/rates.json` — the
+  whole file with that model in it and every field present, ready to paste and
+  fill in — in `week` and in `estimate`, in place of the bare pointer at a
+  filename.
 
 ### Changed
 
@@ -24,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layout moved behind `--full`, which `--tokens` now implies.
 - Every function in `src/` refactored below 20 lines of code, with no change in
   behaviour and no test modified.
+
+### Fixed
+
+- `session --version` reported `0.3.0` on a `0.3.1` package. The version is now
+  read from `package.json` at runtime, resolved against the module rather than
+  the working directory, so a global install run inside another repo still
+  reports its own version and a release cannot bump one without the other.
 
 ## [0.3.0] — 2026-08-19
 

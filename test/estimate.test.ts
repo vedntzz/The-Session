@@ -263,6 +263,7 @@ describe("summarize", () => {
     expect(summarize([free, free, free], RATES)).toMatchObject({
       priced: 3,
       unpriced: 0,
+      unpricedModels: [],
       median: 0,
       p90: 0,
     });
@@ -594,6 +595,7 @@ describe("formatEstimate", () => {
     figures: {
       priced: 9,
       unpriced: 0,
+      unpricedModels: [],
       median: 7.5,
       p90: 13.5,
       mergedFirstTime: 6,
@@ -613,6 +615,7 @@ describe("formatEstimate", () => {
     figures: {
       priced: 6,
       unpriced: 0,
+      unpricedModels: [],
       median: 2.25,
       p90: 9,
       mergedFirstTime: 1,

@@ -3,6 +3,7 @@ import {
   priceSession,
   spendOf,
   unpricedThroughout,
+  USER_RATES_FILE,
   type RateTable,
   type Spend,
 } from "../pricing.js";
@@ -56,7 +57,7 @@ const ELLIPSIS = "…";
 const NO_COST = "—";
 
 /** Where a reader who wants these sessions priced is sent. */
-const RATES_HINT = "~/.session/rates.json";
+const RATES_HINT = USER_RATES_FILE;
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",

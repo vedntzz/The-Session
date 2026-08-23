@@ -4,8 +4,10 @@ import { attributionEntries } from "../config.js";
 import {
   formatUsd,
   priceSession,
+  rateStub,
   spendOf,
   unpricedThroughout,
+  USER_RATES_FILE,
   type Price,
   type RateTable,
   type Spend,
@@ -122,7 +124,7 @@ export interface View {
 const NO_RATES: RateTable = new Map();
 
 /** Where to send a reader whose model has no price on it. */
-const RATES_HINT = "~/.session/rates.json";
+const RATES_HINT = USER_RATES_FILE;
 
 /** The money, or the tokens and the reason there is no money. */
 function costCell(cost: SessionCost, price: Price): string {
@@ -947,11 +949,29 @@ function spendNotes(spend: Spend, palette: Palette): string[] {
     lines.push(
       palette.meta(
         `${INDENT}${plural(spend.unpriced, "session", "sessions")} unpriced: ` +
-          `${spend.unpricedModels.join(", ")} — add rates to ${RATES_HINT}`,
+          `${spend.unpricedModels.join(", ")} — save this as ${RATES_HINT}`,
       ),
+      ...stubLines(spend.unpricedModels, palette),
     );
   }
   return lines;
+}
+
+/**
+ * The file to write, whole, under the line that said a price was missing.
+ *
+ * A pointer at `~/.session/rates.json` tells somebody where to go and not what
+ * to put there, and the format is not one anybody knows by heart. This is the
+ * whole document with the model already in it, so the answer to an unpriced
+ * week is a paste and four numbers.
+ *
+ * `meta`, like the line above it: it is framing around the figures, and no
+ * view earns a colour role for showing a file.
+ */
+function stubLines(models: readonly string[], palette: Palette): string[] {
+  return rateStub(models)
+    .split("\n")
+    .map((line) => palette.meta(`${INDENT}${line}`));
 }
 
 /** How much of the week produced nothing, and what the marker in it means. */

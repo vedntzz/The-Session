@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -10,6 +10,7 @@ import {
   priceSession,
   priceTokens,
   rateFor,
+  rateStub,
   spendOf,
   unpricedThroughout,
   type ModelRate,
@@ -339,6 +340,53 @@ describe("the bundled table", () => {
     expect(rateFor("claude-opus-4-1-20250805", table)).toBeDefined();
   });
 
+  it("prices the current Claude and OpenAI models a transcript reports today", async () => {
+    // Dated and undated ids alike: the adapter reports whatever the transcript
+    // says, and a bundled table that only covered the bare id would leave a
+    // week of Opus sessions unpriced for the sake of a suffix.
+    const table = await loadRates();
+
+    for (const model of [
+      "claude-opus-5",
+      "claude-opus-5-20260115",
+      "claude-fable-5",
+      "claude-sonnet-5",
+      "claude-haiku-4-5",
+      "gpt-5.6-sol",
+      "gpt-5.6-luna",
+      "gpt-5.5",
+      "gpt-5-mini",
+    ]) {
+      expect(rateFor(model, table), model).toBeDefined();
+    }
+  });
+
+  it("does not let a family key swallow a dearer variant of it", async () => {
+    // `gpt-5.5-pro` costs six times `gpt-5.5`, and prefix matching would hand
+    // it the cheaper rate if the variant were missing from the table.
+    const table = await loadRates();
+
+    expect(rateFor("gpt-5.5-pro", table)?.key).toBe("gpt-5.5-pro");
+    expect(table.get("gpt-5.5-pro")?.input).toBeGreaterThan(
+      table.get("gpt-5.5")?.input ?? 0,
+    );
+  });
+
+  it("says where its prices came from and that they go stale", async () => {
+    // The numbers in here are a snapshot of somebody else's price list. A
+    // reader who cannot tell how old they are has no way to know whether to
+    // trust the invoice they end up on.
+    const file = JSON.parse(await readFile(bundledRatesFile(), "utf8")) as {
+      pricesGoStale?: string;
+      checkPricesAt?: Record<string, string>;
+      checked?: string;
+    };
+
+    expect(file.pricesGoStale).toMatch(/stale|out of date/i);
+    expect(Object.values(file.checkPricesAt ?? {}).length).toBeGreaterThan(0);
+    expect(file.checked).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it("quotes cache reads below fresh input for every model in it", async () => {
     // A table where the discount went the wrong way would price a long
     // session at several times what it cost, and nothing else would catch it.
@@ -346,6 +394,62 @@ describe("the bundled table", () => {
       expect(rate.cacheRead, model).toBeLessThan(rate.input);
       expect(rate.output, model).toBeGreaterThanOrEqual(rate.input);
     }
+  });
+});
+
+describe("rateStub", () => {
+  it("offers a whole file, not a fragment", () => {
+    // The reader has just been told a price is missing and is looking at a
+    // format they have never seen. Anything less than the whole document
+    // leaves them to work out what the entry hangs off.
+    const stub = rateStub(["mystery-9"]);
+
+    expect(JSON.parse(stub)).toMatchObject({
+      models: {
+        "mystery-9": { input: 0, cacheRead: 0, cacheCreation: 0, output: 0 },
+      },
+    });
+  });
+
+  it("comes back as something this tool would accept", () => {
+    // The stub and the checker read one list of fields. Were they two, the
+    // way it would show up is a file this tool printed and then rejected.
+    const table = parseRates(rateStub(["mystery-9", "gpt-9"]), "stub");
+
+    expect([...table.keys()]).toEqual(["mystery-9", "gpt-9"]);
+    expect(table.get("gpt-9")).toEqual({
+      input: 0,
+      cacheRead: 0,
+      cacheCreation: 0,
+      output: 0,
+    });
+  });
+
+  it("says the noughts are placeholders", () => {
+    // Pasted unchanged they price the model at nothing, which is the one
+    // thing no view here may say when it means nobody knows.
+    const note = (JSON.parse(rateStub(["mystery-9"])) as { note: string }).note;
+
+    expect(note).toMatch(/replace every 0/i);
+    expect(note).toMatch(/not the same as leaving it unpriced/i);
+  });
+
+  it("carries no price of its own, even for a model it could guess at", () => {
+    // A stub for `claude-opus-5-99` that arrived pre-filled with Opus rates
+    // would be the guess this file refuses to make anywhere else.
+    const stub = rateStub(["claude-opus-5-99"]);
+
+    expect(stub).not.toMatch(/: 5[,\s}]/);
+    expect(stub).not.toMatch(/25/);
+  });
+
+  it("names every model that could not be priced", () => {
+    const stub = rateStub(["gpt-9", "mystery-9"]);
+
+    expect(Object.keys((JSON.parse(stub) as { models: object }).models)).toEqual([
+      "gpt-9",
+      "mystery-9",
+    ]);
   });
 });
 

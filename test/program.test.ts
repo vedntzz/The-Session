@@ -805,6 +805,25 @@ describe("session", () => {
     ) as { version: string };
 
     expect(buildProgram().version()).toBe(manifest.version);
+    // Shape as well as equality. The two sides now read one file, so a
+    // manifest that gave back nothing usable would satisfy a comparison of
+    // it with itself; this is what says the thing read was a version.
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it("prints that version when asked for it", async () => {
+    // The getter agreeing with the manifest is not the same as `--version`
+    // reaching the user, which is the only way anybody actually asks.
+    const program = buildProgram().exitOverride();
+    let printed = "";
+    program.configureOutput({ writeOut: (text) => (printed += text) });
+
+    await expect(program.parseAsync(["--version"], { from: "user" })).rejects.toThrow();
+
+    const manifest = JSON.parse(
+      await readFile(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { version: string };
+    expect(printed.trim()).toBe(manifest.version);
   });
 });
 
@@ -937,7 +956,11 @@ describe("session, priced", () => {
     const lines = await run("week");
 
     expect(lines.some((line) => line.includes("$"))).toBe(false);
-    expect(lines.at(-2)).toContain("1 session unpriced: some-model-nobody-has-priced");
+    expect(
+      lines.some((line) => line.includes("1 session unpriced: some-model-nobody-has-priced")),
+    ).toBe(true);
+    // And the file that would fix it, whole, with the model already in it.
+    expect(lines.join("\n")).toContain('"some-model-nobody-has-priced": { "input": 0');
   });
 
   it("week --md says the cost is unavailable rather than totalling it at $0.00", async () => {

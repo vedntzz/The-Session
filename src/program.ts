@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Command, Help } from "commander";
 import { parseClass } from "./classify.js";
 import {
@@ -164,6 +165,34 @@ function commandEntries(program: Command): CommandEntry[] {
 }
 
 /**
+ * The version the package was published as, read off the manifest.
+ *
+ * Read rather than pasted. A version written out here as well is a version
+ * that will be bumped in one place and not the other — `npm version` writes
+ * the manifest and nothing else, so the copy here would go stale at the next
+ * release and the CLI would misreport itself to whoever was filing the bug.
+ *
+ * Resolved against this module, never the working directory: `session` is
+ * usually a global install being run from inside somebody else's repo, and
+ * the `package.json` in front of it there is theirs. Same `../` as
+ * `bundledRatesFile` — one level up from `dist/` when installed, one level up
+ * from `src/` when run from a checkout.
+ *
+ * Read once, at import: `buildProgram` is called per command and, in the
+ * tests, a hundred times over.
+ *
+ * Nothing catches a failure here. The manifest ships inside the package, so a
+ * missing one is a broken install rather than a missing option, and the
+ * alternative — falling back to some placeholder string — would report a
+ * confidently wrong version, which is the whole defect this replaced.
+ */
+const VERSION: string = (
+  JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    version: string;
+  }
+).version;
+
+/**
  * Builds the `session` command tree. Kept separate from the executable entry
  * point so tests can drive it without spawning a process; `options` is the
  * seam that lets them point the store somewhere temporary.
@@ -177,7 +206,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
   program
     .name("session")
     .description("Record what an AI coding session declared, what it changed, and what it cost")
-    .version("0.3.0");
+    .version(VERSION);
 
   registerHome(program, options, palette);
   // Commander adds its own `help [command]`, which would collide with the one

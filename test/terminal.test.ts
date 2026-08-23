@@ -644,9 +644,33 @@ describe("formatWeek", () => {
     const lines = formatWeek(unpriced, 7, plainPalette, {}, priced);
 
     expect(lines.some((text) => text.includes("spent"))).toBe(false);
-    expect(lines.at(-2)).toBe(
-      "  3 sessions unpriced: claude-opus-5 — add rates to ~/.session/rates.json",
+    expect(lines).toContain(
+      "  3 sessions unpriced: claude-opus-5 — save this as ~/.session/rates.json",
     );
+  });
+
+  it("prints a whole rates file for the model it could not price", () => {
+    // A pointer at a file nobody has opened is not an answer. What comes back
+    // has to be pasteable as it stands, which means every field of every
+    // model — a fragment leaves the reader guessing at the shape.
+    const unpriced = week().map((one) => ({
+      ...one,
+      cost: { ...one.cost, model: "claude-opus-5" },
+    }));
+    const lines = formatWeek(unpriced, 7, plainPalette, {}, priced);
+
+    const start = lines.findIndex((text) => text === "  {");
+    const stub = lines.slice(start, start + 6).map((text) => text.slice(2));
+
+    expect(JSON.parse(stub.join("\n"))).toMatchObject({
+      models: {
+        "claude-opus-5": { input: 0, cacheRead: 0, cacheCreation: 0, output: 0 },
+      },
+    });
+    // The noughts are placeholders, and the file says so — pasted unchanged
+    // they would price the week at $0.00, which is the one thing no view here
+    // is allowed to say when it means "nobody knows".
+    expect(stub.join("\n")).toContain("Replace every 0");
   });
 
   it("admits how much of a total it could not price", () => {
@@ -656,8 +680,8 @@ describe("formatWeek", () => {
     const mixed = [{ ...(first as Session), cost: { ...(first as Session).cost, model: "gpt-9" } }, ...rest];
     const lines = formatWeek(mixed, 7, plainPalette, {}, priced);
 
-    expect(lines.at(-3)).toBe("  $7.74 spent, $1.55 of it on changes that never merged");
-    expect(lines.at(-2)).toContain("1 session unpriced: gpt-9");
+    expect(lines).toContain("  $7.74 spent, $1.55 of it on changes that never merged");
+    expect(lines.some((text) => text.includes("1 session unpriced: gpt-9"))).toBe(true);
   });
 
   it("names the count of turns that changed no files", () => {

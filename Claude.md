@@ -288,6 +288,22 @@ a plausible wrong number. Match exactly, or by the longest key that is a prefix
 **at a dash** — transcripts report dated ids, and without the dash
 `claude-opus-4` would price `claude-opus-45`.
 
+The bundled table carries the current Claude and OpenAI models and the older
+ones a log may still hold, and it says on its face that prices go stale and
+where to check them — the numbers are a snapshot of somebody else's price list,
+and a release of this tool is not a price update. Nothing in the code reads
+those keys; they are there for the person who opens the file.
+
+A model in neither file is not sent away with the name of a file they have
+never opened. `rateStub` returns **the whole document**, with the model already
+in it and every field present, so the answer to an unpriced week is a paste and
+four numbers. The noughts in it are placeholders and the file says so: pasted
+unchanged they would price the model at nothing, and nought is not unknown —
+see below. It is one function, and the fields come off the same list `readRate`
+checks against, so a stub this tool prints cannot be one this tool rejects.
+Never fill a stub in with a nearby model's price; that is the guess the
+paragraph above refuses to make, arriving by another door.
+
 `emptyTurnTokens` is measured, not apportioned. The adapter knows which turn
 each call belonged to, so it adds the empty turns' tokens up directly; taking
 the session total times `emptyTurns / turns` would look like a measurement and

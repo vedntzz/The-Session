@@ -6,7 +6,14 @@ import {
 } from "../classify.js";
 import { withOutcomes } from "../observe.js";
 import { isTerminal, observations } from "../outcome.js";
-import { formatUsd, isPriced, priceSession, type RateTable } from "../pricing.js";
+import {
+  formatUsd,
+  isPriced,
+  priceSession,
+  rateStub,
+  USER_RATES_FILE,
+  type RateTable,
+} from "../pricing.js";
 import {
   intentSourceOf,
   readSessions,
@@ -70,6 +77,8 @@ export interface EstimateFigures {
   priced: number;
   /** Sessions whose model no rate covers, left out of the money. */
   unpriced: number;
+  /** Which models those were, distinct and sorted, so a stub can name them. */
+  unpricedModels: string[];
   median: number;
   p90: number;
   /** Sessions that had landed the first time anyone looked. */
@@ -264,6 +273,9 @@ export function summarize(
   return {
     priced: costs.length,
     unpriced: sessions.length - costs.length,
+    unpricedModels: [
+      ...new Set(prices.filter((price) => !isPriced(price)).map((price) => price.model)),
+    ].sort(),
     // Zero when nothing could be priced. The `priced` count beside it is what
     // says whether that is a figure or a hole, and the view prints both.
     median: costs.length > 0 ? median(costs) : 0,
@@ -425,8 +437,26 @@ function formatGroup(group: EstimateGroup): string[] {
     mergedLine(figures),
     ...driftLines(figures, group),
     ...unpricedLines(figures),
+    ...stubLines(figures),
   );
   return lines;
+}
+
+/**
+ * The file that would price the rest, whole, under the line that said it
+ * could not be.
+ *
+ * The reader has just been told the median is over part of the sample. What
+ * they need next is not the name of a file they have never opened but the
+ * contents of it, with the models already filled in — see `rateStub`.
+ */
+function stubLines(figures: EstimateFigures): string[] {
+  if (figures.unpriced === 0) {
+    return [];
+  }
+  return rateStub(figures.unpricedModels)
+    .split("\n")
+    .map((text) => `  ${" ".repeat(LABEL_WIDTH)}${text}`);
 }
 
 /**
@@ -454,7 +484,7 @@ function sampleLines(group: EstimateGroup): string[] {
 /** The median and the p90, or the admission that nothing here has a rate. */
 function costLines(figures: EstimateFigures): string[] {
   if (figures.priced === 0) {
-    return [line("cost", "no price for any of these models — see ~/.session/rates.json")];
+    return [line("cost", `no price for any of these models — see ${USER_RATES_FILE}`)];
   }
   return [line("median", formatUsd(figures.median)), line("p90", formatUsd(figures.p90))];
 }

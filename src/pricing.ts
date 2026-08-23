@@ -211,6 +211,54 @@ export function formatUsd(value: number): string {
   })}`;
 }
 
+// --- the file a reader has to write --------------------------------------
+
+/** Where a reader whose model has no price is sent to give it one. */
+export const USER_RATES_FILE = "~/.session/rates.json";
+
+/**
+ * The four fields an entry needs, in the order the file writes them.
+ *
+ * One list, read by the thing that checks a file and by the thing that offers
+ * one to write. Two copies could come to disagree, and the way that shows up
+ * is a stub this tool printed being rejected by this tool.
+ */
+const RATE_FIELDS = ["input", "cacheRead", "cacheCreation", "output"] as const;
+
+/** What the stub says about the noughts in it, so nobody pastes them as prices. */
+const STUB_NOTE =
+  "Replace every 0 below with that model's published price in dollars per " +
+  "million tokens. A rate left at 0 prices the model at nothing, which is not " +
+  "the same as leaving it unpriced.";
+
+/**
+ * A rates file for the models nothing could price.
+ *
+ * A whole file, not a fragment. The reader this is for has just been told a
+ * figure is missing and is looking at a format they have never seen; handing
+ * them `"input": 0` and leaving them to work out what it hangs off is how a
+ * week goes unpriced for a month. What comes back from here can be saved as
+ * `~/.session/rates.json` as it stands, and `parseRates` accepts it — the
+ * fields come off the same list `readRate` checks against.
+ *
+ * The noughts are placeholders and are labelled as placeholders. A stub that
+ * guessed at the price would be the one thing this file refuses to do
+ * anywhere else, and a stub with the numbers left out would not parse.
+ */
+export function rateStub(models: readonly string[]): string {
+  const fields = RATE_FIELDS.map((field) => `"${field}": 0`).join(", ");
+  const entries = models.map((model) => `    ${JSON.stringify(model)}: { ${fields} }`);
+
+  return [
+    "{",
+    `  "note": ${JSON.stringify(STUB_NOTE)},`,
+    '  "models": {',
+    entries.join(",\n"),
+    "  }",
+    "}",
+  ].join("\n");
+}
+
 // --- loading the table ---------------------------------------------------
 
 /** The name of the file, in both places one lives. */
@@ -225,9 +273,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function readRate(value: unknown, model: string, source: string): ModelRate {
   const fields = isObject(value) ? value : {};
-  const kinds = ["input", "cacheRead", "cacheCreation", "output"] as const;
 
-  for (const kind of kinds) {
+  for (const kind of RATE_FIELDS) {
     const rate = fields[kind];
     if (typeof rate !== "number" || !Number.isFinite(rate) || rate < 0) {
       throw new Error(
