@@ -167,16 +167,9 @@ export function evidenceFor(session: Session, facts: RepoFacts): FileEvidence[] 
  * once nothing is in the tree does a partial landing count as merged, the
  * remainder having been dropped somewhere along the way.
  */
-export function classify(files: readonly FileEvidence[]): OutcomeVerdict {
-  const landed = files.filter((file) => file.landed).map((file) => file.path);
-  // Content-equal, including both being absent: a deletion the session made
-  // and nobody has undone is still sitting in the working tree.
-  const present = files.filter((file) => file.working === file.ended);
-  const inFlight = present.filter((file) => !file.landed).map((file) => file.path);
-  const lost = files
-    .filter((file) => !file.landed && file.working !== file.ended)
-    .map((file) => file.path);
 
+export function classify(files: readonly FileEvidence[]): OutcomeVerdict {
+  const { landed, inFlight, lost } = sortEvidence(files);
   const verdict = (outcome: SessionOutcome): OutcomeVerdict => ({
     outcome,
     landed,
@@ -199,6 +192,24 @@ export function classify(files: readonly FileEvidence[]): OutcomeVerdict {
     return verdict("merged");
   }
   return verdict("abandoned");
+}
+
+/** The three piles a verdict is read off: landed, still here, and gone. */
+function sortEvidence(files: readonly FileEvidence[]): {
+  landed: string[];
+  inFlight: string[];
+  lost: string[];
+} {
+  // Content-equal, including both being absent: a deletion the session made
+  // and nobody has undone is still sitting in the working tree.
+  const present = files.filter((file) => file.working === file.ended);
+  return {
+    landed: files.filter((file) => file.landed).map((file) => file.path),
+    inFlight: present.filter((file) => !file.landed).map((file) => file.path),
+    lost: files
+      .filter((file) => !file.landed && file.working !== file.ended)
+      .map((file) => file.path),
+  };
 }
 
 /** Every observation recorded against a session, oldest first. */

@@ -186,17 +186,11 @@ export function recordCall(
   entry: Record<string, unknown>,
   turn: number,
 ): boolean {
-  if (entry["type"] !== "assistant") {
+  const call = assistantCall(entry);
+  if (call === undefined) {
     return false;
   }
-  const requestId = entry["requestId"];
-  if (typeof requestId !== "string") {
-    return false;
-  }
-  const message = entry["message"];
-  if (!isObject(message)) {
-    return false;
-  }
+  const { requestId, message } = call;
   const edited = touchesFiles(message);
 
   const existing = calls.get(requestId);
@@ -215,6 +209,18 @@ export function recordCall(
   return true;
 }
 
+/** The parts of an entry that make it a call, or nothing where it is not one. */
+function assistantCall(
+  entry: Record<string, unknown>,
+): { requestId: string; message: Record<string, unknown> } | undefined {
+  const requestId = entry["requestId"];
+  const message = entry["message"];
+  if (entry["type"] !== "assistant" || typeof requestId !== "string" || !isObject(message)) {
+    return undefined;
+  }
+  return { requestId, message };
+}
+
 /**
  * Adds the calls up into one session's cost.
  *
@@ -223,6 +229,7 @@ export function recordCall(
  * whole turn productive, and whether a call belongs to a wasted turn therefore
  * depends on calls that may come after it.
  */
+
 export function costOfCalls(calls: readonly Call[]): SessionCost {
   const turnEdited = new Map<number, boolean>();
   for (const call of calls) {
@@ -232,15 +239,7 @@ export function costOfCalls(calls: readonly Call[]): SessionCost {
   const cost = zeroCost();
   const callsByModel = new Map<string, number>();
   for (const call of calls) {
-    addTokens(cost, call);
-    if (turnEdited.get(call.turn) === false) {
-      // Every token this call moved was spent inside a turn that ended with
-      // nothing written. That is what the waste figure is made of.
-      addTokens(cost.emptyTurnTokens as TokenCounts, call);
-    }
-    if (!call.edited) {
-      cost.callsWithoutEdits += 1;
-    }
+    addCall(cost, call, turnEdited.get(call.turn) === false);
     if (call.model !== "") {
       callsByModel.set(call.model, (callsByModel.get(call.model) ?? 0) + 1);
     }
@@ -251,4 +250,17 @@ export function costOfCalls(calls: readonly Call[]): SessionCost {
   cost.emptyTurns = [...turnEdited.values()].filter((edited) => !edited).length;
   cost.model = dominant(callsByModel);
   return cost;
+}
+
+/** One call's tokens, and its tokens again where its whole turn wrote nothing. */
+function addCall(cost: SessionCost, call: Call, turnWroteNothing: boolean): void {
+  addTokens(cost, call);
+  if (turnWroteNothing) {
+    // Every token this call moved was spent inside a turn that ended with
+    // nothing written. That is what the waste figure is made of.
+    addTokens(cost.emptyTurnTokens as TokenCounts, call);
+  }
+  if (!call.edited) {
+    cost.callsWithoutEdits += 1;
+  }
 }

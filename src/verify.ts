@@ -95,18 +95,13 @@ const str = (value: unknown): string | undefined => (typeof value === "string" ?
  * their `prev`. Reporting the first failure therefore points at the line that
  * was touched, not at the wreckage downstream of it.
  */
+
 export function checkChain(
   lines: readonly RawLine[],
   complete: boolean,
   publicKey?: PublicKey,
 ): ChainCheck {
-  const check: ChainCheck = {
-    total: lines.length,
-    verified: 0,
-    unsigned: 0,
-    signaturesChecked: publicKey !== undefined,
-    truncatedTail: false,
-  };
+  const check = emptyCheck(lines.length, publicKey);
   const walk: Walk = { prev: GENESIS, signedSeen: false };
 
   for (const [index, line] of lines.entries()) {
@@ -125,6 +120,17 @@ export function checkChain(
   }
 
   return check;
+}
+
+/** A walk that has read nothing yet, which is what an empty log stays at. */
+function emptyCheck(total: number, publicKey?: PublicKey): ChainCheck {
+  return {
+    total,
+    verified: 0,
+    unsigned: 0,
+    signaturesChecked: publicKey !== undefined,
+    truncatedTail: false,
+  };
 }
 
 /** What the walk carries from one line to the next. */
@@ -154,6 +160,22 @@ interface RecordFields {
   sig?: string;
 }
 
+/** Ordered so the first thing reported is the first thing an edit breaks. */
+function firstFault(
+  fields: RecordFields,
+  walk: Walk,
+  check: ChainCheck,
+  publicKey?: PublicKey,
+): Fault | undefined {
+  return (
+    checkLink(fields, walk.prev) ??
+    checkSigned(fields) ??
+    checkBody(fields, walk.prev) ??
+    checkKeyClaim(fields, check, publicKey) ??
+    checkSignature(fields, publicKey)
+  );
+}
+
 /**
  * Checks one record, in the order in which an edit shows itself, and advances
  * the walk past it when it holds up.
@@ -175,12 +197,7 @@ function checkRecord(
   }
   walk.signedSeen = true;
 
-  const broken =
-    checkLink(fields, walk.prev) ??
-    checkSigned(fields) ??
-    checkBody(fields, walk.prev) ??
-    checkKeyClaim(fields, check, publicKey) ??
-    checkSignature(fields, publicKey);
+  const broken = firstFault(fields, walk, check, publicKey);
   if (broken) {
     return broken;
   }
@@ -202,17 +219,20 @@ function readRecord(text: string): { fields: RecordFields } | { fault: Fault } {
   if (!isObject(parsed) || typeof parsed["id"] !== "string" || !isObject(parsed["set"])) {
     return { fault: fault("corrupt", "not a session record") };
   }
+  return { fields: fieldsOf(parsed) };
+}
+
+/** Missing fields read as empty, which is what a pre-signing record has. */
+function fieldsOf(parsed: Record<string, unknown>): RecordFields {
   return {
-    fields: {
-      v: typeof parsed["v"] === "number" ? parsed["v"] : 1,
-      id: parsed["id"],
-      at: str(parsed["at"]),
-      set: parsed["set"],
-      prev: str(parsed["prev"]),
-      key: str(parsed["key"]),
-      hash: str(parsed["hash"]),
-      sig: str(parsed["sig"]),
-    },
+    v: typeof parsed["v"] === "number" ? parsed["v"] : 1,
+    id: parsed["id"] as string,
+    at: str(parsed["at"]),
+    set: parsed["set"] as Record<string, unknown>,
+    prev: str(parsed["prev"]),
+    key: str(parsed["key"]),
+    hash: str(parsed["hash"]),
+    sig: str(parsed["sig"]),
   };
 }
 

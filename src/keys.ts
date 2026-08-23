@@ -129,10 +129,28 @@ export async function loadOrCreateKeypair(home: string): Promise<Keypair> {
 
   await mkdir(keysDir(home), { recursive: true, mode: 0o700 });
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 
+  const winner = await claimPrivateKey(home, privateKey);
+  if (winner) {
+    return signing(winner, home); // another process got there first
+  }
+
+  await writePublicKey(home, publicKey);
+  return signing(privateKey, home);
+}
+
+/**
+ * Writes the new key, or returns the one already there.
+ *
+ * `wx` is what makes this a race nobody loses badly: the process that arrives
+ * second is refused the write and reads the winner's key instead of replacing
+ * a key that may already have signed records.
+ */
+async function claimPrivateKey(home: string, privateKey: KeyObject): Promise<KeyObject | undefined> {
+  const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   try {
     await writeFile(privateKeyFile(home), pem, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    return undefined;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
       throw error;
@@ -141,11 +159,8 @@ export async function loadOrCreateKeypair(home: string): Promise<Keypair> {
     if (!winner) {
       throw error;
     }
-    return signing(winner, home);
+    return winner;
   }
-
-  await writePublicKey(home, publicKey);
-  return signing(privateKey, home);
 }
 
 /**

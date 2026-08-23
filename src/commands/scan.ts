@@ -115,6 +115,7 @@ async function foldFile(file: string, from: number, to: number): Promise<Folded>
  * single file the order written is the order things happened, and sorting
  * would mean holding the whole file to answer a question that needs one line.
  */
+
 function readLine(
   line: string,
   folded: Folded,
@@ -132,12 +133,8 @@ function readLine(
   if (folded.cwd === undefined && typeof entry["cwd"] === "string") {
     folded.cwd = entry["cwd"];
   }
-
   if (isUserAuthored(entry)) {
-    setTurn(turn() + 1);
-    if (folded.label === undefined) {
-      folded.label = promptTextOf(entry);
-    }
+    openTurn(entry, folded, turn, setTurn);
     return;
   }
   if (at < from || at > to) {
@@ -146,6 +143,19 @@ function readLine(
   if (recordCall(folded.calls, entry, turn())) {
     folded.first = Math.min(folded.first ?? at, at);
     folded.last = Math.max(folded.last ?? at, at);
+  }
+}
+
+/** A prompt cuts a turn, and the first one that reads as a prompt names the session. */
+function openTurn(
+  entry: Record<string, unknown>,
+  folded: Folded,
+  turn: () => number,
+  setTurn: (next: number) => void,
+): void {
+  setTurn(turn() + 1);
+  if (folded.label === undefined) {
+    folded.label = promptTextOf(entry);
   }
 }
 

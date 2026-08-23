@@ -72,20 +72,24 @@ function isObject(value: unknown): value is Record<string, unknown> {
  * next `config set` would start a fight in the diff.
  */
 async function readRaw(file: string): Promise<Record<string, unknown>> {
-  let text: string;
+  const text = await readText(file);
+  return text.trim() === "" ? {} : parseObject(text, file);
+}
+
+/** The file's text, or empty where a repo has never declared attribution. */
+async function readText(file: string): Promise<string> {
   try {
-    text = await readFile(file, "utf8");
+    return await readFile(file, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return {};
+      return "";
     }
     throw error;
   }
+}
 
-  if (text.trim() === "") {
-    return {};
-  }
-
+/** Both failures name the file and what to do, since a human wrote it by hand. */
+function parseObject(text: string, file: string): Record<string, unknown> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

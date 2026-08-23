@@ -63,21 +63,8 @@ async function openingFacts(cwd: string): Promise<Pick<NewSession, "startedAt" |
  */
 export async function startSession(intent: string, options: StartOptions = {}): Promise<Session> {
   const declared = intent.trim();
-  if (declared === "") {
-    throw new Error('No intent given. Run: session start "what you are about to do"');
-  }
-
   const cwd = options.cwd ?? process.cwd();
-  if (!(await isRepo(cwd))) {
-    throw new Error(`Not a git repository: ${cwd}. Run session start from inside your repo.`);
-  }
-
-  const open = await getOpenSession(options);
-  if (open) {
-    throw new Error(
-      `A session is already open: "${describeOpen(open)}". Run session stop to close it.`,
-    );
-  }
+  await refuseUnlessStartable(declared, cwd, options);
 
   return appendSession(
     {
@@ -88,6 +75,26 @@ export async function startSession(intent: string, options: StartOptions = {}): 
     },
     options,
   );
+}
+
+/** Each refusal names what is wrong and the command that fixes it. */
+async function refuseUnlessStartable(
+  declared: string,
+  cwd: string,
+  options: StartOptions,
+): Promise<void> {
+  if (declared === "") {
+    throw new Error('No intent given. Run: session start "what you are about to do"');
+  }
+  if (!(await isRepo(cwd))) {
+    throw new Error(`Not a git repository: ${cwd}. Run session start from inside your repo.`);
+  }
+  const open = await getOpenSession(options);
+  if (open) {
+    throw new Error(
+      `A session is already open: "${describeOpen(open)}". Run session stop to close it.`,
+    );
+  }
 }
 
 /** How an open session is named in the message that refuses to open a second. */
@@ -110,20 +117,15 @@ function describeOpen(open: Session): string {
  * the same reason: there is nothing to record, and an error in that position
  * is an error in the editor every time it starts anywhere else.
  */
+
 export async function startPassiveSession(options: StoreOptions = {}): Promise<Session | undefined> {
   const cwd = options.cwd ?? process.cwd();
-  if (!(await isRepo(cwd))) {
+  if (!(await isRepo(cwd)) || (await getOpenSession(options))) {
     return undefined;
   }
-  if (await getOpenSession(options)) {
+  const facts = await openingFactsOrNothing(cwd);
+  if (facts === undefined) {
     return undefined;
-  }
-
-  let facts: Awaited<ReturnType<typeof openingFacts>>;
-  try {
-    facts = await openingFacts(cwd);
-  } catch {
-    return undefined; // no commit to diff against; nothing to open
   }
 
   return appendSession(
@@ -137,6 +139,17 @@ export async function startPassiveSession(options: StoreOptions = {}): Promise<S
     },
     options,
   );
+}
+
+/** Nothing rather than a throw: no commit to diff against means nothing to open. */
+async function openingFactsOrNothing(
+  cwd: string,
+): Promise<Awaited<ReturnType<typeof openingFacts>> | undefined> {
+  try {
+    return await openingFacts(cwd);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
