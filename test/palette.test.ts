@@ -179,7 +179,7 @@ const GOLDEN: readonly string[] = [
   "  01-15 14:02  add rate limiting to /orders  $3.69      7      2  merged",
   "",
   "  1 session                                  $3.69      7      2",
-  "  $3.69 spent, $0.00 of it on changes that never merged",
+  "  $3.69 spent, all of it shipped",
   "  2 of 7 turns changed no files",
   "",
   "  No sessions in the last 7 days",

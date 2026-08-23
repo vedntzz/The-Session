@@ -11,7 +11,8 @@ import {
   type SessionPatch,
   type StoreOptions,
 } from "../store.js";
-import { describePaths, intentOf } from "../render/terminal.js";
+import { isPriced, priceSession, type RateTable } from "../pricing.js";
+import { describePaths, intentOf, unpricedTokens } from "../render/terminal.js";
 
 /** What `session stop` needs, on top of where the store lives. */
 export interface StopOptions extends StoreOptions {
@@ -159,7 +160,27 @@ export async function stopIfOpen(options: StopOptions = {}): Promise<Session | u
  * The lines `session stop` prints. The `outside` line appears only when the
  * session drifted, so a clean session stays quiet about it.
  */
-export function formatStopped(session: Session): string[] {
+/**
+ * The tokens, and the model where no rate covers it.
+ *
+ * `stop` reports tokens rather than money — it is the line printed the moment
+ * an agent finishes, and the money is what `show` and `week` are for. What it
+ * owes the reader is the model, in the same words `week` and `scan` use, so a
+ * session that turns up unpriced in the week is recognisable here.
+ *
+ * Without a rate table nothing is claimed either way. `stop` is called in
+ * places that have no rates to hand, and "unpriced" would then mean "nobody
+ * asked" rather than "no rate covers this".
+ */
+function tokensSpent(cost: SessionCost, rates?: RateTable): string {
+  const tokens = `${totalTokens(cost).toLocaleString("en-US")} tokens`;
+  if (rates === undefined || isPriced(priceSession(cost, rates))) {
+    return tokens;
+  }
+  return unpricedTokens(cost);
+}
+
+export function formatStopped(session: Session, rates?: RateTable): string[] {
   // Capped the same way `show` caps its sentence, by the same function: a
   // reader who learned the rule in one view should not meet a different
   // answer in the other. Two spaces, because this is a column and not prose.
@@ -172,7 +193,7 @@ export function formatStopped(session: Session): string[] {
   if (session.cost.apiCalls > 0) {
     const { turns, emptyTurns, apiCalls, callsWithoutEdits } = session.cost;
     lines.push(
-      `  cost     ${totalTokens(session.cost).toLocaleString("en-US")} tokens  ` +
+      `  cost     ${tokensSpent(session.cost, rates)}  ` +
         `${turns} turns, ${emptyTurns} without edits  ` +
         `(${apiCalls} api calls, ${callsWithoutEdits} without edits)`,
     );

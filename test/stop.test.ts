@@ -13,7 +13,15 @@ import {
   stopSession,
   type StopOptions,
 } from "../src/commands/stop.js";
-import { getOpenSession, readSessions, zeroCost, zeroTokens } from "../src/store.js";
+import { parseRates } from "../src/pricing.js";
+import {
+  getOpenSession,
+  readSessions,
+  zeroCost,
+  zeroTokens,
+  type Session,
+  type SessionCost,
+} from "../src/store.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -492,6 +500,65 @@ describe("formatStopped", () => {
     const lines = formatStopped(await stopSession(options));
 
     expect(lines[2]).toBe("  outside  4 files, all in db/");
+  });
+
+  /** Stops a session whose cost came from a stub adapter, so the model is ours to pick. */
+  async function stopped(over: Partial<SessionCost>): Promise<Session> {
+    await startSession("spend some tokens", { ...options, scope: ["api/"] });
+    await write("api/orders.py", "changed");
+    return stopSession({
+      ...options,
+      adapters: [
+        {
+          name: "stub",
+          isAvailable: async () => true,
+          capture: async () => ({ ...zeroCost(), ...over }),
+        },
+      ],
+    });
+  }
+
+  it("names the model when no rate covers it, in the words week uses", async () => {
+    // The reader's next move is to put a rate against that name, so the name
+    // is the part that has to be here.
+    const session = await stopped({ model: "mystery-9", inputTokens: 900, apiCalls: 2, turns: 1 });
+    const rates = parseRates(JSON.stringify({ models: {} }), "test rates");
+
+    expect(formatStopped(session, rates).at(-1)).toContain("900 tokens, mystery-9 unpriced");
+  });
+
+  it("says model, not an empty name, where nothing recorded which one ran", async () => {
+    const session = await stopped({ model: "", inputTokens: 900, apiCalls: 2, turns: 1 });
+    const rates = parseRates(JSON.stringify({ models: {} }), "test rates");
+
+    expect(formatStopped(session, rates).at(-1)).toContain("900 tokens, model unpriced");
+  });
+
+  it("says nothing about pricing when it was handed no rates to check against", async () => {
+    // "Unpriced" would then mean "nobody asked", which is a different fact.
+    const session = await stopped({ model: "mystery-9", inputTokens: 900, apiCalls: 2, turns: 1 });
+
+    expect(formatStopped(session).at(-1)).toContain("900 tokens  ");
+    expect(formatStopped(session).join("\n")).not.toContain("unpriced");
+  });
+
+  it("leaves a priced session's line as the tokens it moved", async () => {
+    // `stop` reports tokens; the money is what `show` and `week` are for.
+    const session = await stopped({
+      model: "claude-opus-5",
+      inputTokens: 900,
+      apiCalls: 2,
+      turns: 1,
+    });
+    const rates = parseRates(
+      JSON.stringify({
+        models: { "claude-opus-5": { input: 5, cacheRead: 0.5, cacheCreation: 6.25, output: 25 } },
+      }),
+      "test rates",
+    );
+
+    expect(formatStopped(session, rates).at(-1)).toContain("900 tokens  ");
+    expect(formatStopped(session, rates).join("\n")).not.toContain("unpriced");
   });
 
   it("adds a cost line reporting the token total and call counts", async () => {

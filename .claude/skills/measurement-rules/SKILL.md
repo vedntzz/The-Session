@@ -218,6 +218,14 @@ Rationale and the file format:
 [What it cost](../../../docs/decisions.md#what-it-cost) and
 [Where the prices come from](../../../docs/decisions.md#where-the-prices-come-from).
 
+An unpriced session names the model wherever one is reported: `week`'s cost
+cell, `scan`'s note, and `stop`'s cost line all read `<n> tokens, <model>
+unpriced`, from `unpricedTokens` in `render/terminal/cost.ts`. The model is the
+only actionable part — the reader's next move is to put a rate against that
+name. Note `stop` reports tokens and not money, and says nothing about pricing
+at all when it was handed no rate table: "unpriced" would then mean "nobody
+asked", which is a different fact.
+
 `pricing.ts` is the only file that knows a price. Everything above `loadRates`
 is pure: `priceTokens`, `rateFor`, `priceSession`, `spendOf`, `formatUsd`.
 
@@ -251,6 +259,25 @@ the session total times `emptyTurns / turns` would look like a measurement and
 would not be one. Empty turns are not average turns — the expensive one is the
 whole point. Don't "simplify" this into a ratio, and don't backfill it onto
 records that predate it.
+
+## A category with no members
+
+No money figure stands in for a category that is empty. `week` says `$X spent,
+all of it shipped` rather than `$0.00 of it on changes that never merged` — a
+nought there is a number the reader has to decode into "none", and a nought is
+what this tool prints when it means *unknown*.
+
+"All of it shipped" is only said when every priced dollar sat on a session
+that merged. Sessions that changed no files are kept out of `unmerged` — they
+had nothing to land — which leaves a window of nothing but those looking like
+a clean sweep. `spendOf` therefore reports their spend as `empty`, apart from
+both, and a window with any of it says `none of it on changes that never
+merged` instead. Both counters are exactly zero when no such session
+contributed, so the test never rests on comparing two sums of floats.
+
+It is one function, `shippedNote` in `pricing.ts`, called by `week` and by the
+page `week --open` writes. Two copies would be two chances for the terminal
+and the page to say different things about one window.
 
 ## A total nobody can work out
 

@@ -11,12 +11,20 @@ import {
   priceTokens,
   rateFor,
   rateStub,
+  shippedNote,
   spendOf,
   unpricedThroughout,
   type ModelRate,
   type RateTable,
+  type Spend,
 } from "../src/pricing.js";
-import { zeroCost, zeroTokens, type Session, type SessionCost } from "../src/store.js";
+import {
+  zeroCost,
+  zeroTokens,
+  type Session,
+  type SessionCost,
+  type SessionOutcome,
+} from "../src/store.js";
 
 /**
  * The arithmetic and the table lookup are pure and tested as such. Only the
@@ -227,9 +235,66 @@ describe("spendOf", () => {
     expect(spendOf([], rates)).toEqual({
       usd: 0,
       unmerged: 0,
+      empty: 0,
       unpriced: 0,
       unpricedModels: [],
     });
+  });
+});
+
+describe("shippedNote", () => {
+  const note = (over: Partial<Spend>): string =>
+    shippedNote({ usd: 100, unmerged: 0, empty: 0, unpriced: 0, unpricedModels: [], ...over });
+
+  it("gives the figure when some of the money never merged", () => {
+    expect(note({ unmerged: 25 })).toBe("$25.00 of it on changes that never merged");
+  });
+
+  it("says all of it shipped rather than printing a nought", () => {
+    // No money figure for a category with nothing in it: `$0.00 of it on
+    // changes that never merged` is a number the reader has to decode into
+    // "none", and a nought is what this tool prints when it means unknown.
+    expect(note({ unmerged: 0 })).toBe("all of it shipped");
+  });
+
+  it("refuses to say anything shipped when the money was all on empty sessions", () => {
+    // The trap this guard exists for. A session that changed no files had
+    // nothing to land, so it is kept out of `unmerged` — which leaves a week
+    // of nothing but those looking, to a naive reading, like a clean sweep.
+    expect(note({ unmerged: 0, empty: 100 })).toBe("none of it on changes that never merged");
+  });
+
+  it("will not claim a clean sweep while any dollar sat on an empty session", () => {
+    expect(note({ unmerged: 0, empty: 1 })).not.toContain("shipped");
+  });
+
+  it("still leads with the unmerged figure when there is both", () => {
+    expect(note({ unmerged: 25, empty: 10 })).toBe("$25.00 of it on changes that never merged");
+  });
+});
+
+describe("spendOf, what the money came to", () => {
+  const at = (outcome: SessionOutcome, tokens: number): Session =>
+    session({
+      outcome,
+      cost: cost({ model: "claude-haiku-4-5", outputTokens: tokens, turns: 1, apiCalls: 1 }),
+    });
+
+  it("keeps money on sessions that changed nothing out of both work figures", () => {
+    // In the total, because it was spent; out of `unmerged`, because there
+    // was no change to land; and named apart, so no view has to guess.
+    const spend = spendOf([at("merged", 1_000), at("empty", 500)], rates);
+
+    expect(spend.usd).toBeGreaterThan(0);
+    expect(spend.unmerged).toBe(0);
+    expect(spend.empty).toBeGreaterThan(0);
+  });
+
+  it("counts an open session against unmerged, not against empty", () => {
+    const spend = spendOf([at("open", 1_000)], rates);
+
+    expect(spend.unmerged).toBeGreaterThan(0);
+    expect(spend.empty).toBe(0);
   });
 });
 

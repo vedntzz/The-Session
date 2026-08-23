@@ -5,7 +5,7 @@
 // layouts, and the only thing they share is the text helpers in `terminal/`.
 export { intentOf, CAPTURED_MARKER } from "./terminal/intent.js";
 export { describePaths, summarizePaths, PATHS_NAMED, type PathSummary } from "./terminal/paths.js";
-export type { View } from "./terminal/cost.js";
+export { unpricedTokens, type View } from "./terminal/cost.js";
 export { formatSession } from "./terminal/session.js";
 export { formatBrief } from "./terminal/brief.js";
 export { formatHome, type Home } from "./terminal/home.js";

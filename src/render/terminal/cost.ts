@@ -28,9 +28,20 @@ export const NO_PRICE = "—";
 
 /** The money, or the tokens and the reason there is no money. */
 export function costCell(cost: SessionCost, price: Price): string {
-  if (price.priced) {
-    return formatUsd(price.usd);
-  }
+  return price.priced ? formatUsd(price.usd) : unpricedTokens(cost);
+}
+
+/**
+ * What a session moved, and the model nothing could price it at.
+ *
+ * The model is named because it is the only actionable part: the reader's next
+ * move is to put a rate against that name. `week`, `scan` and `stop` all say
+ * it this way, from here, so the same session reads the same in all three.
+ *
+ * A cost with no model at all reads `model unpriced` rather than naming an
+ * empty string — nothing was captured to say which model ran.
+ */
+export function unpricedTokens(cost: SessionCost): string {
   const model = cost.model === "" ? "model" : cost.model;
   return `${figure(totalTokens(cost))} tokens, ${model} unpriced`;
 }

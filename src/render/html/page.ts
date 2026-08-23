@@ -4,6 +4,7 @@ import type { SessionFilter } from "../../commands/week.js";
 import {
   formatUsd,
   priceSession,
+  shippedNote,
   spendOf,
   unpricedThroughout,
   type RateTable,
@@ -230,8 +231,7 @@ export function footerBlock(sessions: readonly Session[], spend: Spend): string 
   // could be priced — the summary above carries that distinction.
   const spent =
     spend.usd > 0
-      ? `<p>${escapeHtml(formatUsd(spend.usd))} spent, ` +
-        `${escapeHtml(formatUsd(spend.unmerged))} of it on changes that never merged</p>`
+      ? `<p>${escapeHtml(formatUsd(spend.usd))} spent, ${escapeHtml(shippedNote(spend))}</p>`
       : "";
   const wasted =
     turns > 0

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { Session, SessionCost, TokenCounts } from "./store.js";
+import type { Session, SessionCost, SessionOutcome, TokenCounts } from "./store.js";
 
 /**
  * What a session cost in money.
@@ -124,6 +124,15 @@ export interface Spend {
    * inflate the figure with sessions that never had anything to land.
    */
   unmerged: number;
+  /**
+   * Of the total, what went on sessions that changed no files.
+   *
+   * Kept apart from `unmerged` rather than folded into it — a session with no
+   * changes had nothing to land, so it is not work that failed to ship. It is
+   * here because without it a window of nothing but empty sessions has
+   * `unmerged: 0`, which reads as "everything shipped" when nothing did.
+   */
+  empty: number;
   /** How many sessions carried a model no rate covers. */
   unpriced: number;
   /** Which models those were, distinct and sorted, for a message worth acting on. */
@@ -136,36 +145,72 @@ export interface Spend {
  */
 export function spendOf(sessions: readonly Session[], rates: RateTable): Spend {
   const models = new Set<string>();
-  let usd = 0;
-  let unmerged = 0;
-  let unpriced = 0;
+  const spend: Spend = { usd: 0, unmerged: 0, empty: 0, unpriced: 0, unpricedModels: [] };
 
   for (const session of sessions) {
     const price = priceSession(session.cost, rates);
-    if (!price.priced) {
+    if (price.priced) {
+      addSpend(spend, price.usd, session.outcome);
+    } else if (session.cost.apiCalls > 0 || session.cost.turns > 0) {
       // A session that spent nothing at all needs no rate, and reporting it as
       // unpriced would be reporting a gap that costs nobody anything.
-      if (session.cost.apiCalls > 0 || session.cost.turns > 0) {
-        unpriced += 1;
-        models.add(session.cost.model === "" ? "unknown" : session.cost.model);
-      }
-      continue;
-    }
-    usd += price.usd;
-    // Everything that did not merge, less what never tried to. A session that
-    // changed no files has no changes that failed to land, and counting its
-    // spend here would put money into a figure about work that was thrown
-    // away when no work was done. It stays in `usd`: it was still spent.
-    //
-    // Read off `outcome`, which by the time a view calls this holds what the
-    // repository says now — see `withOutcomes`. The same is true of `merged`
-    // beside it.
-    if (session.outcome !== "merged" && session.outcome !== "empty") {
-      unmerged += price.usd;
+      spend.unpriced += 1;
+      models.add(session.cost.model === "" ? "unknown" : session.cost.model);
     }
   }
 
-  return { usd, unmerged, unpriced, unpricedModels: [...models].sort() };
+  spend.unpricedModels = [...models].sort();
+  return spend;
+}
+
+/**
+ * One session's money, into the total and into whichever category it belongs.
+ *
+ * Everything that did not merge, less what never tried to: a session that
+ * changed no files has no changes that failed to land, so its spend is kept
+ * apart in `empty` rather than counted as work thrown away. It stays in `usd`
+ * either way — it was still spent.
+ *
+ * Read off `outcome`, which by the time a view calls this holds what the
+ * repository says now — see `withOutcomes`.
+ */
+function addSpend(spend: Spend, usd: number, outcome: SessionOutcome): void {
+  spend.usd += usd;
+  if (outcome === "empty") {
+    spend.empty += usd;
+  } else if (outcome !== "merged") {
+    spend.unmerged += usd;
+  }
+}
+
+/**
+ * What became of the money, as the clause after "$X spent, ".
+ *
+ * No money figure for a category with nothing in it. `$0.00 of it on changes
+ * that never merged` is a figure the reader has to work out means "none", and
+ * a nought printed where a category is simply empty is the same defect as a
+ * nought printed where nothing could be priced.
+ *
+ * "All of it shipped" is only said when every priced dollar is on a session
+ * that merged. A window of nothing but sessions that changed no files also
+ * has `unmerged: 0` — they had nothing to land — and claiming those shipped
+ * would be the overstatement this whole tool exists to avoid. Both counters
+ * are exactly zero when no such session contributed, so this never rests on
+ * comparing two sums of floats.
+ *
+ * One function, called by `week` and by the page `week --open` writes, so the
+ * terminal and the page cannot come to say different things about one window.
+ */
+export function shippedNote(spend: Spend): string {
+  if (spend.unmerged > 0) {
+    return `${formatUsd(spend.unmerged)} of it on changes that never merged`;
+  }
+  if (spend.empty > 0) {
+    // Everything that could land, landed — but not every dollar was on work
+    // that could. Said this way round because it is the figure that is nought.
+    return "none of it on changes that never merged";
+  }
+  return "all of it shipped";
 }
 
 /**

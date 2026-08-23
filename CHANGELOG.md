@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `session stop` names the model on its cost line when no rate covers it, in
+  the same words `week` and `scan` use.
+- `session week` says `all of it shipped` where no spend went to unmerged work,
+  rather than printing `$0.00` for a category with nothing in it. Money on
+  sessions that changed no files is reported apart, so a week of those is never
+  read as a clean sweep.
 - `session stop` caps its `changed` and `outside` lines the way `session show`
   caps its sentence: three or fewer paths are named, and past that the line
   gives the count and the two directories most of them are in. Both views go

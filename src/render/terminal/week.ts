@@ -4,6 +4,7 @@ import type { SessionFilter } from "../../commands/week.js";
 import {
   formatUsd,
   priceSession,
+  shippedNote,
   spendOf,
   unpricedThroughout,
   type Price,
@@ -349,10 +350,7 @@ function sessionRows(
 function spendNotes(spend: Spend, palette: Palette): string[] {
   const lines: string[] = [];
   if (spend.usd > 0) {
-    lines.push(
-      `${INDENT}${formatUsd(spend.usd)} spent, ${formatUsd(spend.unmerged)} of it on ` +
-        "changes that never merged",
-    );
+    lines.push(`${INDENT}${formatUsd(spend.usd)} spent, ${shippedNote(spend)}`);
   }
   if (spend.unpriced > 0) {
     // Said out loud, because the total above is a total of the rest.

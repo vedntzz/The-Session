@@ -1,6 +1,8 @@
 // `session stop`.
 import type { Command } from "commander";
 import { formatStopped, stopIfOpen, stopSession } from "../commands/stop.js";
+import { loadRates } from "../pricing.js";
+import { storeHome } from "../store.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
 
@@ -14,6 +16,6 @@ export function registerStop(program: Command, options: ProgramOptions): void {
       if (!session) {
         return; // nothing was open, and --if-open says that is fine
       }
-      printLines(formatStopped(session));
+      printLines(formatStopped(session, await loadRates(storeHome(options))));
     });
 }
