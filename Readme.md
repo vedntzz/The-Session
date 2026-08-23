@@ -18,11 +18,15 @@ npm i -g @vedantzz/session
 ## Quickstart
 
 ```bash
+session scan           # what the agent sessions already on this disk cost — no setup at all
 session hook install   # register the Claude Code hooks, once per machine
 # work normally — the hook opens a record and closes it when the agent stops
 session                # where this repo stands, and the one thing worth typing next
 session week           # one row per session, what each cost, what came of it
 ```
+
+`scan` is the one command that answers before you have recorded anything: it
+reads the transcripts already on your disk, and writes nothing anywhere.
 
 ## Why declare intent first
 
@@ -32,6 +36,7 @@ Without a declaration there is one entry in the ledger — what the machine prod
 
 | | |
 |---|---|
+| `session scan` | What the sessions already on this machine cost, last 30 days. No setup, read-only. |
 | `session start "<intent>"` | Open a session by hand. Records HEAD and the scope you declare with `--scope`. |
 | `session show` | The last session, in two sentences. `--full` for every path and counter. |
 | `session week` | The last 7 days, one row each. `--md` writes it for Slack, Notion or a meeting. |
