@@ -11,7 +11,7 @@ import {
   type SessionPatch,
   type StoreOptions,
 } from "../store.js";
-import { intentOf } from "../render/terminal.js";
+import { describePaths, intentOf } from "../render/terminal.js";
 
 /** What `session stop` needs, on top of where the store lives. */
 export interface StopOptions extends StoreOptions {
@@ -160,10 +160,14 @@ export async function stopIfOpen(options: StopOptions = {}): Promise<Session | u
  * session drifted, so a clean session stays quiet about it.
  */
 export function formatStopped(session: Session): string[] {
-  const changed = session.reality.length > 0 ? session.reality.join("  ") : "nothing";
+  // Capped the same way `show` caps its sentence, by the same function: a
+  // reader who learned the rule in one view should not meet a different
+  // answer in the other. Two spaces, because this is a column and not prose.
+  const changed =
+    session.reality.length > 0 ? describePaths(session.reality, "  ") : "nothing";
   const lines = [`  stopped  ${intentOf(session)}`, `  changed  ${changed}`];
   if (session.drift.length > 0) {
-    lines.push(`  outside  ${session.drift.join("  ")}`);
+    lines.push(`  outside  ${describePaths(session.drift, "  ")}`);
   }
   if (session.cost.apiCalls > 0) {
     const { turns, emptyTurns, apiCalls, callsWithoutEdits } = session.cost;

@@ -904,12 +904,34 @@ describe("formatBrief", () => {
     expect(lines[2]).toBe("  1 file changed outside what you declared: src/store.ts.");
   });
 
-  it("counts the rest rather than naming twelve paths in a sentence", () => {
-    const drift = ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"];
+  it("names three paths, which is what fits beside the words round them", () => {
+    const drift = ["a.ts", "b.ts", "c.ts"];
     const lines = brief({ scope: ["src/"], reality: drift, drift });
 
-    // The count in front is exact; the list is what fits. `--full` has all five.
-    expect(lines[2]).toBe("  5 files changed outside what you declared: a.ts, b.ts, c.ts, and 2 more.");
+    expect(lines[2]).toBe("  3 files changed outside what you declared: a.ts, b.ts, c.ts.");
+  });
+
+  it("counts them and says where instead, once there are more than three", () => {
+    // The count in front stays exact; the paths are what gets dropped, and
+    // `--full` still has every one of them.
+    const drift = [
+      "src/render/a.ts",
+      "src/render/b.ts",
+      "src/render/c.ts",
+      "test/d.test.ts",
+    ];
+    const lines = brief({ scope: ["src/api/"], reality: drift, drift });
+
+    expect(lines[2]).toBe(
+      "  4 files changed outside what you declared, mostly in src/render/ and test/.",
+    );
+  });
+
+  it("says all in rather than mostly in when one directory holds every one", () => {
+    const drift = ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts"];
+    const lines = brief({ scope: ["docs/"], reality: drift, drift });
+
+    expect(lines[2]).toBe("  4 files changed outside what you declared, all in src/.");
   });
 
   it("says when everything stayed inside", () => {

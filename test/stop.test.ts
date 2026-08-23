@@ -459,6 +459,41 @@ describe("formatStopped", () => {
     ]);
   });
 
+  it("counts the changed files and says where, once there are more than three", async () => {
+    // The same cap `show` puts on its sentence, by the same function: a reader
+    // who learned the rule in one view meets the same answer in the other.
+    await startSession("touch the api", { ...options, scope: ["api/"] });
+    for (const name of ["orders.py", "items.py", "carts.py"]) {
+      await write(`api/${name}`, "changed");
+    }
+    await write("db/schema.py", "changed");
+
+    expect(formatStopped(await stopSession(options))[1]).toBe(
+      "  changed  4 files, mostly in api/ and db/",
+    );
+  });
+
+  it("still names them when there are three or fewer", async () => {
+    await startSession("touch the api", { ...options, scope: ["api/"] });
+    await write("api/orders.py", "changed");
+    await write("api/items.py", "changed");
+
+    expect(formatStopped(await stopSession(options))[1]).toBe(
+      "  changed  api/items.py  api/orders.py",
+    );
+  });
+
+  it("caps the outside line the same way", async () => {
+    await startSession("touch the api", { ...options, scope: ["api/"] });
+    for (const name of ["a.py", "b.py", "c.py", "d.py"]) {
+      await write(`db/${name}`, "changed");
+    }
+
+    const lines = formatStopped(await stopSession(options));
+
+    expect(lines[2]).toBe("  outside  4 files, all in db/");
+  });
+
   it("adds a cost line reporting the token total and call counts", async () => {
     await startSession("spend some tokens", { ...options, scope: ["api/"] });
     await write("api/orders.py", "changed");

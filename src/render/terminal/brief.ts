@@ -4,6 +4,7 @@ import { isCaptured, type Session, type SessionCost } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { costCell, NO_RATES, wasteCell, type View } from "./cost.js";
 import { CAPTURED_MARKER, intentOf } from "./intent.js";
+import { summarizePaths } from "./paths.js";
 import { INDENT, plural } from "./text.js";
 
 // --- the brief views -----------------------------------------------------
@@ -26,12 +27,6 @@ import { INDENT, plural } from "./text.js";
 
 /** Separates the figures on the metadata line. */
 const FIGURE_GAP = " · ";
-
-/**
- * How many drift paths the sentence names before it starts counting instead.
- * Three is what fits on a line beside the words around it.
- */
-const DRIFT_IN_SENTENCE = 3;
 
 /** What `show` says when a session has no scope to have drifted from. */
 const NO_DRIFT_POSSIBLE =
@@ -77,16 +72,14 @@ function askedFor(session: Session): { before: string; intent: string; after: st
 function wentOutside(session: Session): { before: string; paths: string; after: string } {
   if (session.drift.length > 0) {
     const files = plural(session.drift.length, "file", "files");
-    const shown = session.drift.slice(0, DRIFT_IN_SENTENCE);
-    // The count is always exact; the list is not always complete. A sentence
-    // naming twelve paths is a sentence nobody reads to the end, and the
-    // number in front of it is the part that decides whether to run `--full`.
-    const rest = session.drift.length - shown.length;
-    return {
-      before: `${files} changed outside what you declared: `,
-      paths: shown.join(", "),
-      after: rest > 0 ? `, and ${rest} more.` : ".",
-    };
+    const declared = `${files} changed outside what you declared`;
+    // The count in front is always exact; the paths are what gets dropped when
+    // there are too many of them to read, and `--full` still has every one.
+    const summary = summarizePaths(session.drift);
+    if (summary.named.length === 0) {
+      return { before: `${declared}, ${summary.where}.`, paths: "", after: "" };
+    }
+    return { before: `${declared}: `, paths: summary.named.join(", "), after: "." };
   }
   // Before the scope check, because it is the stronger fact. A session that
   // changed nothing had nothing to go outside a scope, declared or not, and

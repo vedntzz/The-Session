@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `session stop` caps its `changed` and `outside` lines the way `session show`
+  caps its sentence: three or fewer paths are named, and past that the line
+  gives the count and the two directories most of them are in. Both views go
+  through one summariser, so the rule cannot come to differ between them.
+
 - `session --help` now lists four entry points instead of fifteen. Nothing was
   removed from the parser; `session help all` lists the rest.
 - `session show` is two sentences and three figures by default. The labelled

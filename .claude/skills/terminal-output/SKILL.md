@@ -51,10 +51,20 @@ Nothing in the brief views is computed differently. They read the same
 `intent`, `scope`, `drift` and `cost` the full view reads; what changed is how
 much is said at once. Two consequences worth keeping:
 
-- The drift **count** in the sentence is always exact; the **list** stops at
-  three and counts the rest. A sentence naming twelve paths is one nobody
-  finishes, and the number in front of it is what decides whether to run
-  `--full`.
+- The **count** is always exact; the **paths** are what gets dropped. Three or
+  fewer are named; past that the line gives the count and the two directories
+  most of them are in. A sentence naming twelve paths is one nobody finishes,
+  and the number in front of it is what decides whether to run `--full`.
+- That rule is `summarizePaths` in `render/terminal/paths.ts`, and both views
+  that name files go through it — `show`'s sentence and `stop`'s `changed` and
+  `outside` lines. Each supplies its own separator, a comma for prose and two
+  spaces for a column; neither owns the threshold. Two copies of it would be
+  two chances for a reader to learn the rule in one view and meet a different
+  answer in the other. Note `--full` deliberately does not cap: it is the view
+  somebody opens *because* they want every path.
+- Where the paths are not named, one directory holding all of them reads `all
+  in db/` rather than `mostly in db/`. "Mostly" would understate a fact the
+  paths have already settled, and this line is all the reader gets.
 - The four cases of the second sentence are ordered by which fact the reader
   most needs: something went outside, here it is; nothing changed at all;
   nothing was declared, so the question cannot be asked; everything stayed
