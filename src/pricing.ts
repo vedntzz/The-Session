@@ -188,8 +188,12 @@ export function spendOf(sessions: readonly Session[], rates: RateTable): Spend {
  * It lives here rather than in any one renderer because every view that shows
  * a total obeys it, and three copies of a two-clause test are three chances
  * for the views to come to disagree about what a week cost.
+ *
+ * Takes the two fields it reads rather than a whole `Spend`, so `scan` — which
+ * totals transcripts nobody recorded and so has no `unmerged` to report — is
+ * held to the same rule instead of spelling it out again for itself.
  */
-export function unpricedThroughout(spend: Spend): boolean {
+export function unpricedThroughout(spend: Pick<Spend, "usd" | "unpriced">): boolean {
   return spend.usd === 0 && spend.unpriced > 0;
 }
 

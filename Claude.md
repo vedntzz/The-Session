@@ -33,8 +33,12 @@
 src/
   cli.ts           command registration
   commands/        start.ts stop.ts show.ts week.ts verify.ts key.ts config.ts
-                   settle.ts estimate.ts intent.ts home.ts
-  capture/         hook.ts, adapters/claude-code.ts
+                   settle.ts estimate.ts intent.ts home.ts scan.ts
+  capture/         hook.ts, transcript.ts, adapters/claude-code.ts
+                   transcript.ts is what a transcript line means; the adapter
+                   and scan.ts both read through it, so neither can drift on
+                   what a turn is or what a call cost
+  scan.ts          the aggregation behind `scan`, pure
   store.ts         JSONL read/append
   config.ts        .session.json at the repo root — attribution, checked in
   outcome.ts       merged/abandoned/open from repo facts, pure
@@ -222,6 +226,53 @@ half.
 
 `show` names it, `week` marks the row and filters on it, and `estimate`
 reports the two apart. Nothing pools them.
+
+## Scan
+
+`session scan` answers the question the rest of the tool cannot: what have the
+agent sessions on this machine already cost, for somebody who has recorded
+none of them. No `session start`, no hook, no `~/.session`, nothing to set up.
+It is the only command that is useful before the tool is adopted, and the
+only one that must stay useful to somebody who never adopts it.
+
+**Read-only, and that is the whole promise.** It writes no record, touches
+nothing under `~/.session`, and modifies no repo — it opens transcripts, asks
+git questions, and prints. A test asserts the repo is byte-identical
+afterwards, because the moment this command writes something it becomes a
+thing you have to opt into, which is what it exists not to be.
+
+One transcript is one session. That is a different unit from the adapter,
+which folds every transcript in a window into the one session somebody
+declared — but the reading underneath is the same reading. `capture/transcript.ts`
+holds what a line means: calls keyed by `requestId` so streaming fragments
+collapse, the four counters kept apart, turns cut at developer-authored
+entries. Two parsers would have the tool quoting two figures for the same work
+with nothing to say which was right.
+
+Transcripts are **streamed**, a line at a time. They reach fourteen megabytes
+and a scan opens every one of them; `readFile` over a directory of them is
+hundreds of megabytes held at once to answer a question that never needs two
+lines together.
+
+The label is the session's first prompt, because a transcript says nothing else
+about what the work was for — nothing was declared, so there is no intent to
+quote. Note the label and the turn boundary are separate questions: `/clear`
+starts a turn and will never be a label, and keeping them apart is what stops a
+nicer label moving a cost figure.
+
+**Nothing here says `merged`.** Where the repo is a checkout, `scan` asks git
+which commits reached the default branch and reports how many sessions were
+running when one did. That is a coincidence in time. `outcome.ts` earns the
+word merged by finding the blob a session left in the branch's history, and
+`scan` has no diff to do it with — so the report says "overlapped a commit"
+and the HTML page leaves the outcome cell `open`. A checkout that could not be
+asked is counted apart from one that said no: not knowing where work went is
+not the same answer as knowing it went nowhere.
+
+The dearest three are ranked over the sessions that could be priced, and how
+many could not is printed beside them. "The three most expensive" is a claim
+about an order; a session with no rate has no place in it, and putting it last
+would say it was cheap.
 
 ## Estimate
 

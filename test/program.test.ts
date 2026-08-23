@@ -374,6 +374,34 @@ describe("session", () => {
     expect(written.join("")).toContain("session help all");
   });
 
+  it("names every command it left out, read off the tree rather than by hand", () => {
+    // The sentence was written out by hand once and was wrong by three
+    // commands within a release. Built from the tree, a command registered
+    // without being added here cannot go unmentioned.
+    const written: string[] = [];
+    const program = buildProgram(store);
+    program.configureOutput({ writeOut: (text) => written.push(text) }).outputHelp();
+    const help = written.join("");
+
+    const brief = ["start", "week"];
+    for (const command of program.commands.map((one) => one.name())) {
+      if (brief.includes(command) || command === "help") {
+        continue;
+      }
+      expect(help, command).toContain(command);
+    }
+  });
+
+  it("does not break the command it tells you to run across two lines", () => {
+    // It is the one thing in the sentence the reader is meant to type.
+    const written: string[] = [];
+    buildProgram(store)
+      .configureOutput({ writeOut: (text) => written.push(text) })
+      .outputHelp();
+
+    expect(written.join("")).toMatch(/^.*session help all\./m);
+  });
+
   it("help all lists every command, including the ones --help leaves out", async () => {
     const listed = (await run("help", "all"))
       .slice(3)
@@ -464,7 +492,7 @@ describe("session", () => {
     expect(row.split(/(?<!\\)\|/)).toHaveLength(7);
   });
 
-  it("registers exactly the sixteen subcommands", () => {
+  it("registers exactly the seventeen subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
@@ -479,6 +507,7 @@ describe("session", () => {
       "peers",
       "pull",
       "push",
+      "scan",
       "settle",
       "show",
       "start",

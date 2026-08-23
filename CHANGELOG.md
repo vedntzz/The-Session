@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   command tree rather than a hand-kept list.
 - `session week --md`, a Markdown table for meeting notes, Slack, Notion or
   Confluence, and `--copy` to put it on the clipboard instead of stdout.
+- `session scan`: what the agent sessions already on this machine have cost,
+  with no setup and nothing recorded beforehand. Reads Claude Code's
+  transcripts, groups by repository, and reports the spend, the share of it
+  that went to turns which changed no files, and the three dearest sessions.
+  `--days`, `--repo` and `--open`. Read-only — it writes no record, touches
+  nothing under `~/.session`, and modifies no repo.
 - Bundled prices for the current Claude and OpenAI models, beside the older
   ones already in `rates.json`. The file now records the date its prices were
   checked and where to check them again.
@@ -31,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layout moved behind `--full`, which `--tokens` now implies.
 - Every function in `src/` refactored below 20 lines of code, with no change in
   behaviour and no test modified.
+- What a Claude Code transcript line means moved to `capture/transcript.ts`,
+  shared by the adapter and `scan` so the two cannot come to disagree about
+  what a turn is or what a call cost.
+- The sentence under `session --help` naming the commands it leaves out is now
+  read off the command tree. Written by hand it had already gone stale by
+  three commands.
 
 ### Fixed
 

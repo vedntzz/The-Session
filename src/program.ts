@@ -12,6 +12,13 @@ import { homeState } from "./commands/home.js";
 import { estimateFor, formatEstimate, parseSince } from "./commands/estimate.js";
 import { captureFromPrompt, promptFromHook, readHookPayload } from "./commands/intent.js";
 import { formatKey, showKey } from "./commands/key.js";
+import {
+  DEFAULT_SCAN_DAYS,
+  parseScanDays,
+  scanSessions,
+  transcriptsExist,
+  type ScanOptions,
+} from "./commands/scan.js";
 import { formatMark, formatSettle, markSession, settleSessions } from "./commands/settle.js";
 import { showSession } from "./commands/show.js";
 import { formatStarted, startPassiveSession, startSession } from "./commands/start.js";
@@ -51,16 +58,19 @@ import {
   formatBrief,
   formatCommands,
   formatHome,
+  formatScan,
   formatSession,
   formatWeek,
   type CommandEntry,
 } from "./render/terminal.js";
-import { parseIntentSource, storeHome } from "./store.js";
+import type { ScannedSession } from "./scan.js";
+import { parseIntentSource, storeHome, type Session } from "./store.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
 export type ProgramOptions = StopOptions &
   WeekOptions &
-  HookOptions & {
+  HookOptions &
+  ScanOptions & {
     /**
      * How the terminal views are inked. Defaults to what this process's stdout
      * and environment call for — colour into a terminal, nothing into a pipe.
@@ -139,11 +149,72 @@ function configureHelp(program: Command): void {
     },
   });
 
-  program.addHelpText(
-    "after",
-    "\nEverything else — stop, show, estimate, verify, settle, push, pull, config, key,\n" +
-      "hook — still works and is listed under session help all.",
+  // A function, so it is built when the help is printed rather than when this
+  // runs — `registerCommands` has not happened yet. Written out by hand this
+  // sentence was one release from being wrong, and it was: `scan` shipped and
+  // the list still named ten commands.
+  program.addHelpText("after", () => `\n${everythingElse(program)}`);
+}
+
+/** Width the footer sentence wraps at, matching the help above it. */
+const HELP_WIDTH = 78;
+
+/**
+ * The sentence under the short help: what it left out, and where to find it.
+ *
+ * Read off the command tree, like `session help all` and for the same reason.
+ * The short list is a decision about what a first reader can use; this is a
+ * statement about what exists, and a statement about what exists may not be
+ * kept by hand.
+ */
+function everythingElse(program: Command): string {
+  const rest = program.commands
+    .map((command) => command.name())
+    .filter((name) => !BRIEF_COMMANDS.includes(name) && name !== "help");
+
+  if (rest.length === 0) {
+    return "Everything is listed above.";
+  }
+  return wrap(
+    `Everything else — ${rest.join(", ")} — still works and is listed under ` +
+      `${HELP_ALL.replaceAll(" ", "\u0000")}.`,
+    HELP_WIDTH,
   );
+}
+
+/**
+ * The command the sentence points at, kept whole.
+ *
+ * It is something the reader is meant to type, so a line break through the
+ * middle of it turns the one actionable thing in the sentence into two halves
+ * that have to be reassembled by hand.
+ */
+const HELP_ALL = "session help all";
+
+/**
+ * Greedy wrap on spaces. The sentence is prose, so words stay whole — and
+ * `HELP_ALL` counts as one word, however many spaces are in it.
+ */
+function wrap(text: string, width: number): string {
+  const lines: string[] = [];
+  let line = "";
+  const atomic = "\u0000";
+  for (const token of text.split(" ")) {
+    const word = token.replaceAll(atomic, " ");
+    if (line === "") {
+      line = word;
+    } else if (line.length + 1 + word.length <= width) {
+      line += ` ${word}`;
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  }
+
+  if (line !== "") {
+    lines.push(line);
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -229,6 +300,7 @@ function registerCommands(program: Command, options: ProgramOptions, palette: Pa
   registerStop(program, options);
   registerShow(program, options, palette);
   registerWeek(program, options, palette);
+  registerScan(program, options, palette);
   registerEstimate(program, options);
   registerVerify(program, options);
   registerSettle(program, options);
@@ -454,6 +526,87 @@ async function emitWeekPage(html: string, options: ProgramOptions): Promise<void
   const file = await writeWeekPage(html, options);
   console.log(`  wrote    ${file}`);
   await openInBrowser(file, options);
+}
+
+/**
+ * `session scan` — what the transcripts already on disk cost, for somebody who
+ * has recorded nothing.
+ *
+ * The one command that answers before the tool has been adopted: no `session
+ * start`, no hook, no `~/.session`, nothing to set up. It reads, prices, and
+ * prints. It writes no record, which is what makes it safe to run on a machine
+ * that has never seen this tool and may never see it again.
+ */
+function registerScan(program: Command, options: ProgramOptions, palette: Palette): void {
+  program
+    .command("scan")
+    .description("What the agent sessions already on this machine have cost — no setup needed")
+    .option("--days <n>", `how far back to look (default ${DEFAULT_SCAN_DAYS})`)
+    .option("--repo <path>", "only sessions that ran in this checkout")
+    .option("--open", "write the scan as an HTML page and open it")
+    .action(async (flags: { days?: string; repo?: string; open?: boolean }) => {
+      const days = parseScanDays(flags.days);
+      if (!(await transcriptsExist(options))) {
+        console.log("");
+        console.log(`${SCAN_INDENT}${NO_TRANSCRIPTS}`);
+        return;
+      }
+
+      const rates = await loadRates(storeHome(options));
+      const { report, sessions } = await scanSessions(days, rates, {
+        ...options,
+        repo: flags.repo ?? options.repo,
+      });
+
+      if (flags.open) {
+        await emitWeekPage(renderWeek(asSessions(sessions), days, {}, { rates }), options);
+        return;
+      }
+      printLines(formatScan(report, palette));
+    });
+}
+
+const SCAN_INDENT = "  ";
+
+/** What to say on a machine where the agent has never run. */
+const NO_TRANSCRIPTS =
+  "No Claude Code transcripts on this machine — nothing to scan. " +
+  "Looked in ~/.claude/projects.";
+
+/**
+ * Scanned sessions in the shape the HTML page renders.
+ *
+ * Built here and thrown away: nothing is written, and these never reach the
+ * store. `week --open` and `scan --open` are the same page because they answer
+ * the same question, and a second renderer would be a second set of totals to
+ * keep in agreement with the first.
+ *
+ * Three fields are deliberately empty and one is deliberately `open`. A scan
+ * sees a transcript and no diff, so it knows of no scope, no changed paths and
+ * no drift, and it cannot settle an outcome: `merged` in this tool means the
+ * blob a session left is in the default branch's history, which is evidence
+ * `scan` does not have. The report's own view says how many sessions
+ * overlapped a commit, in those words. Filling this cell in from that would
+ * put a claim on the page that the terminal is careful not to make.
+ */
+function asSessions(scanned: readonly ScannedSession[]): Session[] {
+  return scanned.map((session) => ({
+    id: session.id,
+    repo: session.repo,
+    intent: session.label,
+    // True by construction: these words were typed at the agent, not declared
+    // to this tool before the work.
+    intentSource: "captured" as const,
+    scope: [],
+    baseline: [],
+    reality: [],
+    drift: [],
+    cost: session.cost,
+    outcome: "open" as const,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    startCommit: "",
+  }));
 }
 
 function registerEstimate(program: Command, options: ProgramOptions): void {
