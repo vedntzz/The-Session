@@ -15,6 +15,35 @@ Any total printed here obeys the unpriced rule: **nought is not the same as
 unknown**. That rule lives with the arithmetic, in the `measurement-rules`
 skill under "A total nobody can work out" — load it before touching a figure.
 
+## The order every view is in
+
+Three rules, and they hold in `show`, `week`, `scan` and the Markdown document
+alike. They are what the views are *for*, not a house style:
+
+1. **The first line says where the work went.** How many sessions, how many
+   landed on the default branch, how many did not. `show` says it as a
+   sentence about one session; `week` and `scan` say it as counts.
+2. **Drift comes before cost.** What went outside what was declared is the
+   thing this tool measures that nothing else does. Every column, row and
+   sentence about it precedes every one about money.
+3. **A total in money is one dim line at the bottom, and nowhere else.** Never
+   a heading, never the first figure, never bright, and never in a totals row
+   as well — `week`'s and the Markdown table's cost cells in the totals row are
+   deliberately empty, and the line under the table is the only total. Per
+   session, cost stays in the detail views: `show`'s figure line, `show
+   --full`'s rows, the cost column of a table.
+
+The reason is that the agents meter their own spend now, so a view that opened
+on a dollar figure would be answering a question its reader has already had
+answered. Money is still printed — a week nobody can put a figure on is a week
+nobody can bill — but it closes a view rather than leading it.
+
+`spentFigure` in `render/terminal/week.ts` is the one function that decides
+whether a window's money reads `$0.00`, a figure, or an em dash. `week` and
+`render/markdown.ts` both call it. Two copies of that two-clause test are two
+chances for the terminal and the page somebody pastes into Notion to disagree
+about what one week cost.
+
 ## The CLI surface
 
 Written for somebody who has just watched an agent run for forty minutes. That
@@ -42,10 +71,23 @@ the state, because in each state there is one obvious next move and at most one
 other worth knowing. Commander would print the help here — the right answer to
 "what is this" and the wrong one to "where am I".
 
-`session show` is two sentences and a line of three figures: what was asked
-for, what went outside what was declared, and cost / turns / turns that
-produced nothing. The labelled layout is `--full`, and `--tokens` implies it
-rather than being quietly ignored.
+`session show` is three sentences and a line of three figures: where the work
+ended up, what was asked for, what went outside what was declared, and then
+cost / turns / turns that produced nothing. The labelled layout is `--full`,
+and `--tokens` implies it rather than being quietly ignored.
+
+The outcome sentence is read off `outcome`, which by the time a view runs holds
+what the repository says now rather than what the record was written with — see
+`withOutcomes`. Four ends, four sentences, each saying only what its evidence
+supports: a session still open has not landed and has not failed to, and one
+that changed no files never had anything to land. `WHERE_IT_WENT` in
+`render/terminal/brief.ts` is the whole of the wording. "Landed on the default
+branch", never "shipped" — it is the plainest description of what `outcome.ts`
+actually checked.
+
+`--full` puts the same fact in its first labelled row. The intent stays above
+it as the heading, because it is the title of the view rather than a row in it,
+and cost and attribution close the view under the paths.
 
 Nothing in the brief views is computed differently. They read the same
 `intent`, `scope`, `drift` and `cost` the full view reads; what changed is how
@@ -65,9 +107,9 @@ much is said at once. Two consequences worth keeping:
 - Where the paths are not named, one directory holding all of them reads `all
   in db/` rather than `mostly in db/`. "Mostly" would understate a fact the
   paths have already settled, and this line is all the reader gets.
-- The four cases of the second sentence are ordered by which fact the reader
-  most needs: something went outside, here it is; nothing changed at all;
-  nothing was declared, so the question cannot be asked; everything stayed
+- The four cases of the drift sentence — the third — are ordered by which fact
+  the reader most needs: something went outside, here it is; nothing changed at
+  all; nothing was declared, so the question cannot be asked; everything stayed
   inside. Note "changed nothing" comes before "declared nothing" — a session
   that changed nothing had nothing to go outside a scope, and sending that
   reader to `--scope` answers a question they do not have.
@@ -78,6 +120,30 @@ terminal's own colour — the same roles doing the same jobs as in the labelled
 layout. A view that needed a new role would be a view saying something the tool
 does not otherwise say. The same goes for `scan`: paths are `path`, prompts are
 `intent`, framing is `meta`.
+
+The outcome line each view now leads with takes **no ink at all**. It is the
+one line that is always there, and colouring what is always there says nothing
+— the same argument that leaves the cost figure uncoloured. `merged` and
+`abandoned` stay where they mark one row out of a table of them.
+
+## The week table
+
+Columns, left to right: `started`, `intent`, `class` (`--class` only),
+`outcome`, `drift files`, `turns`, `tokens` (`--tokens` only), `empty`, `cost`.
+Outcome sits in the left block with the text; the figures are right-aligned so
+a column can be scanned. `drift files` carries its unit because a bare `drift`
+over a column of small integers reads as a score.
+
+Two consequences of outcome no longer being the last column. A row is trimmed
+rather than padded, so an abandoned row's strikethrough stops at the last
+figure instead of running out over trailing spaces — which is what the old
+last-column rule existed to prevent, and it is now handled once in `tableRow`.
+And the totals row can leave its cost cell empty without a ragged edge.
+
+The geometry lives in `render/terminal/week/table.ts`, the arithmetic and the
+notes under the table in `week.ts`. The split is what keeps either under 400
+lines; a reader chasing a misaligned column wants the first file and nothing
+in the second.
 
 ## Colour
 
@@ -101,6 +167,12 @@ when it is not zero. `$0.00` in red would teach the reader to ignore red, and
 then the session that wasted $40 would go unread too. The cost figure itself
 is never coloured — it is always there, and colouring what is always there
 says nothing.
+
+The `waste` ink survives in exactly one place: the `no edits` row of `session
+show --full`, per session, where the reader asked for the detail. The aggregate
+views dropped it when their money became a footnote — red inside a footnote
+would make the footnote the loudest thing on the page, which is the arrangement
+the ordering above exists to undo.
 
 `colorEnabled` decides: `FORCE_COLOR` outranks everything either way, then
 `NO_COLOR` (non-empty), then whether stdout is a TTY. Note this deliberately
@@ -126,8 +198,16 @@ clipboard instead of stdout, and implies `--md`, since a terminal table is not
 what anybody pastes into a page.
 
 A different document from the terminal table, not the same one with the escape
-codes taken out. It leads with the two figures that survive being read cold —
-what the week cost and what shipped — and the table comes after them.
+codes taken out. It leads with the figures that survive being read cold — what
+shipped, what did not, what is still open, and how many files went outside the
+plan — and the table comes after them.
+
+It obeys the ordering rules above like every other view. The headline carries
+no money at all; the columns are `Date`, `Work`, `Outcome`, `Unplanned`,
+`Cost`, in `week`'s order with cost last; and what the week cost is the closing
+line, through `spentFigure`. Every count in the headline is a count of
+something observed, and nought of something observed is a fact — which is why
+none of them can go absent the way the closing figure can.
 
 `render/markdown.ts` is pure: sessions, rates and a clock in, one string out,
 with no trailing newline. The clock is injected so the heading is a function of
@@ -154,11 +234,16 @@ and a total larger than the column under it is a table that visibly does not
 add up. What they cost is stated in its own line below instead — disclosed, not
 folded in.
 
-The same rule covers a model with no rate. The cost cell says `unpriced`, the
-totals are over the rest, and a line below says how much of the table the money
-covers and which models were left out. Note a session with no turns and no api
-calls is `$0.00` rather than `unpriced`: nothing was captured for it, so it
-moved no tokens and there is no rate it is missing. That has to agree with
-`spendOf`, which makes the same call — a cell reading `unpriced` under a note
-counting no unpriced sessions is a hole the reader can see and the report will
-not admit to.
+The one cell that totals nothing is `Cost`, left empty on purpose, the same as
+`week`'s. The closing line is the only total, so there is no second copy of it
+sitting in the middle of the columns the table is read for.
+
+A model with no rate is handled per row and per document. The cost cell says
+`unpriced`, the closing figure is over the rest, and the note above it says how
+much of the table the money covers and which models were left out — "below",
+since the figure it points at is the closing line. Note a session with no turns
+and no api calls is `$0.00` rather than `unpriced`: nothing was captured for
+it, so it moved no tokens and there is no rate it is missing. That has to agree
+with `spendOf`, which makes the same call — a cell reading `unpriced` under a
+note counting no unpriced sessions is a hole the reader can see and the report
+will not admit to.

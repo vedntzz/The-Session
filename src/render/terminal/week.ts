@@ -1,211 +1,66 @@
-// `session week`: one row per session, and what the rows do not say.
-import { classOf } from "../../classify.js";
+// `session week`: where the week's work went, one row per session, and what
+// the rows do not say. The geometry of the table is in `week/table.ts`.
 import type { SessionFilter } from "../../commands/week.js";
 import {
   formatUsd,
-  priceSession,
   shippedNote,
   spendOf,
   unpricedThroughout,
-  type Price,
   type RateTable,
   type Spend,
 } from "../../pricing.js";
-import { isCaptured, totalTokens, type Session } from "../../store.js";
+import { isCaptured, totalTokens, type Session, type SessionOutcome } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
+import { NO_PRICE, NO_RATES, outcomeInk, RATES_HINT, stubLines, type View } from "./cost.js";
+import { CAPTURED_MARKER } from "./intent.js";
+import { figure, INDENT, plural } from "./text.js";
 import {
-  costCell,
-  NO_PRICE,
-  NO_RATES,
-  outcomeInk,
-  RATES_HINT,
-  stubLines,
-  wasteCell,
-  type View,
-} from "./cost.js";
-import { CAPTURED_MARKER, intentOf } from "./intent.js";
-import { clock, figure, INDENT, padLeft, padRight, plural, width } from "./text.js";
+  cellsFor,
+  HEADINGS,
+  measure,
+  sessionRow,
+  totalsRow,
+  type Columns,
+  type WeekCells,
+  type Widths,
+} from "./week/table.js";
 
-// --- the week table ------------------------------------------------------
-
-/** Space between columns. Two, so the eye reads them as separate. */
-const COLUMN_GAP = "  ";
-
-/** Width of the start-time column: `MM-DD HH:MM` is always exactly this. */
-const WHEN_WIDTH = 11;
-
-/** How much of an intent survives. Past this the table stops being a table. */
-const INTENT_WIDTH = 28;
-
-/** Stands in for the part of an intent that did not fit. */
-const ELLIPSIS = "…";
-
-/** One row's worth of already-stringified cells. */
-interface WeekCells {
-  when: string;
-  intent: string;
-  class: string;
-  cost: string;
-  turns: string;
-  tokens: string;
-  empty: string;
-  outcome: string;
-}
-
-/** Column widths, measured from the contents rather than guessed. */
-interface Widths {
-  when: number;
-  intent: number;
-  class: number;
-  cost: number;
-  turns: number;
-  tokens: number;
-  empty: number;
-}
-
-const HEADINGS: WeekCells = {
-  when: "started",
-  intent: "intent",
-  class: "class",
-  cost: "cost",
-  turns: "turns",
-  tokens: "tokens",
-  empty: "empty",
-  outcome: "outcome",
-};
-
-/**
- * Date and local time, so a row is placeable in the week without a header.
- * Exported because the HTML view writes the same stamp: one definition means
- * the two views cannot come to disagree about when a session ran.
- */
-export function stamp(iso: string): string {
-  const at = new Date(iso);
-  const month = String(at.getMonth() + 1).padStart(2, "0");
-  const day = String(at.getDate()).padStart(2, "0");
-  return `${month}-${day} ${clock(iso)}`;
-}
-
-/** Cuts `text` to `limit` including the ellipsis, so the column cannot widen. */
-function truncate(text: string, limit: number): string {
-  const chars = [...text];
-  if (chars.length <= limit) {
-    return text;
-  }
-  return `${chars.slice(0, limit - 1).join("")}${ELLIPSIS}`;
-}
-
-function widest(values: readonly string[]): number {
-  return values.reduce((soFar, value) => Math.max(soFar, width(value)), 0);
-}
-
-function cellsFor(session: Session, rates: RateTable): WeekCells {
-  const price = priceSession(session.cost, rates);
-  return {
-    when: stamp(session.startedAt),
-    // The marker is inside the column rather than beside it: a fourth column
-    // holding one character for some rows would cost more width than the fact
-    // is worth, and the note under the table says what it means.
-    intent: truncate(
-      isCaptured(session) ? `${CAPTURED_MARKER} ${intentOf(session)}` : intentOf(session),
-      INTENT_WIDTH,
-    ),
-    class: classOf(session),
-    cost: price.priced ? formatUsd(price.usd) : NO_PRICE,
-    turns: figure(session.cost.turns),
-    tokens: figure(totalTokens(session.cost)),
-    empty: figure(session.cost.emptyTurns),
-    outcome: session.outcome,
-  };
-}
-
-/**
- * The columns that are only there when something asked for them. Both default
- * to off: the table is read at a glance, and every column that is not being
- * looked at makes the ones that are harder to find.
- */
-interface Columns {
-  /** `--tokens`: the raw counts beside the money. */
-  tokens: boolean;
-  /** `--class`: what each session was working on. */
-  classes: boolean;
-}
-
-/**
- * The two cells in a row that carry ink of their own. Applied after padding,
- * so the column widths are measured off text a reader can see; the padding
- * goes inside the escape codes, where it is still just spaces.
- */
-interface RowInk {
-  intent(text: string): string;
-  outcome(text: string): string;
-}
-
-/** Headings, totals, and any row whose ink is carried by the row itself. */
-const NO_INK: RowInk = { intent: (text) => text, outcome: (text) => text };
-
-/**
- * Lays out one row. Figures are right-aligned so their digits line up and a
- * column can be scanned for the expensive one; text is left-aligned. Cost
- * leads them, because it is the column the eye should land on first.
- */
-function tableRow(
-  left: string,
-  cells: WeekCells,
-  widths: Widths,
-  show: Columns,
-  ink: RowInk = NO_INK,
-): string {
-  const columns = [padLeft(cells.cost, widths.cost), padLeft(cells.turns, widths.turns)];
-  if (show.tokens) {
-    columns.push(padLeft(cells.tokens, widths.tokens));
-  }
-  columns.push(padLeft(cells.empty, widths.empty));
-
-  // The outcome column is last and never padded: trailing spaces would show up
-  // as an overlong rule on a struck-through row.
-  const tail = cells.outcome === "" ? "" : `${COLUMN_GAP}${ink.outcome(cells.outcome)}`;
-  return `${INDENT}${left}${COLUMN_GAP}${columns.join(COLUMN_GAP)}${tail}`;
-}
-
-/** The left block: when it ran, what it was for, and what it was working on. */
-function leftColumns(cells: WeekCells, widths: Widths, show: Columns, ink: RowInk): string[] {
-  const left = [
-    padRight(cells.when, widths.when),
-    ink.intent(padRight(cells.intent, widths.intent)),
-  ];
-  if (show.classes) {
-    left.push(padRight(cells.class, widths.class));
-  }
-  return left;
-}
-
-function sessionRow(cells: WeekCells, widths: Widths, show: Columns, ink: RowInk = NO_INK): string {
-  return tableRow(leftColumns(cells, widths, show, ink).join(COLUMN_GAP), cells, widths, show, ink);
-}
-
-/** The totals row, whose label runs across every column on the left. */
-function totalsRow(cells: WeekCells, widths: Widths, show: Columns): string {
-  const spanned = leftColumns(HEADINGS, widths, show, NO_INK);
-  const span = spanned.reduce((total, column) => total + width(column), 0) +
-    COLUMN_GAP.length * (spanned.length - 1);
-  return tableRow(padRight(cells.when, span), cells, widths, show);
-}
-
-function measure(rows: readonly WeekCells[], totals: WeekCells): Widths {
-  return {
-    when: WHEN_WIDTH,
-    intent: widest([HEADINGS.intent, ...rows.map((row) => row.intent)]),
-    class: widest([HEADINGS.class, ...rows.map((row) => row.class)]),
-    cost: widest([HEADINGS.cost, totals.cost, ...rows.map((row) => row.cost)]),
-    turns: widest([HEADINGS.turns, totals.turns, ...rows.map((row) => row.turns)]),
-    tokens: widest([HEADINGS.tokens, totals.tokens, ...rows.map((row) => row.tokens)]),
-    empty: widest([HEADINGS.empty, totals.empty, ...rows.map((row) => row.empty)]),
-  };
-}
+export { stamp } from "./week/table.js";
 
 function sum(sessions: readonly Session[], of: (session: Session) => number): number {
   return sessions.reduce((running, session) => running + of(session), 0);
+}
+
+function count(sessions: readonly Session[], outcome: SessionOutcome): number {
+  return sessions.filter((session) => session.outcome === outcome).length;
+}
+
+/**
+ * The first line: how many sessions, and where their work went.
+ *
+ * Read off `outcome`, which by the time a view runs holds what the repository
+ * says now rather than what the record happened to be written with — see
+ * `withOutcomes`. Nothing here is a new measurement: it is a count of the
+ * column the rows below already show.
+ *
+ * Four ends, and each is its own clause. A session still open has not landed
+ * and has not failed to; a session that changed no files never had anything to
+ * land. Folding either into "did not land" would put work in a bucket it never
+ * belonged to, and this line is the one most readers will stop at. The two
+ * that describe the repo rather than the developer are named only when there
+ * are any — a nought here is a category with nothing in it, which is the same
+ * defect as a money figure over an empty category.
+ */
+function outcomeHeadline(sessions: readonly Session[]): string {
+  const open = count(sessions, "open");
+  const empty = count(sessions, "empty");
+  return [
+    plural(sessions.length, "session", "sessions"),
+    `${figure(count(sessions, "merged"))} landed on the default branch`,
+    `${figure(count(sessions, "abandoned"))} did not`,
+    ...(open > 0 ? [`${figure(open)} still open`] : []),
+    ...(empty > 0 ? [`${figure(empty)} changed no files`] : []),
+  ].join(" · ");
 }
 
 /** The filter in words, or undefined when the week was not narrowed at all. */
@@ -230,9 +85,9 @@ export function describeFilter(filter: SessionFilter): string | undefined {
 }
 
 /**
- * The week as `session week` prints it: one row per session, whatever it came
- * to. Abandoned sessions are struck through rather than dropped — they are
- * part of what the week cost, and hiding them would flatter the total.
+ * The week as `session week` prints it: where the work went, then one row per
+ * session. Abandoned sessions are struck through rather than dropped — they
+ * are part of what the week was, and hiding them would flatter it.
  *
  * `sessions` is expected to be the window already; `days` only says what to
  * call it when the window is empty.
@@ -245,7 +100,7 @@ export function formatWeek(
   view: View = {},
 ): string[] {
   // A filtered table with nothing saying so is a table that lies by omission:
-  // the totals are a subset, and nothing on the page admits it.
+  // the counts and the totals are a subset, and nothing on the page admits it.
   const narrowed = describeFilter(filter);
   if (sessions.length === 0) {
     const window = `No sessions in the last ${plural(days, "day", "days")}`;
@@ -256,12 +111,12 @@ export function formatWeek(
   const show: Columns = { tokens: view.tokens === true, classes: view.classes === true };
   const rows = sessions.map((session) => cellsFor(session, rates));
   const spend = spendOf(sessions, rates);
-  const totals = weekTotals(sessions, spend);
+  const totals = weekTotals(sessions);
   const widths = measure(rows, totals);
   return weekTable({ sessions, rows, totals, widths, show, spend, narrowed, palette });
 }
 
-/** What a week is once the figures are in: a heading, the rows, and the notes. */
+/** What a week is once the figures are in: the headline, the rows, the notes. */
 interface WeekTable {
   sessions: readonly Session[];
   rows: readonly WeekCells[];
@@ -273,6 +128,14 @@ interface WeekTable {
   palette: Palette;
 }
 
+/**
+ * The order a week is read in: where the work went, the rows, what the rows do
+ * not say, and — last and dim — what the week cost.
+ *
+ * The narrowing note sits under the headline rather than above it, so the
+ * first line is the outcome either way; it is still the line before the table,
+ * where a reader meets it before any figure it qualifies.
+ */
 function weekTable({
   sessions,
   rows,
@@ -285,35 +148,41 @@ function weekTable({
 }: WeekTable): string[] {
   return [
     "",
+    `${INDENT}${outcomeHeadline(sessions)}`,
     ...(narrowed ? [palette.meta(`${INDENT}only ${narrowed}`)] : []),
+    "",
     palette.meta(sessionRow(HEADINGS, widths, show)),
     ...sessionRows(sessions, rows, widths, show, palette),
     "",
     totalsRow(totals, widths, show),
-    ...spendNotes(spend, palette),
     ...turnNotes(sessions, palette),
+    ...spendNotes(spend, palette),
   ];
 }
 
-/** The bottom row: a total of every column that has one. */
-function weekTotals(sessions: readonly Session[], spend: Spend): WeekCells {
+/**
+ * The bottom row: a total of every column that has one.
+ *
+ * The cost cell is left empty on purpose. What the week cost is one dim line
+ * under the table and nowhere else, and a second copy of it here would put the
+ * figure back in the middle of the columns the table is read for. The row is
+ * trimmed, so the empty cell costs no trailing space.
+ */
+function weekTotals(sessions: readonly Session[]): WeekCells {
   return {
     when: plural(sessions.length, "session", "sessions"),
     intent: "",
     class: "",
-    // A dash only where there is no total to give. A week that genuinely cost
-    // nothing reads `$0.00` like the rows above it — dashing that out would
-    // put an absence over a column of noughts, and the reader can see the
-    // column.
-    cost: unpricedThroughout(spend) ? NO_PRICE : formatUsd(spend.usd),
+    outcome: "",
+    drift: figure(sum(sessions, (session) => session.drift.length)),
     turns: figure(sum(sessions, (session) => session.cost.turns)),
     tokens: figure(sum(sessions, (session) => totalTokens(session.cost))),
     empty: figure(sum(sessions, (session) => session.cost.emptyTurns)),
-    outcome: "",
+    cost: "",
   };
 }
 
-/** One row per session, inked by what the session came to. */
+/** One row per session, inked by what became of the session. */
 function sessionRows(
   sessions: readonly Session[],
   rows: readonly WeekCells[],
@@ -336,24 +205,28 @@ function sessionRows(
 }
 
 /**
- * The sentence the table is for, and what the total leaves out.
+ * What the week cost, as a footnote and nothing more.
  *
- * Everything that did not merge is money still owed an outcome, which is a
- * different question from the turn counts below it — a productive session that
- * nobody shipped wasted all of itself.
+ * Dim, one line, and last. Cost is measured natively by the agents themselves
+ * now; what this tool knows that they do not is where the work went, and a
+ * money figure at the top of the view would be answering the question somebody
+ * else already answered. It is still printed, because a week nobody can put a
+ * figure on is a week nobody can bill.
  *
- * The sentence is omitted where nothing could be priced: it would read "$0.00
- * spent" about a week nobody can put a figure on, and the unpriced line says
- * why instead. Omitted too where the week genuinely cost nothing, which the
- * total row has already said in full.
+ * The waste share is left dim with the rest of the line rather than taking the
+ * `waste` ink: red inside a footnote would make the footnote the loudest thing
+ * on the page, which is the arrangement this ordering exists to undo. `show
+ * --full` still raises its voice about it, per session, where the reader has
+ * asked for the detail.
+ *
+ * Always one line, whatever the week came to — see `moneyLine` for the three
+ * things it can say. What could not be priced is named under it, because the
+ * figure above is a total over the rest.
  */
 function spendNotes(spend: Spend, palette: Palette): string[] {
-  const lines: string[] = [];
-  if (spend.usd > 0) {
-    lines.push(`${INDENT}${formatUsd(spend.usd)} spent, ${shippedNote(spend)}`);
-  }
+  const lines = [palette.meta(`${INDENT}${moneyLine(spend)}`)];
   if (spend.unpriced > 0) {
-    // Said out loud, because the total above is a total of the rest.
+    // Said out loud, because the figure above is over the rest.
     lines.push(
       palette.meta(
         `${INDENT}${plural(spend.unpriced, "session", "sessions")} unpriced: ` +
@@ -363,6 +236,45 @@ function spendNotes(spend: Spend, palette: Palette): string[] {
     );
   }
   return lines;
+}
+
+/**
+ * What a window cost, as the figure alone.
+ *
+ * Nought is not the same as unknown, and since the totals row above leaves its
+ * cost cell empty this is the only place either gets said. A window nothing
+ * could be priced in gets the dash; one that genuinely cost nothing gets
+ * `$0.00`, because nothing was captured for it and so no rate is missing. The
+ * second case used to be carried by the total row, which is why it is spelled
+ * out rather than left to an omission nobody would read.
+ *
+ * Exported because `week --md` closes on the same figure, and two copies of a
+ * two-clause test are two chances for the terminal and the document somebody
+ * pastes into Notion to disagree about what a week cost — the same reason
+ * `shippedNote` lives in `pricing.ts` rather than in either caller. Takes the
+ * three fields it reads, so a caller with no `unmerged` to report is held to
+ * the same rule.
+ */
+export function spentFigure(spend: Pick<Spend, "usd" | "unpriced" | "unpricedModels">): string {
+  if (unpricedThroughout(spend)) {
+    return `${NO_PRICE} spent: nothing here could be priced`;
+  }
+  return `${formatUsd(spend.usd)} spent`;
+}
+
+/**
+ * The figure, and what became of it.
+ *
+ * No `shippedNote` on a week that cost nothing or one nobody can price: "all
+ * of it shipped" over $0.00 is a claim about no money at all, and a share of a
+ * total that does not exist is not a figure either.
+ */
+function moneyLine(spend: Spend): string {
+  const spent = spentFigure(spend);
+  if (spend.usd === 0) {
+    return spent;
+  }
+  return `${spent}, ${shippedNote(spend)}`;
 }
 
 /** How much of the week produced nothing, and what the marker in it means. */

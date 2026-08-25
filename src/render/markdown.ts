@@ -8,7 +8,7 @@ import {
   type Spend,
 } from "../pricing.js";
 import { isCaptured, type Session } from "../store.js";
-import { CAPTURED_MARKER, intentOf, type View } from "./terminal.js";
+import { CAPTURED_MARKER, intentOf, spentFigure, type View } from "./terminal.js";
 
 /**
  * The week as Markdown, for pasting somewhere other people read it — meeting
@@ -17,9 +17,15 @@ import { CAPTURED_MARKER, intentOf, type View } from "./terminal.js";
  * A different document from the terminal table, not the same one with the
  * escape codes taken out. The terminal view is read by the person who ran the
  * sessions, beside the repo they ran in; this one is read by somebody who was
- * not there. So it leads with the two figures that survive being read cold —
- * what the week cost and what shipped — and the table comes after them rather
- * than instead of them.
+ * not there. So it leads with the figures that survive being read cold — what
+ * shipped, what did not, and what went outside the plan — and the table comes
+ * after them rather than instead of them.
+ *
+ * What the week cost is the closing line and nothing else, in the order `week`
+ * puts it in: the agents meter their own spend now, so a document that opened
+ * on a dollar figure would answer a question its reader has already had
+ * answered. It still closes on one — a week nobody can put a figure on is a
+ * week nobody can bill.
  *
  * Plain Markdown throughout: no colour, no escape codes, no box drawing. The
  * one deliberate exception to the house style is the tick in the outcome
@@ -52,9 +58,6 @@ const WORK_WIDTH = 60;
 
 /** Stands in for the part of an intent that did not fit. */
 const ELLIPSIS = "…";
-
-/** Stands in for a figure there is no rate to work out. */
-const NO_COST = "—";
 
 /** Where a reader who wants these sessions priced is sent. */
 const RATES_HINT = USER_RATES_FILE;
@@ -183,12 +186,12 @@ export function renderMarkdownWeek(
 
   return blocksOf([
     heading,
-    headline(spend, merged, unplanned),
-    weekTable(shown, rates, spend, merged, unplanned),
+    headline(shown, merged, unplanned),
+    weekTable(shown, rates, merged, unplanned),
     emptyNote(empties, rates),
     unpricedNote(spend, shown.length),
     capturedNote(shown),
-    costPerShippedChange(spend.usd, merged),
+    spentClosing(spend, merged),
   ]);
 }
 
@@ -198,41 +201,53 @@ function blocksOf(blocks: readonly (string | undefined)[]): string {
 }
 
 /**
- * The line the document leads with.
+ * The line the document leads with: what landed, what did not, and how far the
+ * work went outside what was declared.
  *
  * Every figure in it is over the sessions the table lists, so a headline never
  * counts sessions the table does not — that would send the reader looking for
- * rows that are not there.
+ * rows that are not there. Sessions that changed no files are not among them;
+ * the note under the table accounts for those.
  *
- * The money is the one figure here that can be absent rather than zero. The
- * other two are counts of things that were observed, and nought of something
- * observed is a fact.
+ * No money. Every figure here is a count of something observed, and nought of
+ * something observed is a fact — which is why none can go absent the way the
+ * closing line's figure can.
+ *
+ * A session still open has not landed and has not failed to, so it gets its
+ * own clause rather than being counted against the week; the clause is dropped
+ * when there are none. `week` splits the same ends the same way.
  */
-function headline(spend: Spend, merged: number, unplanned: number): string {
-  const money = unpricedThroughout(spend)
-    ? `cost unavailable — no rate for ${spend.unpricedModels.join(", ")}`
-    : `${formatUsd(spend.usd)} spent`;
+function headline(shown: readonly Session[], merged: number, unplanned: number): string {
+  const open = shown.filter((session) => session.outcome === "open").length;
   return (
-    `**${money} · ${plural(merged, "change", "changes")} shipped · ` +
+    `**${plural(merged, "change", "changes")} shipped · ` +
+    `${shown.length - merged - open} did not · ` +
+    `${open > 0 ? `${open} still open · ` : ""}` +
     `${plural(unplanned, "file", "files")} touched outside plan**`
   );
 }
 
-/** The table itself: headings, one row per session, then the total. */
+/**
+ * The table itself: headings, one row per session, then the total.
+ *
+ * The column order is `week`'s, cost last. Where the work went and how far it
+ * went outside the plan are what the table is read for, and a reader scanning
+ * the columns should meet the money after the two that are this document's
+ * reason for existing.
+ */
 function weekTable(
   shown: readonly Session[],
   rates: RateTable,
-  spend: Spend,
   merged: number,
   unplanned: number,
 ): string {
   return [
-    row(["Date", "Work", "Outcome", "Cost", "Unplanned"]),
-    // Cost and Unplanned right-aligned: they are figures, and figures are
+    row(["Date", "Work", "Outcome", "Unplanned", "Cost"]),
+    // Unplanned and Cost right-aligned: they are figures, and figures are
     // compared down a column rather than read across a row.
     "|---|---|---|---:|---:|",
     ...shown.map((session) => sessionRow(session, rates)),
-    totalRow(shown.length, spend, merged, unplanned),
+    totalRow(shown.length, merged, unplanned),
   ].join("\n");
 }
 
@@ -241,21 +256,26 @@ function sessionRow(session: Session, rates: RateTable): string {
     monthDay(new Date(session.startedAt)),
     workCell(session),
     session.outcome === "merged" ? MERGED_MARK : "",
-    priced(session, rates),
     String(session.drift.length),
+    priced(session, rates),
   ]);
 }
 
-/** The bottom row, which is a total of the column above it and nothing else. */
-function totalRow(count: number, spend: Spend, merged: number, unplanned: number): string {
+/**
+ * The bottom row, which is a total of the column above it and nothing else.
+ *
+ * The cost cell is empty on purpose. What the week cost is the closing line
+ * and nowhere else — the same arrangement `week`'s totals row keeps — and a
+ * second copy of the figure here would put it back in the middle of the
+ * columns the table is read for.
+ */
+function totalRow(count: number, merged: number, unplanned: number): string {
   return row([
     "**Total**",
     `**${plural(count, "session", "sessions")}**`,
     merged > 0 ? `**${merged} ${MERGED_MARK}**` : "",
-    // An em dash, not a bolded nought. The row is a total of the column above
-    // it, and there is no total to put there.
-    unpricedThroughout(spend) ? NO_COST : `**${formatUsd(spend.usd)}**`,
     `**${unplanned}**`,
+    "",
   ]);
 }
 
@@ -312,15 +332,15 @@ function emptyNote(empties: readonly Session[], rates: RateTable): string | unde
 /**
  * How much of the table the money covers.
  *
- * Said outright rather than folded in. The figures above are a total over the
+ * Said outright rather than folded in. The figure below is a total over the
  * sessions that could be priced, and a total with a silent hole in it is the
- * kind of number that ends up in an invoice — which is the whole reason
- * `pricing.ts` refuses to guess a rate in the first place.
+ * kind of number that ends up in an invoice — the whole reason `pricing.ts`
+ * refuses to guess a rate.
  *
- * Two shapes, because "the cost above covers 0 of 2 sessions" points at a cost
- * that is not there. When nothing could be priced the headline has already
- * said so, and what is left to say is how many sessions that was and what to
- * do about it.
+ * "Below", because the money is the closing line now. Two shapes, because "the
+ * cost below covers 0 of 2 sessions" points at a cost that is not there; where
+ * nothing could be priced the closing line says so itself, and what is left
+ * here is how many sessions that was and what to do about it.
  */
 function unpricedNote(spend: Spend, shown: number): string | undefined {
   if (spend.unpriced === 0) {
@@ -330,9 +350,9 @@ function unpricedNote(spend: Spend, shown: number): string | undefined {
   const ran = `${plural(spend.unpriced, "session", "sessions")} ran on a model with no rate (${models})`;
 
   if (unpricedThroughout(spend)) {
-    return `No cost could be worked out: ${ran}. Add one to ${RATES_HINT}.`;
+    return `${ran}. Add one to ${RATES_HINT}.`;
   }
-  return `The cost above covers ${shown - spend.unpriced} of ${shown} sessions. ${ran}.`;
+  return `The cost below covers ${shown - spend.unpriced} of ${shown} sessions. ${ran}.`;
 }
 
 /** The legend for the marker, and only when a row carries one. */
@@ -348,21 +368,28 @@ function capturedNote(shown: readonly Session[]): string | undefined {
 }
 
 /**
- * What each shipped change cost, over everything spent to get them.
+ * The closing line: what the week cost, and what that came to per shipped
+ * change.
  *
- * The numerator is the whole week, not the merged sessions' own spend. That is
- * the figure worth putting in front of somebody: the money that went into
- * attempts that never landed is part of what the changes that did land cost.
+ * `spentFigure` is `week`'s, imported rather than copied. Whether a window
+ * reads `$0.00` or an em dash is a distinction the whole tool turns on, and
+ * this document and the terminal one must not be able to answer it differently
+ * for the same week.
  *
- * Omitted when nothing merged, rather than dividing by zero or printing a dash
- * — a dash in a cost line reads as a figure somebody failed to compute, and
- * the honest statement is that the week has no such figure. Omitted too when
- * no session could be priced at all, where the ratio would be `$0.00` sitting
- * under a note saying the cost covers none of them.
+ * The ratio is over everything spent, not over the merged sessions' own spend:
+ * money that went into attempts that never landed is part of what the changes
+ * that did land cost. It is dropped where nothing merged, and where there is
+ * no total to divide — a free week, or one nothing could be priced in. Better
+ * no figure than a dash, which reads as one somebody failed to compute.
+ *
+ * The line itself is never dropped. It is the only place left that says what
+ * the week cost, and a document that stopped mentioning money would be one
+ * somebody has to go and ask about.
  */
-function costPerShippedChange(usd: number, merged: number): string | undefined {
-  if (merged === 0 || usd === 0) {
-    return undefined;
+function spentClosing(spend: Spend, merged: number): string {
+  const spent = spentFigure(spend);
+  if (merged === 0 || spend.usd === 0) {
+    return `**${spent}**`;
   }
-  return `**${formatUsd(usd / merged)} per shipped change.**`;
+  return `**${spent} · ${formatUsd(spend.usd / merged)} per shipped change**`;
 }

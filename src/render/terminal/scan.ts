@@ -1,25 +1,32 @@
-// `session scan`: what the transcripts already on disk cost.
+// `session scan`: what the transcripts already on disk did, and then what
+// they cost.
 import { formatUsd, unpricedThroughout } from "../../pricing.js";
 import { UNKNOWN_REPO, type ScanReport } from "../../scan.js";
 import type { Palette } from "../palette.js";
 import { NO_PRICE, RATES_HINT, stubLines } from "./cost.js";
-import { figure, INDENT, label, padLeft, padRight, plural, width } from "./text.js";
+import { figure, INDENT, padLeft, padRight, plural, width } from "./text.js";
 
 // --- scan -----------------------------------------------------------------
 
-/** The column heading of the repository table. */
-const REPO_HEADINGS = ["repository", "sessions", "cost", "empty turns"] as const;
+/**
+ * The column headings of the repository table, and with them the column order.
+ * Cost is the last column rather than the middle one: the turns that changed
+ * no files are what the table is read for, and the money is the figure the
+ * footnote under it carries.
+ */
+const REPO_HEADINGS = ["repository", "sessions", "empty turns", "cost"] as const;
 
 /**
- * What `session scan` found, in the order somebody reads it: what the window
- * cost, how much of that bought nothing, where it went, and which sessions
- * were the dearest.
+ * What `session scan` found, in the order somebody reads it: how many sessions
+ * ran while something landed, how many turns produced nothing, where the work
+ * was, which sessions were the dearest, and — last and dim — what the window
+ * cost.
  *
- * No colour role of its own. The money is left in the terminal's own colour
- * like everywhere else, the waste figure takes `waste` only when it is not
- * zero, prompts are `intent` because that is what they are, repository paths
- * are `path`, and the framing is `meta`. A report needing an eighth role
- * would be a report saying something the tool does not otherwise say.
+ * No colour role of its own. The headline is left in the terminal's own colour
+ * because it is always there and always the first thing read, prompts are
+ * `intent` because that is what they are, repository paths are `path`, and the
+ * framing is `meta`. A report needing an eighth role would be a report saying
+ * something the tool does not otherwise say.
  */
 export function formatScan(report: ScanReport, palette: Palette): string[] {
   if (report.sessions === 0) {
@@ -28,58 +35,85 @@ export function formatScan(report: ScanReport, palette: Palette): string[] {
 
   return [
     "",
-    palette.meta(`${INDENT}${scanWindow(report)}`),
-    "",
-    ...totalLines(report, palette),
-    "",
-    ...repoTable(report, palette),
     ...landedLines(report, palette),
-    "",
-    ...dearestLines(report, palette),
+    palette.meta(`${INDENT}${scanWindow(report)}`),
+    ...section(emptyTurnLines(report, palette)),
+    ...section(repoTable(report, palette)),
+    ...section(dearestLines(report, palette)),
+    ...section(totalLines(report, palette)),
   ];
 }
 
-/** The one line that says what was read, before any figure computed from it. */
+/** A block of the report, with the blank line that separates it from the last. */
+function section(lines: readonly string[]): string[] {
+  return lines.length === 0 ? [] : ["", ...lines];
+}
+
+/** What was read, under the headline computed from it. */
 function scanWindow(report: ScanReport): string {
-  return [
-    `the last ${plural(report.days, "day", "days")}`,
-    plural(report.sessions, "session", "sessions"),
-    plural(report.repos.length, "repo", "repos"),
-  ].join(" · ");
+  return `the last ${plural(report.days, "day", "days")} · ${plural(report.repos.length, "repo", "repos")}`;
 }
 
 /**
- * The two figures the report leads with: what the window cost, and how much
- * of it went on turns that changed no files.
+ * How many turns changed no files — the fact, not what it cost.
  *
- * A window nothing could be priced in says so instead of totalling to nought
- * — see `unpricedThroughout`. The waste line goes with it: a share of a total
+ * Worded exactly as `week` words it, because it is the same fact about the
+ * same kind of thing and a reader should not have to notice that two views
+ * phrased it differently. What those turns came to in money is in the footnote
+ * at the bottom with the rest of the money.
+ */
+function emptyTurnLines(report: ScanReport, palette: Palette): string[] {
+  if (report.turns === 0) {
+    return [];
+  }
+  return [
+    `${INDENT}${figure(report.emptyTurns)} of ${plural(report.turns, "turn", "turns")} ` +
+      "changed no files",
+  ];
+}
+
+/**
+ * What the window cost, as a footnote and nothing more.
+ *
+ * Dim, and last. The agents measure their own cost now; what this command
+ * knows that they do not is which sessions ran while work reached the default
+ * branch and how many turns produced nothing, and those are the lines above.
+ *
+ * The waste share stays dim with the rest of the line rather than taking the
+ * `waste` ink. Red inside a footnote would make the footnote the loudest thing
+ * on the page, which is the arrangement this ordering exists to undo.
+ *
+ * A window nothing could be priced in says so instead of totalling to nought —
+ * see `unpricedThroughout`. The waste share goes with it: a share of a total
  * that does not exist is not a figure either.
  */
 function totalLines(report: ScanReport, palette: Palette): string[] {
   const { spend } = report;
   if (unpricedThroughout(spend)) {
     return [
-      `${INDENT}${label("spent")}${NO_PRICE}`,
+      palette.meta(`${INDENT}${NO_PRICE} spent: nothing here could be priced`),
       ...unpricedScanLines(spend.unpriced, spend.unpricedModels, palette),
     ];
   }
 
-  const waste = formatUsd(spend.emptyUsd);
   return [
-    `${INDENT}${label("spent")}${formatUsd(spend.usd)}`,
-    `${INDENT}${label("no edits")}${spend.emptyUsd > 0 ? palette.waste(waste) : waste}` +
-      palette.meta(
-        ` on ${figure(report.emptyTurns)} of ${plural(report.turns, "turn", "turns")}` +
-          " that changed no files",
-      ),
+    palette.meta(
+      `${INDENT}${formatUsd(spend.usd)} spent, ${formatUsd(spend.emptyUsd)} of it on ` +
+        "turns that changed no files",
+    ),
     ...(spend.unpriced > 0
       ? unpricedScanLines(spend.unpriced, spend.unpricedModels, palette)
       : []),
   ];
 }
 
-/** What could not be priced, and the whole file that would fix it. */
+/**
+ * What could not be priced, and the whole file that would fix it.
+ *
+ * Worded as `week` words it. The label column it used to sit in went with the
+ * two figures that used to head this report, and one line of prose under the
+ * footnote is the right shape for a note about the footnote.
+ */
 function unpricedScanLines(
   unpriced: number,
   models: readonly string[],
@@ -87,20 +121,20 @@ function unpricedScanLines(
 ): string[] {
   return [
     palette.meta(
-      `${INDENT}${label("unpriced")}${plural(unpriced, "session", "sessions")} on ` +
+      `${INDENT}${plural(unpriced, "session", "sessions")} unpriced: ` +
         `${models.join(", ")} — save this as ${RATES_HINT}`,
     ),
     ...stubLines(models, palette),
   ];
 }
 
-/** The repository table: where the money went, and what produced nothing. */
+/** The repository table: where the work was, what produced nothing, what it cost. */
 function repoTable(report: ScanReport, palette: Palette): string[] {
   const rows = report.repos.map((row) => [
     row.repo === UNKNOWN_REPO ? "(no directory recorded)" : row.repo,
     figure(row.sessions),
-    unpricedThroughout(row.spend) ? "unpriced" : formatUsd(row.spend.usd),
     figure(row.emptyTurns),
+    unpricedThroughout(row.spend) ? "unpriced" : formatUsd(row.spend.usd),
   ]);
   const widths = columnWidths([[...REPO_HEADINGS], ...rows]);
 
@@ -115,29 +149,42 @@ function repoTable(report: ScanReport, palette: Palette): string[] {
 }
 
 /**
- * How many sessions were running while something reached the default branch.
+ * The headline: how many sessions, and how many of them were running while
+ * something reached the default branch.
  *
- * "Overlapped", never "merged". `outcome.ts` earns the word merged by finding
- * the blob a session left in the branch's history; this is two timestamps and
- * nothing else, and a report that called it merged would be claiming evidence
- * it does not have. Sessions in a checkout that could not be asked are named
- * rather than folded into the no's.
+ * "Ran while something landed", never "merged", and never "shipped".
+ * `outcome.ts` earns the word merged by finding the blob a session left in the
+ * branch's history; this is two timestamps and nothing else. Saying it as a
+ * coincidence in time is the whole of what the evidence supports, and it is
+ * plainer English than the "overlapped a commit" this line used to read —
+ * which was accurate and which nobody could parse at a glance.
+ *
+ * Sessions in a checkout that could not be asked get a line of their own
+ * rather than being folded into the no's: not knowing where work went is not
+ * the same as knowing it went nowhere. A window where none could be asked
+ * still leads with how many sessions there were, since that much is known.
  */
 function landedLines(report: ScanReport, palette: Palette): string[] {
+  const sessions = plural(report.sessions, "session", "sessions");
   const asked = report.sessions - report.landingUnknown;
+  const unknown = unknownLines(report.landingUnknown, palette);
   if (asked === 0) {
+    return [`${INDENT}${sessions}`, ...unknown];
+  }
+  return [
+    `${INDENT}${sessions} · ${figure(report.landed)} ran while something landed on the ` +
+      `default branch · ${figure(asked - report.landed)} did not`,
+    ...unknown,
+  ];
+}
+
+/** The checkouts that could not answer, counted apart from the ones that said no. */
+function unknownLines(unknown: number, palette: Palette): string[] {
+  if (unknown === 0) {
     return [];
   }
-  const unknown =
-    report.landingUnknown > 0
-      ? `; ${figure(report.landingUnknown)} in checkouts git could not be asked about`
-      : "";
-  return [
-    palette.meta(
-      `${INDENT}${figure(report.landed)} of ${plural(asked, "session", "sessions")} ` +
-        `overlapped a commit landing on the default branch${unknown}`,
-    ),
-  ];
+  const where = unknown === 1 ? "a checkout" : "checkouts";
+  return [palette.meta(`${INDENT}${figure(unknown)} in ${where} git could not be asked about`)];
 }
 
 /** The widest cell in each column, so the table sizes to its contents. */
@@ -157,12 +204,12 @@ function repoRow(
   widths: readonly number[],
   ink: (text: string) => string = (text) => text,
 ): string {
-  const [repo = "", sessions = "", cost = "", empty = ""] = cells;
+  const [repo = "", sessions = "", empty = "", cost = ""] = cells;
   return [
     ink(padRight(repo, widths[0] ?? 0)),
     padLeft(sessions, widths[1] ?? 0),
-    padLeft(cost, widths[2] ?? 0),
-    padLeft(empty, widths[3] ?? 0),
+    padLeft(empty, widths[2] ?? 0),
+    padLeft(cost, widths[3] ?? 0),
   ].join("  ");
 }
 

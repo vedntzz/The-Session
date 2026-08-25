@@ -81,10 +81,12 @@ describe("session", () => {
 
     const lines = await run("week");
 
-    expect(lines[1]).toContain("started");
-    expect(lines[2]).toContain("the first thing");
-    expect(lines[3]).toContain("the second thing");
-    expect(lines.at(-1)).toContain("2 sessions");
+    expect(lines[1]).toContain("2 sessions");
+    expect(lines[1]).toContain("landed on the default branch");
+    expect(lines[3]).toContain("started");
+    expect(lines[4]).toContain("the first thing");
+    expect(lines[5]).toContain("the second thing");
+    expect(lines.at(-2)).toContain("2 sessions");
   });
 
   it("week says so when nothing is in the window", async () => {
@@ -97,8 +99,8 @@ describe("session", () => {
 
     const lines = await run("week", "--days", "1");
 
-    expect(lines[2]).toContain("today's thing");
-    expect(lines.at(-1)).toContain("1 session");
+    expect(lines[4]).toContain("today's thing");
+    expect(lines.at(-2)).toContain("1 session");
   });
 
   it("week refuses a --days that is not a whole number of days", async () => {
@@ -161,15 +163,16 @@ describe("session", () => {
     expect(lines).toContain("  outcome     open");
   });
 
-  it("show without --full answers in two sentences and a line of figures", async () => {
+  it("show without --full answers in three sentences and a line of figures", async () => {
     await run("start", "touch a.txt", "--scope", "a.txt");
     await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
     await run("stop");
 
     const lines = await run("show");
 
-    expect(lines[1]).toBe('  You asked for "touch a.txt".');
-    expect(lines[2]).toBe("  Everything it changed stayed inside what you declared.");
+    expect(lines[1]).toBe("  The work has not landed on the default branch yet.");
+    expect(lines[2]).toBe('  You asked for "touch a.txt".');
+    expect(lines[3]).toBe("  Everything it changed stayed inside what you declared.");
     // No labelled columns, no gutter, no outcome word: that is what --full is.
     expect(lines.join("\n")).not.toContain("declared    ");
     expect(lines.join("\n")).not.toContain("outcome");
@@ -183,7 +186,7 @@ describe("session", () => {
 
     const lines = await run("show");
 
-    expect(lines[2]).toBe("  1 file changed outside what you declared: undeclared.txt.");
+    expect(lines[3]).toBe("  1 file changed outside what you declared: undeclared.txt.");
   });
 
   it("show marks drift", async () => {
@@ -207,8 +210,8 @@ describe("session", () => {
     const [first] = await readSessions(store);
     const lines = await run("show", (first as Session).id);
 
-    expect(lines[1]).toContain("the first thing");
-    expect(lines[1]).toBe('  You asked for "the first thing".');
+    expect(lines[2]).toContain("the first thing");
+    expect(lines[2]).toBe('  You asked for "the first thing".');
   });
 
   it("show surfaces a refusal when no session has closed", async () => {
@@ -448,7 +451,7 @@ describe("session", () => {
     const document = (await run("week", "--md")).join("\n");
 
     expect(document).toMatch(/^### AI-assisted work · /);
-    expect(document).toContain("| Date | Work | Outcome | Cost | Unplanned |");
+    expect(document).toContain("| Date | Work | Outcome | Unplanned | Cost |");
     expect(document).toContain("|---|---|---|---:|---:|");
     expect(document).toContain("| **Total** |");
     // The terminal table's furniture is not in it.
@@ -464,7 +467,7 @@ describe("session", () => {
 
     expect(copied).toHaveLength(1);
     expect(copied[0]).toMatch(/^### AI-assisted work · /);
-    expect(copied[0]).toContain("| Date | Work | Outcome | Cost | Unplanned |");
+    expect(copied[0]).toContain("| Date | Work | Outcome | Unplanned | Cost |");
     // Only the confirmation reaches stdout.
     expect(printed).toBe("  copied   1 session as Markdown");
   });
@@ -638,7 +641,7 @@ describe("session", () => {
 
     const lines = await run("week", "--client", "Acme");
 
-    expect(lines[1]).toBe("  only client Acme");
+    expect(lines[2]).toBe("  only client Acme");
     expect(lines.join("\n")).toContain("for acme");
     expect(lines.join("\n")).not.toContain("for globex");
   });
@@ -930,17 +933,17 @@ describe("session, priced", () => {
     expect(lines.find((line) => line.includes("cost"))).toContain("$15.00");
   });
 
-  it("week leads with cost, and adds tokens only when asked", async () => {
+  it("week keeps cost as the last column, and adds tokens only when asked", async () => {
     await spent();
 
     const plain = await run("week");
-    expect(plain[1]).toContain("cost");
-    expect(plain[1]).not.toContain("tokens");
-    expect(plain[2]).toContain("$15.00");
+    expect(plain[3]).toContain("cost");
+    expect(plain[3]).not.toContain("tokens");
+    expect(plain[4]).toContain("$15.00");
 
     const detailed = await run("week", "--tokens");
-    expect(detailed[1]).toContain("tokens");
-    expect(detailed[2]).toContain("1,000,000");
+    expect(detailed[3]).toContain("tokens");
+    expect(detailed[4]).toContain("1,000,000");
   });
 
   it("week says what the window cost and how much never merged", async () => {
@@ -956,7 +959,8 @@ describe("session, priced", () => {
 
     const lines = await run("week");
 
-    expect(lines[2]).toMatch(/ {2}empty$/);
+    expect(lines[1]).toContain("1 changed no files");
+    expect(lines[4]).toContain("  empty ");
     expect(lines.join("\n")).not.toContain("abandoned");
   });
 
@@ -992,7 +996,7 @@ describe("session, priced", () => {
     expect(lines.join("\n")).toContain('"some-model-nobody-has-priced": { "input": 0');
   });
 
-  it("week --md says the cost is unavailable rather than totalling it at $0.00", async () => {
+  it("week --md says nothing could be priced rather than totalling it at $0.00", async () => {
     // End to end, because the rule is only worth having if the command routes
     // through the renderer that obeys it. A window nobody can price must not
     // reach a meeting note as a week that cost nothing.
@@ -1000,9 +1004,9 @@ describe("session, priced", () => {
     const lines = await run("week", "--md");
     const document = lines.join("\n");
 
-    expect(document).toContain("cost unavailable — no rate for some-model-nobody-has-priced");
+    expect(document.split("\n").at(-1)).toBe("**— spent: nothing here could be priced**");
+    expect(document).toContain("no rate (some-model-nobody-has-priced)");
     expect(document).not.toContain("$0.00");
-    expect(document).toContain("| — |");
   });
 
   it("week --md still totals a week that genuinely cost nothing at $0.00", async () => {
@@ -1038,7 +1042,7 @@ describe("session, priced", () => {
 
     // Nothing was rewritten: the same record, read against a table that now
     // has a price in it.
-    expect((await run("week"))[2]).toContain("$2.00");
+    expect((await run("week"))[4]).toContain("$2.00");
   });
 
   it("keeps the bundled rates when the store adds one model", async () => {
@@ -1050,7 +1054,7 @@ describe("session, priced", () => {
       "utf8",
     );
 
-    expect((await run("week"))[2]).toContain("$15.00");
+    expect((await run("week"))[4]).toContain("$15.00");
   });
 });
 
@@ -1139,8 +1143,8 @@ describe("passive capture, end to end", () => {
 
     const lines = await run("week");
 
-    expect(lines[2]).toContain("~ why does /orders 500");
-    expect(lines.at(-1)).toContain("1 session recorded by the hook");
+    expect(lines[4]).toContain("~ why does /orders 500");
+    expect(lines.at(-2)).toContain("1 session recorded by the hook");
   });
 
   it("says on show that the intent was captured and no scope was declared", async () => {
@@ -1155,7 +1159,7 @@ describe("passive capture, end to end", () => {
     expect(lines.some((text) => text.trimStart().startsWith("outside"))).toBe(false);
   });
 
-  it("says the same in two sentences without --full", async () => {
+  it("says the same in three sentences without --full", async () => {
     await run("start", "--passive");
     await prompt("why does /orders 500");
     // Something has to change, or the stronger fact — that it changed nothing
@@ -1165,10 +1169,10 @@ describe("passive capture, end to end", () => {
 
     const lines = await run("show");
 
-    expect(lines[1]).toBe(
+    expect(lines[2]).toBe(
       '  Your first prompt was "why does /orders 500", and you declared nothing up front.',
     );
-    expect(lines[2]).toContain("session start --scope");
+    expect(lines[3]).toContain("session start --scope");
   });
 
   it("week --md honours the filters, so a pasted table is the one asked for", async () => {
@@ -1194,12 +1198,12 @@ describe("passive capture, end to end", () => {
     await run("stop", "--if-open");
 
     const captured = await run("week", "--intent", "captured");
-    expect(captured[1]).toBe("  only captured intents");
+    expect(captured[2]).toBe("  only captured intents");
     expect(captured.join("\n")).toContain("never said a word");
     expect(captured.join("\n")).not.toContain("declared it first");
 
     const declared = await run("week", "--intent", "declared");
-    expect(declared[1]).toBe("  only declared intents");
+    expect(declared[2]).toBe("  only declared intents");
     expect(declared.join("\n")).toContain("declared it first");
     expect(declared.join("\n")).not.toContain("never said a word");
   });

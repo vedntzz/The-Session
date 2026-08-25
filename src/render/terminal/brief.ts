@@ -1,6 +1,11 @@
-// `session show`: two sentences and a line of three figures.
+// `session show`: three sentences and a line of three figures.
 import { formatUsd, priceSession, type RateTable } from "../../pricing.js";
-import { isCaptured, type Session, type SessionCost } from "../../store.js";
+import {
+  isCaptured,
+  type Session,
+  type SessionCost,
+  type SessionOutcome,
+} from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { costCell, NO_RATES, wasteCell, type View } from "./cost.js";
 import { CAPTURED_MARKER, intentOf } from "./intent.js";
@@ -12,7 +17,7 @@ import { INDENT, plural } from "./text.js";
 /**
  * The default `session show`, and the reason `--full` exists.
  *
- * Two sentences and a line of figures. The labelled layout below says more,
+ * Three sentences and a line of figures. The labelled layout below says more,
  * and says it in a shape that has to be learned: which column means what, what
  * a bare `!` marks, why `declared` and `changed` are different lines. That is
  * the right trade for somebody studying a session and the wrong one for
@@ -28,12 +33,36 @@ import { INDENT, plural } from "./text.js";
 /** Separates the figures on the metadata line. */
 const FIGURE_GAP = " · ";
 
+/**
+ * The first sentence of all: where the work ended up.
+ *
+ * Read off `outcome`, which by the time a view runs holds what the repository
+ * says now rather than what the record was written with — see `withOutcomes`.
+ * The full view spends a labelled row on the same fact; here it is a sentence,
+ * and it comes first because it is the question the reader opened `show` with.
+ *
+ * Four ends, four sentences, and each says only what its evidence supports. A
+ * session still open has not landed and has not failed to, so it is not told
+ * it did either. A session that changed no files never had anything to land,
+ * and the sentence below it says that in its own words.
+ *
+ * "Landed on the default branch" rather than "shipped" or "merged": it is the
+ * plainest description of the thing `outcome.ts` actually checked, which is
+ * whether what the session left is in the default branch's history.
+ */
+const WHERE_IT_WENT: Record<SessionOutcome, string> = {
+  merged: "The work landed on the default branch.",
+  abandoned: "The work did not land on the default branch.",
+  open: "The work has not landed on the default branch yet.",
+  empty: "Nothing landed on the default branch.",
+};
+
 /** What `show` says when a session has no scope to have drifted from. */
 const NO_DRIFT_POSSIBLE =
   "Nothing was declared to compare against — run session start --scope to see drift.";
 
 /**
- * The first sentence: what was asked for.
+ * The second sentence: what was asked for.
  *
  * Returned in three pieces so the intent itself can be inked without the
  * sentence around it going bold too. A captured intent says so in the
@@ -63,7 +92,7 @@ function askedFor(session: Session): { before: string; intent: string; after: st
 }
 
 /**
- * The second sentence: what went outside what was declared.
+ * The third sentence: what went outside what was declared.
  *
  * Four cases, ordered by which fact a tired reader most needs. Something went
  * outside, and here it is; nothing changed at all; nothing was declared, so
@@ -95,8 +124,8 @@ function wentOutside(session: Session): { before: string; paths: string; after: 
 }
 
 /**
- * The figures, on one line: what it cost, how many turns that took, and how
- * many of those turns produced nothing.
+ * The figures, on one line at the bottom and dim: what it cost, how many turns
+ * that took, and how many of those turns produced nothing.
  *
  * Three numbers, because they are the three a person acts on. The api-call
  * counters, the token breakdown and what the empty turns cost in money are
@@ -121,6 +150,10 @@ function figures(cost: SessionCost, rates: RateTable): string | undefined {
 /**
  * The session as `session show` prints it without `--full`.
  *
+ * Three sentences now, in the order the questions are asked: where the work
+ * went, what was asked for, and what went outside what was declared. Then the
+ * figures, dim, at the bottom.
+ *
  * Colour does the same work it does everywhere else and no more: the intent is
  * the line you look for first, the drift paths are the thing that is there,
  * and everything framing them is dim. No role is used here that the full view
@@ -136,6 +169,11 @@ export function formatBrief(
 
   const lines = [
     "",
+    // Left in the terminal's own colour, like the money. It is the one line
+    // that is always there, and colouring what is always there says nothing;
+    // the `merged` and `abandoned` inks stay where they mark one row out of a
+    // table of them.
+    `${INDENT}${WHERE_IT_WENT[session.outcome]}`,
     `${INDENT}${asked.before}${palette.intent(asked.intent)}${asked.after}`,
     `${INDENT}${outside.before}${palette.drift(outside.paths)}${outside.after}`,
   ];

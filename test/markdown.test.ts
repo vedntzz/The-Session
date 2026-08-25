@@ -135,25 +135,42 @@ describe("renderMarkdownWeek", () => {
     expect(lines([session()], 30)[0]).toBe("### AI-assisted work · 20 Jul – 18 Aug");
   });
 
-  it("leads with spend, what shipped, and what went outside plan", () => {
+  it("leads with what shipped, what did not, and what went outside plan", () => {
     const week = [
       session({ startedAt: on(12) }),
       session({ startedAt: on(13), outcome: "open", drift: ["src/store.ts", "rates.json"] }),
     ];
 
     expect(lines(week)[2]).toBe(
-      "**$3.00 spent · 1 change shipped · 2 files touched outside plan**",
+      "**1 change shipped · 0 did not · 1 still open · 2 files touched outside plan**",
+    );
+  });
+
+  it("keeps money out of the headline entirely", () => {
+    // The agents meter their own spend; the document closes on the figure
+    // rather than opening on it.
+    expect(lines([session()])[2]).not.toContain("$");
+  });
+
+  it("drops the open clause when no session is still running", () => {
+    const week = [
+      session({ startedAt: on(12) }),
+      session({ startedAt: on(13), outcome: "abandoned" }),
+    ];
+
+    expect(lines(week)[2]).toBe(
+      "**1 change shipped · 1 did not · 0 files touched outside plan**",
     );
   });
 
   it("says one change and one file in the singular", () => {
     expect(lines([session({ drift: ["src/store.ts"] })])[2]).toBe(
-      "**$1.50 spent · 1 change shipped · 1 file touched outside plan**",
+      "**1 change shipped · 0 did not · 1 file touched outside plan**",
     );
   });
 
-  it("names the five columns in order", () => {
-    expect(lines([session()])[4]).toBe("| Date | Work | Outcome | Cost | Unplanned |");
+  it("names the five columns in week's order, cost last", () => {
+    expect(lines([session()])[4]).toBe("| Date | Work | Outcome | Unplanned | Cost |");
   });
 
   it("right-aligns the two columns that hold figures, and only those", () => {
@@ -168,9 +185,9 @@ describe("renderMarkdownWeek", () => {
     ];
     const rows = lines(week).filter((line) => line.startsWith("| 1"));
 
-    expect(rows[0]).toBe("| 12 Aug | add rate limiting to /orders | ✅ | $1.50 | 0 |");
-    expect(rows[1]).toBe("| 13 Aug | add rate limiting to /orders |  | $1.50 | 0 |");
-    expect(rows[2]).toBe("| 14 Aug | add rate limiting to /orders |  | $1.50 | 0 |");
+    expect(rows[0]).toBe("| 12 Aug | add rate limiting to /orders | ✅ | 0 | $1.50 |");
+    expect(rows[1]).toBe("| 13 Aug | add rate limiting to /orders |  | 0 | $1.50 |");
+    expect(rows[2]).toBe("| 14 Aug | add rate limiting to /orders |  | 0 | $1.50 |");
   });
 
   it("closes the table with a bold total row", () => {
@@ -180,34 +197,43 @@ describe("renderMarkdownWeek", () => {
     ];
 
     expect(lines(week).find((line) => line.includes("**Total**"))).toBe(
-      "| **Total** | **2 sessions** | **1 ✅** | **$3.00** | **2** |",
+      "| **Total** | **2 sessions** | **1 ✅** | **2** |  |",
     );
+  });
+
+  it("leaves the cost cell of the total row empty, so the closing line is the only total", () => {
+    const document = renderMarkdownWeek([session()], 7, priced, NOW);
+    const total = lines([session()]).find((line) => line.includes("**Total**")) as string;
+
+    expect(total).not.toContain("$");
+    expect(document.split("\n").at(-1)).toBe("**$1.50 spent · $1.50 per shipped change**");
   });
 
   it("leaves the tick off the total row when nothing shipped", () => {
     expect(lines([session({ outcome: "open" })]).find((line) => line.includes("**Total**"))).toBe(
-      "| **Total** | **1 session** |  | **$1.50** | **0** |",
+      "| **Total** | **1 session** |  | **0** |  |",
     );
   });
 
-  it("closes with what each shipped change cost, over everything spent", () => {
+  it("closes on what the week cost, and what each shipped change cost", () => {
     const week = [
       session({ startedAt: on(12), outcome: "merged" }),
       // Money that never landed is part of what the change that did land cost.
       session({ startedAt: on(13), outcome: "abandoned" }),
     ];
 
-    expect(lines(week).at(-1)).toBe("**$3.00 per shipped change.**");
+    expect(lines(week).at(-1)).toBe("**$3.00 spent · $3.00 per shipped change**");
   });
 
-  it("omits that line entirely when nothing merged", () => {
+  it("still closes on the spend when nothing merged, without the ratio", () => {
     const document = renderMarkdownWeek([session({ outcome: "open" })], 7, priced, NOW);
 
+    expect(document.split("\n").at(-1)).toBe("**$1.50 spent**");
     expect(document).not.toContain("per shipped change");
     expect(document).not.toContain("—");
   });
 
-  it("omits it when no session could be priced, rather than dividing nothing", () => {
+  it("omits the ratio when no session could be priced, rather than dividing nothing", () => {
     const unpriced = session({ cost: cost({ model: "mystery-9", inputTokens: 100_000 }) });
 
     expect(renderMarkdownWeek([unpriced], 7, priced, NOW)).not.toContain("per shipped change");
@@ -228,8 +254,9 @@ describe("a week with sessions no rate covers", () => {
   });
 
   it("says plainly how much of the table the money covers", () => {
-    expect(lines(week).find((line) => line.startsWith("The cost above"))).toBe(
-      "The cost above covers 1 of 2 sessions. 1 session ran on a model with no rate (mystery-9).",
+    // "Below", since the figure it points at is the closing line now.
+    expect(lines(week).find((line) => line.startsWith("The cost below"))).toBe(
+      "The cost below covers 1 of 2 sessions. 1 session ran on a model with no rate (mystery-9).",
     );
   });
 
@@ -238,7 +265,9 @@ describe("a week with sessions no rate covers", () => {
 
     // The total is $1.50, and the document says out loud that it is a total of
     // one of the two rows rather than of both.
-    expect(document).toContain("**$1.50**");
+    // Two sessions merged; only one of them could be priced, and the ratio is
+    // over both — which is exactly why the note above says so out loud.
+    expect(document.split("\n").at(-1)).toBe("**$1.50 spent · $0.75 per shipped change**");
     expect(document).toContain("covers 1 of 2 sessions");
   });
 
@@ -249,7 +278,7 @@ describe("a week with sessions no rate covers", () => {
 
     expect(document).toContain("| $0.00 |");
     expect(document).not.toContain("unpriced");
-    expect(document).not.toContain("The cost above covers");
+    expect(document).not.toContain("The cost below covers");
   });
 });
 
@@ -261,48 +290,47 @@ describe("a week where nothing could be priced", () => {
       ...over,
     });
 
-  it("says the cost is unavailable rather than claiming the week cost nothing", () => {
+  it("says nothing could be priced rather than claiming the week cost nothing", () => {
     const week = [unpriced(12), unpriced(13, { outcome: "open" })];
 
-    expect(lines(week)[2]).toBe(
-      "**cost unavailable — no rate for mystery-9 · 1 change shipped · 0 files touched outside plan**",
-    );
+    // The dash and the wording are `week`'s, through `spentFigure`: the
+    // terminal and this document must answer "what did it cost" the same way.
+    expect(lines(week).at(-1)).toBe("**— spent: nothing here could be priced**");
   });
 
-  it("never puts $0.00 in the headline", () => {
-    expect(renderMarkdownWeek([unpriced(12)], 7, priced, NOW)).not.toContain("$0.00 spent");
+  it("never puts $0.00 anywhere in a week nobody can price", () => {
+    expect(renderMarkdownWeek([unpriced(12)], 7, priced, NOW)).not.toContain("$0.00");
   });
 
   it("names every model it has no rate for", () => {
     const week = [unpriced(12), unpriced(13, { cost: cost({ model: "other-7", inputTokens: 5000 }) })];
 
-    expect(lines(week)[2]).toContain("no rate for mystery-9, other-7");
+    expect(renderMarkdownWeek(week, 7, priced, NOW)).toContain("no rate (mystery-9, other-7)");
   });
 
-  it("puts an em dash in the total row rather than a bolded nought", () => {
+  it("leaves the total row's cost cell empty, dash and all", () => {
     const week = [unpriced(12), unpriced(13)];
 
     expect(lines(week).find((line) => line.includes("**Total**"))).toBe(
-      "| **Total** | **2 sessions** | **2 ✅** | — | **0** |",
+      "| **Total** | **2 sessions** | **2 ✅** | **0** |  |",
     );
   });
 
   it("says how many sessions that was, and what to do about it", () => {
     const week = [unpriced(12), unpriced(13)];
 
-    expect(lines(week).find((line) => line.startsWith("No cost"))).toBe(
-      "No cost could be worked out: 2 sessions ran on a model with no rate (mystery-9). " +
-        "Add one to ~/.session/rates.json.",
+    expect(lines(week).find((line) => line.includes("no rate"))).toBe(
+      "2 sessions ran on a model with no rate (mystery-9). Add one to ~/.session/rates.json.",
     );
   });
 
-  it("does not point at a cost above that is not there", () => {
-    // The other shape of this note reads "The cost above covers 0 of 2
+  it("does not point at a cost that covers none of them", () => {
+    // The other shape of this note reads "The cost below covers 0 of 2
     // sessions", which sends the reader looking for a figure the document
     // deliberately did not print.
     const document = renderMarkdownWeek([unpriced(12), unpriced(13)], 7, priced, NOW);
 
-    expect(document).not.toContain("The cost above");
+    expect(document).not.toContain("The cost below");
   });
 
   it("still omits the cost per shipped change", () => {
@@ -315,18 +343,18 @@ describe("a week where nothing could be priced", () => {
     const free = session({ cost: zeroCost() });
     const document = renderMarkdownWeek([free], 7, priced, NOW);
 
-    expect(document).toContain("**$0.00 spent ·");
-    expect(document).toContain("**$0.00**");
-    expect(document).not.toContain("cost unavailable");
+    expect(document.split("\n").at(-1)).toBe("**$0.00 spent**");
+    expect(document).toContain("| $0.00 |");
+    expect(document).not.toContain("—");
   });
 
-  it("says cost unavailable when the only priced session cost nothing", () => {
+  it("says nothing could be priced when the only priced session cost nothing", () => {
     // One session with a rate and no tokens, one with tokens and no rate. The
     // total is $0.00 and it is not the week's cost, so it is not printed.
     const free = session({ startedAt: on(12), cost: zeroCost() });
     const document = renderMarkdownWeek([free, unpriced(13)], 7, priced, NOW);
 
-    expect(document).toContain("cost unavailable — no rate for mystery-9");
+    expect(document.split("\n").at(-1)).toBe("**— spent: nothing here could be priced**");
     expect(document).not.toContain("$0.00 spent");
   });
 });
@@ -356,10 +384,13 @@ describe("sessions that changed nothing", () => {
   });
 
   it("keeps them out of every figure above, so the table adds up to its own total", () => {
-    // $1.50, not $1.80: the total row is a total of the rows above it, and the
+    // $1.50, not $1.80: every figure is over the rows the table lists, and the
     // $0.30 is accounted for in its own line rather than folded in silently.
-    expect(lines(week)[2]).toContain("$1.50 spent");
-    expect(lines(week).find((line) => line.includes("**Total**"))).toContain("**$1.50**");
+    const document = renderMarkdownWeek(week, 7, priced, NOW);
+
+    expect(document.split("\n").at(-1)).toBe("**$1.50 spent · $1.50 per shipped change**");
+    expect(document).toContain("costing $0.30");
+    expect(lines(week)[2]).toBe("**1 change shipped · 0 did not · 0 files touched outside plan**");
   });
 
   it("says so and stops when every session in the window was one", () => {

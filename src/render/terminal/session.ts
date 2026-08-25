@@ -9,29 +9,38 @@ import { CAPTURED_INTENT, DRIFT_MARKER, intentOf, NO_SCOPE, SCOPE_HINT } from ".
 import { clock, figure, gap, INDENT, label, padRight, plural, width } from "./text.js";
 
 /**
- * The session as `session show` prints it.
+ * The session as `session show --full` prints it.
+ *
+ * `outcome` is the first labelled row: where the work ended up is the question
+ * the reader came with, and it used to be the last thing they found. The
+ * intent stays above it as the heading, because it is the title of the view
+ * rather than a row in it.
  *
  * `changed` and `outside` partition what actually changed: the paths that
  * landed inside the declared scope, then the ones that did not. Reading both
- * gives back `reality` exactly, with no path listed twice.
+ * gives back `reality` exactly, with no path listed twice. Both come before
+ * the cost rows — the gap between what was declared and what happened is what
+ * this tool measures that nothing else does.
  */
 export function formatSession(
   session: Session,
   palette: Palette = plainPalette,
   view: View = {},
 ): string[] {
+  // Cost and attribution share the last block, and a session no transcript was
+  // captured for has neither. The blank line above them goes with them, rather
+  // than being left hanging off the end of the view.
+  const footer = [...costLines(session, palette, view), ...attributionLines(session, palette)];
   return [
     "",
     headingLine(session, palette),
     "",
+    outcomeLine(session, palette),
     ...capturedIntentLines(session, palette),
     declaredLine(session, palette),
     ...changedLines(session, palette),
     ...outsideLines(session, palette),
-    "",
-    ...costLines(session, palette, view),
-    ...attributionLines(session, palette),
-    outcomeLine(session, palette),
+    ...(footer.length > 0 ? ["", ...footer] : []),
   ];
 }
 
@@ -116,9 +125,10 @@ function outsideLines(session: Session, palette: Palette): string[] {
 }
 
 /**
- * Money first, counts in the gutter beside it: what the session cost is the
- * question, and the counters are how it got there. Nothing is printed for a
- * session no transcript was captured for.
+ * Money left, counts in the gutter beside it. Last in the view, under the
+ * paths: what a session cost is a detail, and this is the view somebody opened
+ * because they wanted the details. Nothing is printed for a session no
+ * transcript was captured for.
  */
 function costLines(session: Session, palette: Palette, view: View): string[] {
   const { turns, apiCalls } = session.cost;

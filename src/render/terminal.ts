@@ -10,5 +10,5 @@ export { formatSession } from "./terminal/session.js";
 export { formatBrief } from "./terminal/brief.js";
 export { formatHome, type Home } from "./terminal/home.js";
 export { formatCommands, type CommandEntry } from "./terminal/commands.js";
-export { formatWeek, describeFilter, stamp } from "./terminal/week.js";
+export { formatWeek, describeFilter, spentFigure, stamp } from "./terminal/week.js";
 export { formatScan } from "./terminal/scan.js";
