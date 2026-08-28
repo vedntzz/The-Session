@@ -57,6 +57,7 @@ Without a declaration there is one entry in the ledger — what the machine prod
 | `session week` | The last 7 days, one row each: where the work went and what drifted. `--md` writes it for Slack, Notion or a meeting. |
 | `session estimate "<intent>"` | What sessions like this one have cost before, from your own history. |
 | `session debt` | Files that keep drifting outside the plan and were never declared since, per repo. |
+| `session survival` | How much of what merged is still there at 14 and 30 days. `--check` records the checks that are due. |
 
 `session help all` lists the other twelve — `stop`, `settle`, `mark`, `verify`, `push`, `pull`, `peers`, `config`, `key`, `hook`, `intent`, `help`.
 

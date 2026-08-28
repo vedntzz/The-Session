@@ -13,3 +13,10 @@ export { formatCommands, type CommandEntry } from "./terminal/commands.js";
 export { formatWeek, describeFilter, spentFigure, stamp } from "./terminal/week.js";
 export { formatScan } from "./terminal/scan.js";
 export { formatDebt, NOTHING_RECORDED } from "./terminal/debt.js";
+export {
+  formatSurvival,
+  formatCheck,
+  NOTHING_MERGED,
+  NO_BRANCH,
+  BENCHMARK_NOTE,
+} from "./terminal/survival.js";

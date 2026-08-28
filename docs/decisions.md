@@ -14,6 +14,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 - [Colour](#colour)
 - [What it cost](#what-it-cost) — why money leads, and where the prices come from
 - [Did it ship?](#did-it-ship) — outcomes decided on content, not commit shas
+- [Did it stick?](#did-it-stick) — survival at 14 and 30 days
 - [What will this one cost?](#what-will-this-one-cost) — the class rules and `estimate`
 - [The files nobody plans for](#the-files-nobody-plans-for) — `debt`
 - [Handing the week to someone else](#handing-the-week-to-someone-else) — `--md`
@@ -188,6 +189,43 @@ session mark 487aa3ad merged
 ```
 
 That is written as a manual observation, and it wins — over the computation, and over any later `settle`. A person can see things the algorithm cannot.
+
+## Did it stick?
+
+Merging is not the end of the question. A session merges, the tool records that it landed, and three weeks later the file it wrote holds none of what it wrote — reverted, rewritten by the next person through, or deleted outright. That is the difference between work that shipped and work that stuck, and until now the log had nothing to say about it: `outcome` says the blobs reached the branch once, which is a fact about a moment rather than about what came after.
+
+```
+$ session survival
+
+  18 merged sessions · what is still there
+  measured against the published benchmark: above 90% of what merged still there, below 10% churned
+
+  14 days   93% of 148 files still there · 18 sessions
+            above the 90% benchmark · 7% churn · 8 rewritten, 3 deleted
+            6 still inside the window
+  class     api   96% of 71 files still there · 9 sessions
+            ui    88% of 42 files still there · 6 sessions
+  declared  96% of 96 files still there · 11 sessions
+  captured  87% of 52 files still there · 7 sessions
+
+  30 days   4 sessions measured — fewer than 5, so no rate · 9 still inside the window
+```
+
+**It has to be written down, because it cannot be recomputed.** Every other figure in this tool is a query over the record, and `outcome` is deliberately recomputed on every view because the branch moves. This one cannot be: the tip today says what is there today, and a file rewritten in week three and restored in week six looks untouched to anybody asking afterwards. So the check runs on a schedule and is appended to the log — signed and chained like every other record, per path, with the day it was made and the commit it was made against. `session survival --check` is what runs it, and the report says when one is owed.
+
+A path is **survived** when it still holds the blob the session left, **rewritten** when it holds something else, and **deleted** when it is not there at all. A session that deleted a file survives by the file staying gone; something back at that path is that deletion being undone. A session's survival rate is the share of its paths that survived, and the overall rate is over *paths*, not an average of session rates — a session that touched forty files is forty files' worth of evidence.
+
+Four things it will not do:
+
+**It never counts waiting as failure.** A session merged the day before yesterday has not failed to survive a fortnight. Those are `pending`, on their own line, and they are not in the denominator — otherwise the figure would fall every time you merged something and rise again a fortnight later, and the movement would be the calendar rather than the code.
+
+**It will not answer late.** A window closed more than a week ago is `missed`, not checked: the branch now is not evidence about a fortnight that ended in March, and a late check would quietly report today's tip as though it were that day's. Missed windows are counted and named. This mostly bites on the day you adopt the tool, when a backlog of old merges can never be answered — which is true, and better said than papered over.
+
+**It is dated from when the merge was observed, not when it happened.** Nothing on disk records the latter and nothing can: a squash merge writes a new commit with its own dates and keeps none of the originals. What the log holds is the day somebody looked and found the work there, so a session settled late has late windows. Merged sessions nobody has settled have no date at all, and are counted as `unsettled` with a pointer at `session settle`.
+
+**Declared and captured are never pooled**, and neither is anything below five sessions. Same rules as `estimate`, for the same reasons — a commitment made before the work and a transcript of a prompt are different evidence, and a rate over two sessions looks like knowledge and is not.
+
+The 90% is somebody else's figure, not a measurement this tool made; churn is exactly the share that did not survive, so 90% survival and 10% churn are one line quoted from both ends. It is one constant in `src/survival.ts`, so disagreeing with it is a one-line change.
 
 ## What will this one cost?
 

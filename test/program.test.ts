@@ -495,7 +495,7 @@ describe("session", () => {
     expect(row.split(/(?<!\\)\|/)).toHaveLength(7);
   });
 
-  it("registers exactly the eighteen subcommands", () => {
+  it("registers exactly the nineteen subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
@@ -516,6 +516,7 @@ describe("session", () => {
       "show",
       "start",
       "stop",
+      "survival",
       "verify",
       "week",
     ]);

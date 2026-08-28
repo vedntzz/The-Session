@@ -1,6 +1,7 @@
 // The shape of a session and of one line of the log. Pure: no disk, no git.
 import type { SessionClass } from "../classify.js";
 import type { Observation } from "../outcome.js";
+import type { SurvivalObservation } from "../survival.js";
 import type { Attribution } from "../config.js";
 /**
  * The four token counters, kept separate because the four kinds bill at
@@ -170,6 +171,17 @@ export interface Session {
    * computed afresh. See `outcome.ts`.
    */
   observations?: Observation[];
+  /**
+   * Whether what merged is still there, checked at 14 and at 30 days past the
+   * merge and written down, oldest first.
+   *
+   * Unlike `outcome`, this one cannot be recomputed. The branch tip says what
+   * is there today; a file rewritten in week three and restored in week six
+   * looks untouched to anybody asking afterwards. So the answer only exists if
+   * somebody wrote it down on the day — which is what makes this a record
+   * rather than a cache. See `survival.ts`.
+   */
+  survival?: SurvivalObservation[];
   /** HEAD when the session opened, so its diff can be recovered later. */
   startCommit: string;
   /**

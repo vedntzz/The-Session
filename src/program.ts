@@ -17,6 +17,7 @@ import { registerSettle } from "./program/settle.js";
 import { registerShow } from "./program/show.js";
 import { registerStart } from "./program/start.js";
 import { registerStop } from "./program/stop.js";
+import { registerSurvival } from "./program/survival.js";
 import { registerSync } from "./program/sync.js";
 import { registerVerify } from "./program/verify.js";
 import { registerWeek } from "./program/week.js";
@@ -94,6 +95,7 @@ function registerCommands(program: Command, options: ProgramOptions, palette: Pa
   registerEstimate(program, options);
   registerVerify(program, options);
   registerSettle(program, options);
+  registerSurvival(program, options, palette);
   registerSync(program, options);
   registerConfig(program, options);
   registerKey(program, options);

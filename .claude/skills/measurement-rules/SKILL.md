@@ -202,6 +202,60 @@ from repositories it is not standing in and so cannot recompute one — see the
 top of this file. Unpriced sessions are counted and named as everywhere else,
 and a file nothing could be priced for reads `—`.
 
+## Survival
+
+Rationale and a worked report:
+[Did it stick?](../../../docs/decisions.md#did-it-stick).
+
+The one figure in this tool that is **not** recomputed on every view, and the
+reason is the whole design: the branch tip says what it holds today and nothing
+says what it held on the fourteenth day after a merge. A file rewritten in week
+three and restored in week six is indistinguishable from one nobody touched. So
+the check runs on a schedule and is written to the log as a signed record, per
+path, stamped with the day and the commit — `session survival --check`. Never
+turn this into a live computation, and never revise an observation once
+written: a survival record that could be rewritten is worth what recomputing it
+is worth, which is nothing.
+
+Per path: `survived` (still the blob the session left), `rewritten` (something
+else), `deleted` (nothing there). A session that deleted a file survives by the
+file staying gone, and something back at the path is that deletion undone —
+`rewritten`, since from here they are the same event.
+
+Windows are `SURVIVAL_WINDOWS` (14 and 30), counted from **the first
+observation saying `merged`**, not from `endedAt` and not from any commit date.
+Nothing on disk records when a merge happened — a squash writes a new commit
+with its own dates — so what is counted from is the day somebody looked. A
+session no `settle` has dated is `unsettled` and is counted, never guessed at.
+
+Five states, and each is printed rather than collapsed:
+
+- `measured` — on the record.
+- `pending` — merged too recently for the window to have closed. **Never a
+  failure and never in the denominator.** Counting it would make the rate fall
+  on every merge and recover a fortnight later, and the movement would be the
+  calendar.
+- `due` — closed, within `CHECK_GRACE_DAYS`, still answerable. The one
+  actionable state; the view names the command.
+- `missed` — closed longer ago than that. **Not checked late**: the tip now is
+  not evidence about then, and answering anyway would file today's branch as
+  that day's. Counted and named, which is what an adopter with a backlog of old
+  merges is owed.
+- `unsettled` — merged, but nothing records when.
+
+The rate is over **paths, not sessions** — a session that touched forty files
+is forty files' worth of evidence — while `MIN_SESSIONS` still counts sessions,
+since what has to be numerous enough to generalise from is the work. Below it,
+the count prints and no rate does, exactly as in `estimate`. Declared and
+captured are separate lines and never a total, and a block holding nothing
+still prints, for the reasons under Estimate.
+
+`SURVIVAL_BENCHMARK` is one constant, quoted from both ends: churn here is
+exactly the share that did not survive, so 90% survival and 10% churn are the
+same line. Two constants would be two things to keep in step. It is somebody
+else's published figure, not a measurement — it is there so a reader has
+something to sit their own figure against.
+
 ## Estimate
 
 Rationale: [What will this one cost?](../../../docs/decisions.md#what-will-this-one-cost).

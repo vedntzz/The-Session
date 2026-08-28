@@ -19,14 +19,16 @@ Node 20+, TypeScript, ESM. `commander` for the CLI, `picocolors` for output. Sto
 ## Layout
 
 ```
-src/  cli.ts registration   commands/ start stop show week scan debt verify key config
-      settle estimate intent home   render/ palette.ts (semantic colour) terminal.ts
-      html.ts markdown.ts   capture/ hook.ts, adapters/claude-code.ts, transcript.ts
+src/  cli.ts registration   commands/ start stop show week scan debt survival verify
+      key config settle estimate intent home   render/ palette.ts (semantic colour)
+      terminal.ts html.ts markdown.ts
+      capture/ hook.ts, adapters/claude-code.ts, transcript.ts
       (what a transcript line means — the adapter and scan.ts both read through it)
       store.ts JSONL   outcome.ts merged/abandoned/open   classify.ts path+intent rules
       pricing.ts money   observe.ts repo facts   scan.ts aggregation   git.ts diff, HEAD
       scope.ts what a declared scope covers (stop and debt share the one rule)
       debt.ts paths that keep drifting and were never declared since, per repo
+      survival.ts whether merged work is still there at 14 and 30 days
       chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
       config.ts .session.json, checked in   ../rates.json prices per model, per Mtok
 ```
@@ -51,6 +53,10 @@ type Session = {
   endState?: Record<string, string | null>  // blob id per reality path at stop, null
                                // = deleted; what makes "did it merge" answerable
   observations?: Observation[] // { outcome, observedAt, commit, branch, source }
+  survival?: SurvivalObservation[]  // { window: 14|30, observedAt, commit, branch,
+                               // fates: path -> survived|rewritten|deleted }. The one
+                               // figure that cannot be recomputed: the branch says what
+                               // it holds today, never what it held on day 14
 }
 // Four counters, never one sum: each bills at a different rate, so a total cannot be
 // converted back into money. Turns are prompts; calls are what each one set off.
