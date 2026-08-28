@@ -10,7 +10,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 
 ## Contents
 
-- [The record](#the-record) — the nine fields everything else is a query over
+- [The record](#the-record) — the nine fields everything else is a query over, and [one repo, two logs](#one-repo-two-logs)
 - [Colour](#colour)
 - [What it cost](#what-it-cost) — why money leads, and where the prices come from
 - [Did it ship?](#did-it-ship) — outcomes decided on content, not commit shas
@@ -41,6 +41,18 @@ Nine fields. Everything else is a query over them.
 Cost counts two ways, because they answer different questions. **Turns** are your prompts: one per thing you asked for. **API calls** are what each prompt set off — the reads, the greps, the edits. A turn that ends without touching a file is waste you can act on; a call that ends without touching a file is usually just the agent looking something up.
 
 Stored as JSONL under `~/.session/`. Your data, your disk. No account, no server, no telemetry.
+
+### One repo, two logs
+
+Records are filed per repository, and a repository is identified by its origin remote — or, when it has none, by where it sits on disk. Which means a repo that gains an origin changes name: `path:/home/me/tool` becomes `remote:github.com/acme/tool`, and the next session opens a second log under the new key.
+
+Nothing on disk is moved to fix that. The two logs are two hash chains, signed at different times, and appending to the older one or splicing them into a single file would fork a chain `session verify` is entitled to walk line by line. Writing stays on the current log; the join happens in memory, at read time, where nothing is at stake.
+
+So reading asks the checkout what its origin is now, and reads the log it used to be keyed under as well. `week`, `estimate`, `show` and `settle` all see one history, and a session created before the remote and settled after it — its creating record in one file, its outcome in the other — is folded back into one record rather than losing the half that arrived late.
+
+`session debt` does the same thing without a checkout to start from: it resolves each path-keyed log's own directory to whatever origin it has today, and merges only where some other log is already keyed on that remote. The resolution is the evidence that two logs are one repo; with nothing to merge into, there is nothing to say. A directory that has been deleted, is no longer a repo, or still has no remote gives no answer, and its log stays where it is.
+
+Only that direction resolves. A checkout with a remote can always be asked what it used to be called, because its root is a fact about where it is; a remote-keyed log names no directory to go and ask. And the lookup is never written down: `repo` on a record says what the repository was called when the record was written, which is a fact about the past, and facts about the past are not edited here.
 
 ### Colour
 

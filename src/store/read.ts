@@ -14,7 +14,12 @@ import {
   type SessionPatch,
   type StoreOptions,
 } from "./record.js";
-import { resolveStoreFile } from "./paths.js";
+import {
+  pathIdentity,
+  remoteIdentity,
+  resolveStoreFile,
+  storeFileFor,
+} from "./paths.js";
 
 // --- log I/O -------------------------------------------------------------
 
@@ -86,10 +91,13 @@ export function splitLog(file: string, text: string): RawLog {
   return { file, lines, complete: text === "" || text.endsWith("\n") };
 }
 
-/** Reads this repo's log. An absent file is an empty log, not an error. */
+/** Reads this repo's own log — the one appends go to. An absent file is empty. */
 export async function readLog(options: StoreOptions = {}): Promise<RawLog> {
-  const file = await resolveStoreFile(options);
+  return readLogAt(await resolveStoreFile(options));
+}
 
+/** Reads a log by path. An absent file is an empty log, not an error. */
+export async function readLogAt(file: string): Promise<RawLog> {
   try {
     return splitLog(file, await readFile(file, "utf8"));
   } catch (error) {
@@ -98,6 +106,50 @@ export async function readLog(options: StoreOptions = {}): Promise<RawLog> {
     }
     throw error;
   }
+}
+
+/**
+ * Every log on this machine that belongs to the repo at `cwd`, oldest first,
+ * and what the repo is called now.
+ *
+ * A repo that gains an origin remote changes identity — `path:/home/me/tool`
+ * becomes `remote:github.com/acme/tool` — and the next `session start` opens a
+ * second log under the new key. Everything recorded before that goes on
+ * sitting in the first one, and a `week` that read only the current file would
+ * report a repo with months of history as having none.
+ *
+ * So reading asks for both, while writing stays on the current one. The two
+ * logs are two hash chains signed at different times, and appending to the
+ * older one, or splicing them into a single file, would fork a chain that
+ * `verify` is entitled to walk line by line. They are joined where nothing is
+ * at stake: in memory, at the fold.
+ *
+ * Only this direction resolves. A checkout with a remote can always be asked
+ * what it used to be called — its root is a fact about where it is — while a
+ * remote-keyed log names no directory to go and ask. That is the same
+ * asymmetry `debt` works under, and it is why the origin is looked up rather
+ * than remembered: the answer is whatever git says today.
+ */
+export async function sameRepoLogs(
+  options: StoreOptions = {},
+): Promise<{ identity: string; logs: RawLog[] }> {
+  const cwd = options.cwd ?? process.cwd();
+  const remote = await remoteIdentity(cwd);
+  if (remote === undefined) {
+    // Nothing to merge: this checkout is keyed on its location, which is the
+    // key it has always had. Resolved from the identity in hand rather than
+    // through `readLog`, which would ask git the same two questions again.
+    const identity = await pathIdentity(cwd);
+    return { identity, logs: [await readLogAt(storeFileFor(identity, options))] };
+  }
+
+  // Oldest first, so a record created before the remote existed is folded
+  // before the patches that later landed in the current log for it.
+  const previous = storeFileFor(await pathIdentity(cwd), options);
+  return {
+    identity: remote,
+    logs: [await readLogAt(previous), await readLogAt(storeFileFor(remote, options))],
+  };
 }
 
 /**
@@ -158,15 +210,37 @@ export function sessionFrom(input: NewSession, repo: string, intentSource: Inten
 }
 
 /**
- * Reads the log and folds patch records into current session state, sorted by
- * start time ascending. Returns an empty array when no log exists yet.
+ * Reads this repo's history and folds patch records into current session
+ * state, sorted by start time ascending. Empty when nothing has been recorded.
+ *
+ * Every log belonging to the repo, not only the file appends go to — a repo
+ * that gained an origin has two, and its history is both. See `sameRepoLogs`.
  *
  * A truncated final line is tolerated (an interrupted append); corruption
  * anywhere earlier throws, since that is real data loss rather than a partial
  * write.
  */
 export async function readSessions(options: StoreOptions = {}): Promise<Session[]> {
-  return foldLog(await readLog(options));
+  const { identity, logs } = await sameRepoLogs(options);
+  return relabel(foldLogs(logs), identity);
+}
+
+/**
+ * The same sessions, under what the repo is called now.
+ *
+ * A record written before the repo had an origin says `path:/home/me/tool`
+ * for good — records are never rewritten. What it was called is a fact about
+ * the past; what it *is* is one repo, and a reader handed both halves under
+ * two names would have to know this file's business to add them up. `debt`
+ * groups on this field, so the rename is what keeps one repo out of two rows.
+ *
+ * Pure, and it only ever touches the field: nothing else about a session
+ * depends on which key its log was filed under.
+ */
+export function relabel(sessions: readonly Session[], identity: string): Session[] {
+  return sessions.map((session) =>
+    session.repo === identity ? session : { ...session, repo: identity },
+  );
 }
 
 /**
@@ -178,21 +252,40 @@ export async function readSessions(options: StoreOptions = {}): Promise<Session[
  * what a log says, and the one that goes wrong is always the one written
  * second.
  */
-export function foldLog({ file, lines, complete }: RawLog): Session[] {
+export function foldLog(log: RawLog): Session[] {
+  return foldLogs([log]);
+}
+
+/**
+ * Several logs folded as one history, oldest log first.
+ *
+ * One fold across all of them rather than a fold each and the results
+ * concatenated, because a session can span two files: a repo that gained an
+ * origin keeps its old sessions in the old log, and a `settle` or a `stop`
+ * afterwards writes its patch into the new one. Folded apart, that patch would
+ * find no session to attach to and be dropped as dangling — the outcome would
+ * be recorded on disk and invisible in every view. Folded together it lands on
+ * the record it belongs to.
+ *
+ * Sorted by start time across the lot, so the merged history reads as one.
+ */
+export function foldLogs(logs: readonly RawLog[]): Session[] {
   const sessions = new Map<string, Session>();
   const order = new Map<string, number>();
 
-  for (const [index, line] of lines.entries()) {
-    let record: LogRecord;
-    try {
-      record = parseRecord(line.text, file, line.no);
-    } catch (error) {
-      if (index === lines.length - 1 && !complete) {
-        break; // interrupted append; the rest of the log is intact
+  for (const { file, lines, complete } of logs) {
+    for (const [index, line] of lines.entries()) {
+      let record: LogRecord;
+      try {
+        record = parseRecord(line.text, file, line.no);
+      } catch (error) {
+        if (index === lines.length - 1 && !complete) {
+          break; // interrupted append; the rest of the log is intact
+        }
+        throw error;
       }
-      throw error;
+      foldRecord(record, sessions, order);
     }
-    foldRecord(record, sessions, order);
   }
 
   return [...sessions.values()].sort(byStartedAt(order));

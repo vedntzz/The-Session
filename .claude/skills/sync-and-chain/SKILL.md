@@ -83,6 +83,46 @@ says so rather than implying its signatures were checked. A plain `verify`
 walks one log, so where other chains are present it says they went unchecked;
 one log verifying is not everything here verifying.
 
+## One repo, two logs
+
+A log is filed under `keyOf(repoIdentity(cwd))`, and the identity is the origin
+remote where there is one, the repository root where there is not. So a repo
+that gains an origin **changes key**, and `session start` opens a second log —
+everything recorded before it stays in the first, under `path:<root>`.
+
+**Writing stays single-file.** `resolveStoreFile` still resolves one path and
+every append goes there. Two logs are two hash chains, signed at different
+times; appending to the older one would fork it, and splicing them into one
+file would rewrite lines `verify` is entitled to walk. Don't "fix" the split by
+moving, merging or rewriting files on disk.
+
+**Reading merges them.** `sameRepoLogs` asks the checkout for its origin, and
+where there is one also reads the log keyed on `path:<root>` for the same
+checkout. `readSessions` folds both and relabels the older sessions to the
+current identity, so every view — `show`, `week`, `estimate`, `settle`, `home`
+— sees one history. `readLog` is untouched and single-file, which is what
+`verify` and `sync` read: one chain is one key's statement about one file, and
+neither may be handed two.
+
+`foldLogs` folds **across** logs into one map, oldest first, rather than
+folding each and concatenating. A session can span both files — a `settle`
+after the remote was added patches a session created before it — and folded
+apart that patch anchors to nothing and is dropped as dangling, so the outcome
+would be on disk and in no view. Don't reintroduce a per-file fold.
+
+Only path → remote resolves. A checkout with a remote can be asked what it used
+to be called; a remote-keyed log names no directory to go and ask. The origin is
+looked up at read time, never remembered on the record: `session.repo` says what
+the repo was called when the record was written, and that is a fact about the
+past which is never rewritten on disk.
+
+`debt` applies the same rule machine-wide, where it has no cwd to start from:
+it resolves each path-keyed log's own directory and merges only into a remote
+some other log is already keyed on — the resolution is the evidence that two
+logs are one repo, and with nothing to merge into it says nothing worth acting
+on. A directory that is gone, is no longer a repo, or still has no remote
+answers nothing, and its log stays where it is.
+
 ## Sync
 
 Rationale: [Sharing them with the team](../../../docs/decisions.md#sharing-them-with-the-team)

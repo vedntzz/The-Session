@@ -187,6 +187,12 @@ codebases, and grouping happens in the pure half so no caller can pool by
 accident. Repos sort by name: ranking them would be the aggregation this
 refuses, arriving by way of a sort.
 
+Grouping is on `session.repo` *after* the reader has merged the logs of a repo
+that changed identity — see `One repo, two logs` in the `sync-and-chain` skill.
+Two half-histories under two names are the failure this floor turns into its
+worst form: months of sessions, split, each half under three, and a report
+saying it cannot judge.
+
 The cost column is the whole cost of every session that touched the file, never
 a share of one — there is no way to divide a session's tokens between the files
 it changed. So the column does not add up, nothing offers a total for it, and
