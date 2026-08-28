@@ -4,6 +4,7 @@
 import { blobIds, defaultBranch, repoRoot } from "../git.js";
 import { isRepo } from "../git/run.js";
 import { withOutcomes } from "../observe.js";
+import type { RepoFacts } from "../outcome.js";
 import {
   fateOf,
   mergedAt,
@@ -70,9 +71,13 @@ export interface CheckResult {
 export async function checkSurvival(
   options: StoreOptions = {},
   now: number = Date.now(),
+  gathered?: RepoFacts,
 ): Promise<CheckResult> {
   const cwd = options.cwd ?? process.cwd();
-  const sessions = await withOutcomes(await readSessions(options), cwd);
+  // Facts the caller already asked for, where there are any: the daily sweep
+  // settles and then checks, and gathering twice for one sweep would double
+  // the most expensive thing this tool does. See `withOutcomes`.
+  const sessions = await withOutcomes(await readSessions(options), cwd, gathered);
   const merged = sessions.filter((session) => session.outcome === "merged");
 
   const result: CheckResult = {
@@ -82,7 +87,11 @@ export async function checkSurvival(
     unsettled: merged.filter((session) => mergedAt(session) === undefined).length,
   };
 
-  const branch = (await isRepo(cwd)) ? await defaultBranch(await repoRoot(cwd)) : undefined;
+  // The gathered facts already name the branch and its tip, which is what
+  // they were judged against; asking git again could only disagree with them.
+  const branch = gathered
+    ? { name: gathered.branch, tip: gathered.tip }
+    : (await isRepo(cwd)) ? await defaultBranch(await repoRoot(cwd)) : undefined;
   if (!branch) {
     // No branch to check against, so nothing is due and nothing is missed:
     // the question was never asked, which is not the same as going unanswered.

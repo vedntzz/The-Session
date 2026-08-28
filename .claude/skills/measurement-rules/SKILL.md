@@ -243,6 +243,16 @@ Five states, and each is printed rather than collapsed:
   merges is owed.
 - `unsettled` — merged, but nothing records when.
 
+Both `settle` and the due checks also run **automatically**, once a day per
+repo, from the `SessionEnd` hook and opportunistically from `week`, `show` and
+the bare screen — `commands/sweep.ts`. Rules that hold there: silent unless
+something was written; the once-a-day stamp goes down *before* the work, so a
+cancelled sweep waits for tomorrow rather than retrying on every command; it
+never fails its host command; and it gathers `RepoFacts` once and hands them to
+the view, since gathering twice in one command doubles the most expensive thing
+this tool does. Don't make it chatty, don't let it throw, and don't add a second
+gather.
+
 The rate is over **paths, not sessions** — a session that touched forty files
 is forty files' worth of evidence — while `MIN_SESSIONS` still counts sessions,
 since what has to be numerous enough to generalise from is the work. Below it,

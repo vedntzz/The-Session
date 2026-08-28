@@ -39,17 +39,25 @@ export interface HookSpec {
  * the ones where nobody ran `session start` and passive capture is off: with
  * nothing open for that repo there is nothing to close and nothing to say.
  *
- * Ten seconds because `SessionEnd` handlers share a 1.5-second budget by
- * default, which `session stop` can outrun: it shells out to git and then
- * reads the whole transcript to count tokens. Past the budget the handler is
- * cancelled and the session stays open forever — the one failure that loses a
- * record rather than merely delaying it. A per-hook `timeout` raises the
- * shared budget to match, up to 60.
+ * `SessionEnd` handlers share a 1.5-second budget by default, which `session
+ * stop` can outrun: it shells out to git and then reads the whole transcript
+ * to count tokens. Past the budget the handler is cancelled and the session
+ * stays open forever — the one failure that loses a record rather than merely
+ * delaying it. A per-hook `timeout` raises the shared budget to match, up to
+ * 60.
+ *
+ * Thirty, because closing the session is no longer all this does: once a day
+ * per repo it also settles what has landed and runs the survival checks that
+ * have come due, which is a `git log` per path — see `commands/sweep.ts`. The
+ * stop is written first and the sweep second, so a budget that still runs out
+ * costs a day of sweeping rather than a record. An installation left at the
+ * old ten seconds keeps working for the same reason; `session hook install`
+ * raises it, and `hasHook` reports the old entry as needing that repair.
  */
 export const STOP_HOOK: HookSpec = {
   event: "SessionEnd",
   command: "session stop --if-open",
-  timeout: 10,
+  timeout: 30,
   passive: false,
 };
 
@@ -61,8 +69,10 @@ export const STOP_HOOK: HookSpec = {
  * themselves is left exactly as it is, because they declared an intent and a
  * scope and a second session would take the diff away from it.
  *
- * The same ten seconds as `SessionEnd`, and for the same reason — it reads
- * HEAD and the dirty files before it writes.
+ * Ten seconds, for the same reason `SessionEnd` needs its own budget — it
+ * reads HEAD and the dirty files before it writes. Less than that hook needs,
+ * because nothing sweeps here: this one is on the path between the developer
+ * opening the editor and the agent starting.
  */
 export const OPEN_HOOK: HookSpec = {
   event: "SessionStart",

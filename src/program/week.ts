@@ -10,6 +10,7 @@ import {
   writeWeekPage,
   type SessionFilter,
 } from "../commands/week.js";
+import { sweepFirst } from "../commands/sweep.js";
 import { parseOutcome } from "../outcome.js";
 import { loadRates } from "../pricing.js";
 import { renderWeek } from "../render/html.js";
@@ -82,7 +83,10 @@ async function emitWeek(
 ): Promise<void> {
   const days = parseDays(flags.days);
   const filter = weekFilterFrom(flags);
-  const sessions = await weekSessions(days, options, filter);
+  // Before the week is gathered, so the table shows what was just written, and
+  // reusing the facts it asked for — see `sweepFirst`.
+  const { notice, facts } = await sweepFirst(options);
+  const sessions = await weekSessions(days, options, filter, facts);
   const view = {
     rates: await loadRates(storeHome(options)),
     tokens: flags.tokens,
@@ -90,14 +94,17 @@ async function emitWeek(
   };
 
   if (flags.md || flags.copy) {
+    // No notice here, ever. `session week --md > notes.md` is a document, and
+    // a line of ours above the heading would be in the file somebody pastes.
     await emitWeekMarkdown(renderMarkdownWeek(sessions, days, view), sessions.length, flags, options);
     return;
   }
   if (flags.open) {
+    printLines(notice);
     await emitWeekPage(renderWeek(sessions, days, filter, view), options);
     return;
   }
-  printLines(formatWeek(sessions, days, palette, filter, view));
+  printLines([...notice, ...formatWeek(sessions, days, palette, filter, view)]);
 }
 
 /** Puts the Markdown on the clipboard, or on stdout. */

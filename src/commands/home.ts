@@ -1,4 +1,5 @@
 import { withOutcomes } from "../observe.js";
+import type { RepoFacts } from "../outcome.js";
 import type { Home } from "../render/terminal.js";
 import { readSessions, type StoreOptions } from "../store.js";
 
@@ -13,7 +14,10 @@ import { readSessions, type StoreOptions } from "../store.js";
  * somebody finds out what this is; answering an empty repo with a stack trace
  * would be answering the question badly.
  */
-export async function homeState(options: StoreOptions = {}): Promise<Home> {
+export async function homeState(
+  options: StoreOptions = {},
+  gathered?: RepoFacts,
+): Promise<Home> {
   const sessions = await readSessions(options);
 
   const running = sessions.filter((session) => session.endedAt === null).at(-1);
@@ -24,6 +28,6 @@ export async function homeState(options: StoreOptions = {}): Promise<Home> {
 
   // The outcome is resolved for the one session the screen names, the same way
   // `show` resolves it: the field on disk is only what `settle` last wrote.
-  const [resolved] = await withOutcomes([last], options.cwd ?? process.cwd());
+  const [resolved] = await withOutcomes([last], options.cwd ?? process.cwd(), gathered);
   return { ...(running ? { running } : {}), last: resolved ?? last };
 }

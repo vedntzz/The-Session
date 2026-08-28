@@ -19,8 +19,8 @@ Node 20+, TypeScript, ESM. `commander` for the CLI, `picocolors` for output. Sto
 ## Layout
 
 ```
-src/  cli.ts registration   commands/ start stop show week scan debt survival verify
-      key config settle estimate intent home   render/ palette.ts (semantic colour)
+src/  cli.ts registration   commands/ start stop show week scan debt survival sweep
+      verify key config settle estimate intent home   render/ palette.ts (semantic colour)
       terminal.ts html.ts markdown.ts
       capture/ hook.ts, adapters/claude-code.ts, transcript.ts
       (what a transcript line means — the adapter and scan.ts both read through it)
@@ -29,6 +29,7 @@ src/  cli.ts registration   commands/ start stop show week scan debt survival ve
       scope.ts what a declared scope covers (stop and debt share the one rule)
       debt.ts paths that keep drifting and were never declared since, per repo
       survival.ts whether merged work is still there at 14 and 30 days
+      commands/sweep.ts settle + due checks, once a day per repo, silent unless written
       chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
       config.ts .session.json, checked in   ../rates.json prices per model, per Mtok
 ```

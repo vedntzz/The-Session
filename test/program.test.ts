@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOOKS } from "../src/capture/hook.js";
+import { sweepStampFile } from "../src/commands/sweep.js";
 import { buildProgram, parseFlag, type ProgramOptions } from "../src/program.js";
 import { readSessions, type Session } from "../src/store.js";
 
@@ -49,6 +50,28 @@ beforeEach(async () => {
   await execFileAsync("git", ["-C", cwd, "add", "-A"]);
   await execFileAsync("git", ["-C", cwd, "commit", "-q", "--no-verify", "-m", "first"]);
 });
+
+/**
+ * Records a session whose file then lands on the default branch, leaving an
+ * outcome for the sweep to settle. `stop` sweeps too, so this ends with the
+ * repo already stamped for today — see `nextDay`.
+ */
+async function landASession(): Promise<void> {
+  const cwd = store.cwd as string;
+  await run("start", "the first thing", "--scope", "a.txt");
+  await writeFile(path.join(cwd, "a.txt"), "edited", "utf8");
+  await run("stop");
+  await execFileAsync("git", ["-C", cwd, "add", "-A"]);
+  await execFileAsync("git", ["-C", cwd, "commit", "-q", "--no-verify", "-m", "landed"]);
+}
+
+/**
+ * Makes the repo due for a sweep again, by taking away the stamp the last
+ * command left. Tomorrow, without waiting for it.
+ */
+async function nextDay(): Promise<void> {
+  await rm(await sweepStampFile(store), { force: true });
+}
 
 /** A hook payload on a stream, standing in for the one Claude Code pipes in. */
 function stdinWith(payload: string): AsyncIterable<string> {
@@ -493,6 +516,60 @@ describe("session", () => {
 
     expect(row).toContain("grep foo \\| wc -l");
     expect(row.split(/(?<!\\)\|/)).toHaveLength(7);
+  });
+
+  it("sweeps from week, and says so only when it wrote something", async () => {
+    await landASession();
+    await nextDay();
+
+    const first = await run("week");
+    expect(first[0]).toBe("  recorded 1 outcome");
+
+    // Once a day: the second run says nothing, and the week is unchanged.
+    const second = await run("week");
+    expect(second[0]).not.toContain("recorded");
+    expect(second.join("\n")).toContain("merged");
+  });
+
+  it("keeps the sweep notice out of the Markdown", async () => {
+    await landASession();
+    await nextDay();
+
+    // `session week --md > notes.md` is a document. A line of ours above the
+    // heading would be in the file somebody pastes into Notion.
+    const document = await run("week", "--md");
+    expect(document.join("\n")).not.toContain("recorded");
+    expect(document[0]).toMatch(/^#/);
+
+    // It still swept, silently: the outcome is on the record afterwards.
+    const [session] = await readSessions(store);
+    expect(session?.observations?.[0]?.outcome).toBe("merged");
+  });
+
+  it("sweeps from show and from the bare screen", async () => {
+    await landASession();
+    await nextDay();
+
+    expect((await run("show"))[0]).toBe("  recorded 1 outcome");
+
+    // Already swept today, so the bare screen says nothing about it.
+    expect((await run()).join("\n")).not.toContain("recorded");
+  });
+
+  it("sweeps from the hook that closes the session", async () => {
+    await landASession();
+    await nextDay();
+
+    // What `SessionEnd` runs. Nothing is open, and it sweeps anyway: the end
+    // of an editor session is exactly when a repo is worth catching up.
+    expect(await run("stop", "--if-open")).toEqual(["  recorded 1 outcome"]);
+  });
+
+  it("leaves a repo that has recorded nothing exactly as it found it", async () => {
+    await run("week");
+
+    // No log, so no sweep, so no store directory written by a read command.
+    await expect(readdir(store.home as string)).rejects.toThrow();
   });
 
   it("registers exactly the nineteen subcommands", () => {

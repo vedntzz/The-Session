@@ -227,6 +227,33 @@ Four things it will not do:
 
 The 90% is somebody else's figure, not a measurement this tool made; churn is exactly the share that did not survive, so 90% survival and 10% churn are one line quoted from both ends. It is one constant in `src/survival.ts`, so disagreeing with it is a one-line change.
 
+### Nobody remembers to run it
+
+`session settle` and `session survival --check` both write down answers that stop being available if nobody asks in time. A survival window closes for good a week after it opens. An outcome computed a year late is computed against a branch that has moved. Leaving both to be typed by hand means a log full of questions that were answerable once, which is the failure this whole tool exists to avoid.
+
+So they run themselves, once a day per repository, off the back of whatever you were already doing: the editor hook that closes a session, or the next `week`, `show` or bare `session` you type for some other reason. Both commands still work by hand, unchanged, and `session survival --check` remains the way to force one.
+
+```
+$ session week
+
+  recorded 1 outcome, 2 survival checks
+
+  started      intent              cost  turns  empty  outcome
+  08-16 03:01  add rate limiting  $4.04     14      3  merged
+```
+
+Four rules keep that from being an imposition:
+
+**Silent unless something was written.** A sweep that found nothing to say says nothing at all, which is most days. Printing "nothing to settle" above every week is how a tool teaches people to stop reading its output.
+
+**Once a day, per repo**, stamped in `~/.session/<repo-key>.swept`. The stamp is written *before* the work rather than after, so a sweep cut short — the hook's budget runs out, the terminal closes — waits until tomorrow instead of running again on the very next command. A repo that swept on every invocation because the sweep never finishes would make the whole tool feel broken.
+
+**It cannot fail the command it rode in on.** `session week` exists to print a week, and a repository whose default branch has gone missing is not a reason to refuse to. The sweep is skipped and the command carries on.
+
+**It costs no extra git.** Asking the repository where work went is a `git log` per path, and by far the most expensive thing here — a `week` that swept and then gathered again for its own table would take twice as long on exactly the day you would notice. The sweep gathers once, over every session, and hands the answers to the view that called it.
+
+The `SessionEnd` hook's budget went from ten seconds to thirty to make room, and the stop is written before the sweep begins: a budget that still runs out costs a day of sweeping rather than a record. An installation left at the old ten seconds keeps working, and `session hook install` raises it.
+
 ## What will this one cost?
 
 Every session is filed under what it was working on — `schema`, `api`, `ui`, `test`, `config`, `docs`, `build`, `other` — from the paths it changed. The rules are a table of path patterns at the top of `src/classify.ts`, in order, first match wins. No model is asked; if your repo is laid out differently, the fix is a line in that table.

@@ -59,6 +59,8 @@ Without a declaration there is one entry in the ledger — what the machine prod
 | `session debt` | Files that keep drifting outside the plan and were never declared since, per repo. |
 | `session survival` | How much of what merged is still there at 14 and 30 days. `--check` records the checks that are due. |
 
+`session settle` and the due survival checks also run themselves — once a day per repo, off the back of the editor hook or the next `week`, `show` or bare `session` you type. Silent unless something was written, and both commands still work by hand.
+
 `session help all` lists the other twelve — `stop`, `settle`, `mark`, `verify`, `push`, `pull`, `peers`, `config`, `key`, `hook`, `intent`, `help`.
 
 ## Privacy

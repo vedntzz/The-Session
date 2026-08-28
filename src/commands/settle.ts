@@ -100,9 +100,16 @@ function observe(
  * but a session that has since changed gets a second observation rather than
  * an edited first one, so the log shows that it moved and when.
  */
-export async function settleSessions(options: StoreOptions = {}): Promise<SettleResult> {
+export async function settleSessions(
+  options: StoreOptions = {},
+  gathered?: RepoFacts,
+): Promise<SettleResult> {
   const sessions = await readSessions(options);
-  const facts = await factsFor(sessions, options.cwd ?? process.cwd());
+  // Gathered by the caller where there is one — the daily sweep asks the
+  // repository once and hands the answers to both halves of itself. A `git log`
+  // per path is the most expensive thing here, and twice in one command is
+  // twice too many.
+  const facts = gathered ?? (await factsFor(sessions, options.cwd ?? process.cwd()));
 
   const result: SettleResult = {
     ...(facts ? { branch: facts.branch } : {}),

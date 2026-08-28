@@ -1,4 +1,5 @@
 import { withOutcomes } from "../observe.js";
+import type { RepoFacts } from "../outcome.js";
 import { readSessions, type Session, type StoreOptions } from "../store.js";
 
 /**
@@ -29,11 +30,17 @@ export function findSession(sessions: readonly Session[], id: string): Session {
  * With no id, the most recent session that has stopped: an open session has no
  * reality to report yet, so showing it would be showing a blank.
  */
-export async function showSession(id?: string, options: StoreOptions = {}): Promise<Session> {
+export async function showSession(
+  id?: string,
+  options: StoreOptions = {},
+  gathered?: RepoFacts,
+): Promise<Session> {
   const sessions = await readSessions(options);
 
   const wanted = id !== undefined ? findSession(sessions, id) : lastClosed(sessions);
-  const [resolved] = await withOutcomes([wanted], options.cwd ?? process.cwd());
+  // `gathered` is the daily sweep's, taken over every session — this one
+  // included. See `withOutcomes`.
+  const [resolved] = await withOutcomes([wanted], options.cwd ?? process.cwd(), gathered);
   return resolved as Session;
 }
 

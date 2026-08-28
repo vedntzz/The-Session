@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { classOf, type SessionClass } from "../classify.js";
 import { withOutcomes } from "../observe.js";
+import type { RepoFacts } from "../outcome.js";
 import {
   intentSourceOf,
   readSessions,
@@ -140,6 +141,7 @@ export async function weekSessions(
   days: number = DEFAULT_DAYS,
   options: StoreOptions = {},
   filter: SessionFilter = {},
+  gathered?: RepoFacts,
 ): Promise<Session[]> {
   const sessions = await readSessions(options);
   const cutoff = Date.now() - days * DAY_MS;
@@ -147,8 +149,11 @@ export async function weekSessions(
   // The window first, so the repository is only asked about the sessions that
   // could appear. Outcomes next, because filtering on one means filtering on
   // what is true now. Then the rest of the filter, over the resolved rows.
+  //
+  // `gathered` is what the daily sweep already asked the repository, over every
+  // session — a superset of this window. See `withOutcomes`.
   const inWindow = sessions.filter((session) => Date.parse(session.startedAt) >= cutoff);
-  const resolved = await withOutcomes(inWindow, options.cwd ?? process.cwd());
+  const resolved = await withOutcomes(inWindow, options.cwd ?? process.cwd(), gathered);
   return resolved.filter((session) => matchesFilter(session, filter));
 }
 
