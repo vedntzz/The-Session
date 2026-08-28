@@ -495,12 +495,13 @@ describe("session", () => {
     expect(row.split(/(?<!\\)\|/)).toHaveLength(7);
   });
 
-  it("registers exactly the seventeen subcommands", () => {
+  it("registers exactly the eighteen subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
     expect(names).toEqual([
       "config",
+      "debt",
       "estimate",
       "help",
       "hook",

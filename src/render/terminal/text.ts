@@ -32,6 +32,17 @@ export function clock(iso: string): string {
   return `${hours}:${minutes}`;
 }
 
+/**
+ * Local calendar day. Written out in full because the views that use it look
+ * back over months — `08-12` in a report spanning a year is a date the reader
+ * cannot place, which is exactly the ambiguity `stamp` is free of inside a week.
+ */
+export function day(iso: string): string {
+  const at = new Date(iso);
+  const month = String(at.getMonth() + 1).padStart(2, "0");
+  return `${at.getFullYear()}-${month}-${String(at.getDate()).padStart(2, "0")}`;
+}
+
 export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }

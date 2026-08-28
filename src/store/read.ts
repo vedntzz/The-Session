@@ -166,8 +166,19 @@ export function sessionFrom(input: NewSession, repo: string, intentSource: Inten
  * write.
  */
 export async function readSessions(options: StoreOptions = {}): Promise<Session[]> {
-  const { file, lines, complete } = await readLog(options);
+  return foldLog(await readLog(options));
+}
 
+/**
+ * The sessions a log holds, folded and sorted, without going near a disk.
+ *
+ * Split out of `readSessions` so a caller holding a log read from somewhere
+ * else — another repo's file, a log that arrived over a ref — folds it exactly
+ * the way this repo's own is folded. Two fold loops would be two answers to
+ * what a log says, and the one that goes wrong is always the one written
+ * second.
+ */
+export function foldLog({ file, lines, complete }: RawLog): Session[] {
   const sessions = new Map<string, Session>();
   const order = new Map<string, number>();
 

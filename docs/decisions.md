@@ -15,6 +15,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 - [What it cost](#what-it-cost) — why money leads, and where the prices come from
 - [Did it ship?](#did-it-ship) — outcomes decided on content, not commit shas
 - [What will this one cost?](#what-will-this-one-cost) — the class rules and `estimate`
+- [The files nobody plans for](#the-files-nobody-plans-for) — `debt`
 - [Handing the week to someone else](#handing-the-week-to-someone-else) — `--md`
 - [Who the work was for](#who-the-work-was-for) — attribution
 - [The log is tamper-evident](#the-log-is-tamper-evident)
@@ -236,6 +237,43 @@ $ session estimate "restyle the header component"
 ```
 
 A median of two is a number that looks like knowledge. The drift column is the part worth reading twice: those are the files your api sessions keep wandering into, and they are the ones to put in `--scope` this time.
+
+## The files nobody plans for
+
+One session drifting onto a file is an accident. The same file, session after session, with nobody ever writing it into a scope, is a fact about the repository rather than about any of those sessions:
+
+```
+$ session debt
+
+  remote:github.com/acme/tool
+  2 files drifted into 3 or more times and never declared since · 24 sessions of history
+
+  file                sessions drifted  last touched      cost
+  src/store.ts                       7    2026-08-21  $184.02
+  src/api/orders.ts                  4    2026-08-14   $61.55
+
+  remote:github.com/acme/site
+  not enough history to judge — 2 sessions recorded, 3 needed
+
+  cost is the whole of every session that touched the file, so the column does not add up
+  docs, config, build files are never listed
+```
+
+The whole report is a query over `drift` and `scope`, which are already on the record. Nothing new is measured and no model is asked whether the file is bad code — the claim is only that work keeps landing somewhere nobody plans for, which is a thing the log can prove.
+
+Four rules make it worth reading:
+
+**Three drifts, not one.** Once is an accident, twice is a coincidence. A list that started at one would be a list of everything that ever changed, and nobody would open it twice.
+
+**A later declaration clears it.** The moment somebody runs `session start --scope src/store.ts`, the gap between plan and reality is closed and the file drops off the list — even if it goes on being edited every week. That is the tool working. A list that kept punishing the person who fixed the problem would teach people to stop declaring scopes. Note it is *after*: a file declared in March and drifted onto again in June is owed again, because the plan stopped describing the work.
+
+**Docs, config and build files are never listed.** A lockfile, a workflow and a changelog turn up outside the plan of half the sessions in any repo, because the plan was about the code and these came along with it. They are touched by everything and owned by nobody, and left in they would sit at the top of every repo's list and bury the paths that mean something. The test is the same table `week --class` uses, so a repo whose layout puts the wrong file here is fixed by a line in `classify.ts`.
+
+**Below three sessions, no answer at all.** A repo with two sessions in it has no pattern to have. It gets a sentence saying the history is too short, not an empty list — "we found nothing" and "we could not look" are different statements, and printing the first when the second is true is an all-clear nobody checked.
+
+The report is per repository and never adds up across them. The same path means different things in two codebases, and a file three repos each drifted onto once is not a file three sessions drifted onto. The command reads every log under `~/.session` rather than only the one for the checkout you are standing in, because the pattern takes months to appear and "which repo should I run this in" is the question the report is meant to answer.
+
+The cost column is the only figure here that needs care. It is the whole cost of every session that touched the file, not a share of it — there is no way to divide a session's tokens between the files it changed, and inventing one would put a made-up number beside measured ones. So a session that drifted onto four files appears in four rows, the column does not add up, and the line under the table says so rather than leaving somebody to sum it. A file whose sessions ran on models with no rate reads `—`, never `$0.00`, like every other total in the tool.
 
 ## Handing the week to someone else
 

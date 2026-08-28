@@ -6,6 +6,7 @@ import { Command } from "commander";
 import { paletteFor, type Palette } from "./render/palette.js";
 import { configureHelp, registerHelp } from "./program/help.js";
 import { registerConfig } from "./program/config.js";
+import { registerDebt } from "./program/debt.js";
 import { registerEstimate } from "./program/estimate.js";
 import { registerHome } from "./program/home.js";
 import { registerHook } from "./program/hook.js";
@@ -89,6 +90,7 @@ function registerCommands(program: Command, options: ProgramOptions, palette: Pa
   registerShow(program, options, palette);
   registerWeek(program, options, palette);
   registerScan(program, options, palette);
+  registerDebt(program, options, palette);
   registerEstimate(program, options);
   registerVerify(program, options);
   registerSettle(program, options);

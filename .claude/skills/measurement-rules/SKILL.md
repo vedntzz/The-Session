@@ -158,6 +158,44 @@ many could not is printed beside them. "The three most expensive" is a claim
 about an order; a session with no rate has no place in it, and putting it last
 would say it was cheap.
 
+## Debt
+
+Rationale and a worked report:
+[The files nobody plans for](../../../docs/decisions.md#the-files-nobody-plans-for).
+
+`debt.ts` is a query over `drift` and `scope`, both already on the record.
+Nothing new is measured, and no model is asked whether a file is bad code — the
+only claim is that work keeps landing where nobody planned it.
+
+Four thresholds, and each is a refusal to say more than the log supports:
+
+- **Three drifts.** Once is an accident, twice a coincidence. `MIN_DRIFTS`.
+- **A later declaration clears it**, through the same `covers` rule `stop`
+  computes drift with — `src/api/` clears every file under it. *After* is
+  decided by position in the session list, which is why `debtOf` documents that
+  it wants them oldest first. A file declared and then drifted onto again is
+  owed again.
+- **Docs, config and build are never listed**, by `classOfPath` and no second
+  list of exceptions. They are touched by everything and owned by nobody, and
+  left in they bury every path that means something.
+- **Under three sessions of history, no answer at all.** `RepoDebt.files` is
+  *absent*, not empty — "found nothing" and "could not look" are different
+  statements, the same distinction `EstimateGroup.figures` makes.
+
+**Per repo, never pooled.** The same path means different things in two
+codebases, and grouping happens in the pure half so no caller can pool by
+accident. Repos sort by name: ranking them would be the aggregation this
+refuses, arriving by way of a sort.
+
+The cost column is the whole cost of every session that touched the file, never
+a share of one — there is no way to divide a session's tokens between the files
+it changed. So the column does not add up, nothing offers a total for it, and
+the note under the table says so. It uses its own `spendOfDebt` rather than
+`spendOf`, because that one splits money by `outcome`, and `debt` reads logs
+from repositories it is not standing in and so cannot recompute one — see the
+top of this file. Unpriced sessions are counted and named as everywhere else,
+and a file nothing could be priced for reads `—`.
+
 ## Estimate
 
 Rationale: [What will this one cost?](../../../docs/decisions.md#what-will-this-one-cost).

@@ -19,12 +19,14 @@ Node 20+, TypeScript, ESM. `commander` for the CLI, `picocolors` for output. Sto
 ## Layout
 
 ```
-src/  cli.ts registration   commands/ start stop show week scan verify key config
+src/  cli.ts registration   commands/ start stop show week scan debt verify key config
       settle estimate intent home   render/ palette.ts (semantic colour) terminal.ts
       html.ts markdown.ts   capture/ hook.ts, adapters/claude-code.ts, transcript.ts
       (what a transcript line means — the adapter and scan.ts both read through it)
       store.ts JSONL   outcome.ts merged/abandoned/open   classify.ts path+intent rules
       pricing.ts money   observe.ts repo facts   scan.ts aggregation   git.ts diff, HEAD
+      scope.ts what a declared scope covers (stop and debt share the one rule)
+      debt.ts paths that keep drifting and were never declared since, per repo
       chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
       config.ts .session.json, checked in   ../rates.json prices per model, per Mtok
 ```

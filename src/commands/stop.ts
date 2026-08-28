@@ -12,30 +12,13 @@ import {
   type StoreOptions,
 } from "../store.js";
 import { isPriced, priceSession, type RateTable } from "../pricing.js";
+import { inScope } from "../scope.js";
 import { describePaths, intentOf, unpricedTokens } from "../render/terminal.js";
 
 /** What `session stop` needs, on top of where the store lives. */
 export interface StopOptions extends StoreOptions {
   /** Transcript adapters to read. Defaults to every tool `session` knows. */
   adapters?: readonly Adapter[];
-}
-
-/** Strips the `./` prefix and trailing slashes so entries compare uniformly. */
-function normalizeEntry(entry: string): string {
-  return entry.trim().replace(/^\.\//, "").replace(/\/+$/, "");
-}
-
-/**
- * True when `path` falls under `entry`. Scope entries are path prefixes that
- * stop at directory boundaries, so `api/middleware/` covers
- * `api/middleware/rate_limit.py` but `api/order` never covers `api/orders.py`.
- */
-function covers(entry: string, path: string): boolean {
-  const prefix = normalizeEntry(entry);
-  if (prefix === "" || prefix === ".") {
-    return true; // the whole repo was declared
-  }
-  return path === prefix || path.startsWith(`${prefix}/`);
 }
 
 /**
@@ -54,7 +37,7 @@ export function computeReality(changed: readonly string[], baseline: readonly st
  * `reality`, which git already returns sorted.
  */
 export function computeDrift(reality: readonly string[], scope: readonly string[]): string[] {
-  return reality.filter((path) => !scope.some((entry) => covers(entry, path)));
+  return reality.filter((path) => !inScope(scope, path));
 }
 
 /**
