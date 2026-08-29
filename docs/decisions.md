@@ -17,6 +17,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 - [Did it stick?](#did-it-stick) — survival at 14 and 30 days
 - [What will this one cost?](#what-will-this-one-cost) — the class rules and `estimate`
 - [The files nobody plans for](#the-files-nobody-plans-for) — `debt`
+- [The files that move together](#the-files-that-move-together) — `cochange`
 - [Handing the week to someone else](#handing-the-week-to-someone-else) — `--md`
 - [Who the work was for](#who-the-work-was-for) — attribution
 - [The log is tamper-evident](#the-log-is-tamper-evident)
@@ -351,6 +352,77 @@ Four rules make it worth reading:
 The report is per repository and never adds up across them. The same path means different things in two codebases, and a file three repos each drifted onto once is not a file three sessions drifted onto. The command reads every log under `~/.session` rather than only the one for the checkout you are standing in, because the pattern takes months to appear and "which repo should I run this in" is the question the report is meant to answer.
 
 The cost column is the only figure here that needs care. It is the whole cost of every session that touched the file, not a share of it — there is no way to divide a session's tokens between the files it changed, and inventing one would put a made-up number beside measured ones. So a session that drifted onto four files appears in four rows, the column does not add up, and the line under the table says so rather than leaving somebody to sum it. A file whose sessions ran on models with no rate reads `—`, never `$0.00`, like every other total in the tool.
+
+## The files that move together
+
+`debt` asks which files work keeps landing in that nobody planned for. `cochange` asks a different question of the same record: which files cannot be changed on their own.
+
+```
+$ session cochange
+
+  remote:github.com/acme/tool
+  3 pairs moved together in 3 or more sessions, 70% of the time or more · 24 sessions of history
+  checked against origin/main
+
+  file                      moves with               sessions together  strength
+  src/api/orders.ts         test/orders.test.ts                      9       90%
+  src/scope.ts              src/debt.ts                              6       86%
+  src/old/parser.ts (gone)  src/old/lexer.ts (gone)                  4       80%
+
+  remote:github.com/acme/site
+  not enough history to judge — 2 sessions recorded, 3 needed
+
+  strength is the sessions a pair moved together in, over every session the commoner of the two appeared in
+  (gone) is a file that is not at the branch tip now — the pair moved together, and one half of it has since been split up, renamed or deleted
+  session cochange --current lists only the pairs still there
+  docs, config, build files are never listed
+```
+
+The coupling is real, nobody wrote it down, and the only record of it is that session after session touched both. A handler and its test; a rule and the two views that render it; a migration and the model it is for. The value of knowing is not the list itself — it is that the third file on it is one you did not know about, and it is the one the next session will forget.
+
+The claim is deliberately small. This is a count over `reality`, and nothing here reads a line of the files or asks a model whether the coupling is good design. Two files that always move together may be one idea correctly split in two, or a seam that should never have been cut. The report does not know which, and does not say — it prints the pair and the number of times, and what to make of that is the reader's.
+
+It reads `reality` rather than `drift`, unlike `debt`, and the difference is the point: coupling is a fact about the work, not about anybody's plan. Two files that always change together do so in the sessions that declared them as much as in the ones that did not.
+
+Two rules make it worth reading:
+
+**Three sessions together, not one.** One session touching two files is what a session is. Twice is two sessions.
+
+**Seven times in ten, against the commoner of the two.** This is the rule that decides whether the report is useful or a list of whichever file is busiest. Divide by the rarer file and a `store.ts` that half the sessions in the repo touch comes out as the reliable partner of everything in it — every file it was ever near scores 1.0, because that file is always there when anything happens. Dividing by the commoner instead makes the figure the weaker of the pair's two conditional rates, so a pair clears the bar only when each file predicts the other. `src/scope.ts` and `src/debt.ts` at 86% means neither one moves without the other most of the time, in both directions.
+
+Seven in ten rather than nine, because the pair worth printing is the one somebody forgets a third of the time. A bar at 0.9 lists only what nobody was going to forget anyway.
+
+Docs, config and build files are never listed, through the same `classify.ts` table `debt` uses. A lockfile changes with everything, so left in it would be the reliable partner of half the repo — which is a fact about lockfiles and not about this codebase. Note tests are not excluded: a test moving with the code it covers is exactly the coupling this exists to show.
+
+Per repository and never pooled, for the reasons under `debt` — the same path in two codebases is two files — and below three sessions of history the repo gets a sentence saying so rather than an empty list, which is the same distinction between "found nothing" and "could not look".
+
+There is no money in this view. There is no way to divide a session's cost between the files it touched, and less still between one pair of them; `debt` can print the whole cost of the sessions behind a file because that is a real figure with a caveat, and there is no equivalent here worth printing.
+
+### When one of them is gone
+
+The third row above is not a fact about the repository as it stands. Those two files moved together four times, and then somebody split them up — or renamed one, or deleted it. The coupling was real and the log is not wrong about it, but a reader looking at today's tree cannot act on it, and an unmarked row invites them to try.
+
+So every path the report lists is held against the default branch's tip, and the ones that are not there are marked `(gone)`. `session cochange --current` leaves those pairs out altogether.
+
+Marked by default rather than dropped, because both questions are real. *What does this repo couple now* is the question the flag answers. *What has it been coupling* is the one somebody asks after a refactor that was meant to break a pair up — and a report that silently dropped the answer would look exactly like the refactor having worked.
+
+The check needs a checkout, and a log names repositories rather than directories. The one you are standing in can always be asked; so can any repo whose log is still keyed on a location, which names its directory outright — and only while that directory is still the repository the identity belongs to, since one that has since gained a different remote is a different repo and would answer about somebody else's tree. Everything else — a clone that lives on another machine, a checkout since deleted — cannot be asked at all.
+
+Which is why the line under each repo says which of the two happened:
+
+```
+  remote:github.com/acme/tool
+  3 pairs moved together in 3 or more sessions, 70% of the time or more · 24 sessions of history
+  checked against origin/main
+
+  remote:github.com/acme/other
+  2 pairs moved together in 3 or more sessions, 70% of the time or more · 11 sessions of history
+  not checked against a branch tip, so nothing here is marked (gone)
+```
+
+Without that line an unmarked row would mean two different things in the same report — "both files are still there" under one repo and "nobody looked" under the next — and the reader would have no way to tell which they were reading. It is the same rule `scan` follows when it will not say `merged`: a checkout that could not be asked is not a checkout that said no. For the same reason `--current` drops nothing from an unchecked repo. Dropping a pair on the strength of not having looked would be the report answering a question it had just declined to put.
+
+`partnersOf(path, sessions, tip)` is the same query asked about one file — the files that reliably move with this one. It exists because `session start --scope src/api/orders.ts` can eventually say "these two usually come with it", and that answer has to be the one this report prints, or the tool would quote two different sets of partners for one file. Hand it a tip and each partner says whether it is still there — a suggestion to declare a deleted file is worse than no suggestion — and omit the tip and the field is absent rather than false, since nobody looked. It refuses a list of sessions spanning two repositories rather than pooling them.
 
 ## Handing the week to someone else
 

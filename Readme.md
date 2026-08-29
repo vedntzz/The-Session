@@ -58,6 +58,7 @@ Without a declaration there is one entry in the ledger — what the machine prod
 | `session estimate "<intent>"` | What sessions like this one have cost before, from your own history. |
 | `session debt` | Files that keep drifting outside the plan and were never declared since, per repo. |
 | `session survival` | How much of what merged is still there at 14 and 30 days. `--check` records the checks that are due. |
+| `session cochange` | Files that keep changing together, and how reliably, per repo. Pairs whose files are gone from the branch tip are marked; `--current` leaves them out. |
 
 `session settle` and the due survival checks also run themselves — once a day per repo, off the back of the editor hook or the next `week`, `show` or bare `session` you type. Silent unless something was written, and both commands still work by hand.
 

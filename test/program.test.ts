@@ -572,11 +572,12 @@ describe("session", () => {
     await expect(readdir(store.home as string)).rejects.toThrow();
   });
 
-  it("registers exactly the nineteen subcommands", () => {
+  it("registers exactly the twenty subcommands", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
     expect(names).toEqual([
+      "cochange",
       "config",
       "debt",
       "estimate",

@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { paletteFor, type Palette } from "./render/palette.js";
 import { configureHelp, registerHelp } from "./program/help.js";
+import { registerCochange } from "./program/cochange.js";
 import { registerConfig } from "./program/config.js";
 import { registerDebt } from "./program/debt.js";
 import { registerEstimate } from "./program/estimate.js";
@@ -92,6 +93,7 @@ function registerCommands(program: Command, options: ProgramOptions, palette: Pa
   registerWeek(program, options, palette);
   registerScan(program, options, palette);
   registerDebt(program, options, palette);
+  registerCochange(program, options, palette);
   registerEstimate(program, options);
   registerVerify(program, options);
   registerSettle(program, options);

@@ -19,7 +19,7 @@ Node 20+, TypeScript, ESM. `commander` for the CLI, `picocolors` for output. Sto
 ## Layout
 
 ```
-src/  cli.ts registration   commands/ start stop show week scan debt survival sweep
+src/  cli.ts registration   commands/ start stop show week scan debt cochange survival sweep
       verify key config settle estimate intent home   render/ palette.ts (semantic colour)
       terminal.ts html.ts markdown.ts
       capture/ hook.ts, adapters/claude-code.ts, transcript.ts
@@ -28,6 +28,7 @@ src/  cli.ts registration   commands/ start stop show week scan debt survival sw
       pricing.ts money   observe.ts repo facts   scan.ts aggregation   git.ts diff, HEAD
       scope.ts what a declared scope covers (stop and debt share the one rule)
       debt.ts paths that keep drifting and were never declared since, per repo
+      cochange.ts files that keep changing together, per repo; partnersOf(path)
       survival.ts whether merged work is still there at 14 and 30 days
       commands/sweep.ts settle + due checks, once a day per repo, silent unless written
       chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*

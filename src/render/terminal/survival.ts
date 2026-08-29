@@ -11,7 +11,7 @@ import {
   type WindowReport,
 } from "../../survival.js";
 import type { Palette } from "../palette.js";
-import { figure, INDENT, padRight, plural, width } from "./text.js";
+import { figure, INDENT, padRight, percent, plural, width } from "./text.js";
 
 /**
  * What `session survival` prints.
@@ -243,10 +243,6 @@ function unsettledLines(report: SurvivalReport, palette: Palette): string[] {
   return ["", `${INDENT}${palette.meta(text)}`];
 }
 
-/** A share as a whole percent. Rounded, because a tenth of a file is not a thing. */
-function percent(share: number): string {
-  return `${Math.round(share * 100)}%`;
-}
 
 // --- the check ------------------------------------------------------------
 

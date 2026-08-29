@@ -59,3 +59,15 @@ export function padRight(text: string, to: number): string {
 export function padLeft(text: string, to: number): string {
   return " ".repeat(Math.max(to - width(text), 0)) + text;
 }
+
+/**
+ * A share as a whole percent.
+ *
+ * Rounded: the shares these views print are counts over counts — paths that
+ * survived, sessions a pair moved together in — and a tenth of a file is not a
+ * thing. Shared so `survival`'s rates and `cochange`'s strengths cannot come
+ * to be written two different ways.
+ */
+export function percent(share: number): string {
+  return `${Math.round(share * 100)}%`;
+}

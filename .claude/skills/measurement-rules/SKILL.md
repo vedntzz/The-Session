@@ -202,6 +202,76 @@ from repositories it is not standing in and so cannot recompute one — see the
 top of this file. Unpriced sessions are counted and named as everywhere else,
 and a file nothing could be priced for reads `—`.
 
+## Co-change
+
+Rationale and a worked report:
+[The files that move together](../../../docs/decisions.md#the-files-that-move-together).
+
+`cochange.ts` is a query over `reality`, already on the record: for each pair of
+paths, how many sessions changed both, over how many changed either. Nothing
+new is measured, and no model is asked whether the coupling is good design —
+the only claim is that two files keep moving together, which the log can prove.
+
+`reality`, not `drift`. Coupling is a fact about the work rather than about
+anybody's plan, and two files that always change together do so in the sessions
+that declared them as much as in the ones that did not. That is the one place
+this and `debt` read different columns; everything else about the two reports is
+deliberately the same.
+
+Four rules:
+
+- **Three sessions together.** One session touching two files is what a session
+  is. `MIN_TOGETHER`.
+- **`MIN_RATE` against the commoner of the two**, never the rarer. The
+  denominator is the file that appeared in *more* sessions, which makes the
+  figure the weaker of the pair's two conditional rates: a pair clears the bar
+  only when each file predicts the other. Divided by the rarer one, a `store.ts`
+  half the repo's sessions touch is the reliable partner of every file it was
+  ever near, and the report becomes a list of whichever file is busiest. Don't
+  "simplify" this to `together / either` or to a union denominator — both let the
+  busy file back in.
+- **Docs, config and build are never listed**, through `IGNORED_CLASSES` and
+  `classOfPath`, imported from `debt.ts` rather than copied. Tests are *not*
+  excluded: a test moving with its subject is the coupling this exists to show.
+- **Under `MIN_HISTORY` sessions, no answer at all.** `RepoCoChange.pairs` is
+  *absent*, not empty, exactly as `RepoDebt.files` is.
+
+**Per repo, never pooled**, and grouped in the pure half so no caller can pool
+by accident. Rows sort by strength, then by count, then by path — the last is
+what makes the order total, so two runs over one log produce a report that can
+be diffed. Repos sort by name.
+
+**A pair whose files are gone is history, not a current fact.** Every path the
+report lists is held against the default branch's tip through `absentAt`, and
+the ones that are not there are marked `(gone)`; `--current` drops those pairs.
+Marked rather than dropped by default — *what does this repo couple now* and
+*what has it been coupling* are both real questions, and silently dropping the
+second would make a refactor that failed look like one that worked.
+
+The check needs a checkout, and a log names repositories. The current one can
+always be asked, and so can any log still keyed on a location — but only while
+that directory is still the repository the identity belongs to. Everything else
+cannot be asked, and `RepoCoChange.branch` is **absent** for those repos, every
+`gone` empty, with the view saying so under the repo name. Never let an
+unmarked row mean "still there" in one repo and "nobody looked" in the next.
+For the same reason `onlyCurrent` drops nothing from an unchecked repo: that
+would be answering a question the report just declined to put. Same rule as
+`scan` refusing to say `merged` — a checkout that could not be asked is not one
+that said no.
+
+**No money in the view.** A session's cost cannot be divided between the files
+it touched, and less still between one pair of them. `debt` prints the whole
+cost of the sessions behind a file with a note saying the column does not add
+up; there is no equivalent figure here, so none is printed.
+
+`partnersOf(path, sessions, tip?)` is the same query asked about one file, for
+`prime` and scope suggestion. One implementation, so the tool cannot quote two
+different sets of partners for one file. Given a tip each partner carries
+`gone`; without one the field is **absent**, never false. It **refuses** a
+session list spanning two repositories rather than pooling it, and needs no
+history floor of its own: a pair takes `MIN_TOGETHER` sessions to exist, which
+is the floor.
+
 ## Survival
 
 Rationale and a worked report:
