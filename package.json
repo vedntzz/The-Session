@@ -1,6 +1,6 @@
 {
   "name": "@vedantzz/session",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A black box recorder for AI coding sessions: declare intent before the agent runs, record what actually changed and whether it landed.",
   "keywords": [
     "ai",
