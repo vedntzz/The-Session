@@ -13,6 +13,7 @@ import { registerHome } from "./program/home.js";
 import { registerHook } from "./program/hook.js";
 import { registerIntent } from "./program/intent.js";
 import { registerKey } from "./program/key.js";
+import { registerPr } from "./program/pr.js";
 import { registerScan } from "./program/scan.js";
 import { registerSettle } from "./program/settle.js";
 import { registerShow } from "./program/show.js";
@@ -91,6 +92,7 @@ function registerCommands(program: Command, options: ProgramOptions, palette: Pa
   registerStop(program, options);
   registerShow(program, options, palette);
   registerWeek(program, options, palette);
+  registerPr(program, options);
   registerScan(program, options, palette);
   registerDebt(program, options, palette);
   registerCochange(program, options, palette);

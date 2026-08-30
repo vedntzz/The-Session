@@ -8,7 +8,7 @@
 
 1. **`intent` is immutable.** Written once at `session start`, never edited afterward. A declaration you can revise after seeing the result is a rationalisation. No `--edit-intent` flag, ever.
 2. **No server, no database, no account.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service, and anything needing one is wrong.
-3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant".
+3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else.
 4. **Turns that produced nothing are first-class.** Turns and API calls that changed no files are counted and displayed, never dropped.
 5. **Cross-tool.** Nothing may assume Claude Code specifically. Adapters go behind an interface; the core reads a normalised shape.
 
@@ -19,9 +19,9 @@ Node 20+, TypeScript, ESM. `commander` for the CLI, `picocolors` for output. Sto
 ## Layout
 
 ```
-src/  cli.ts registration   commands/ start stop show week scan debt cochange survival sweep
+src/  cli.ts registration   commands/ start stop show week scan debt cochange survival pr sweep
       verify key config settle estimate intent home   render/ palette.ts (semantic colour)
-      terminal.ts html.ts markdown.ts
+      terminal.ts html.ts markdown.ts pr.ts (a pull request body, from the record)
       capture/ hook.ts, adapters/claude-code.ts, transcript.ts
       (what a transcript line means — the adapter and scan.ts both read through it)
       store.ts JSONL   outcome.ts merged/abandoned/open   classify.ts path+intent rules
@@ -86,4 +86,4 @@ type SessionCost = TokenCounts & {
 
 ## The rest
 
-Rules for one area each, loaded when that area is what you are changing: `.claude/skills/measurement-rules` (outcome, class, intent source, scan, estimate, money), `.claude/skills/sync-and-chain` (the line on disk, verify, refs), `.claude/skills/terminal-output` (CLI surface, colour, Markdown). Why any of it is this way: [docs/decisions.md](docs/decisions.md).
+Rules for one area each, loaded when that area is what you are changing: `.claude/skills/measurement-rules` (outcome, class, intent source, scan, debt, co-change, survival, estimate, money), `.claude/skills/sync-and-chain` (the line on disk, verify, refs), `.claude/skills/terminal-output` (CLI surface, colour, Markdown, the pull request body). Why any of it is this way: [docs/decisions.md](docs/decisions.md).

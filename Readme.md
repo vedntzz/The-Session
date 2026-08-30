@@ -24,6 +24,7 @@ session hook install   # register the Claude Code hooks, once per machine
 # work normally — the hook opens a record and closes it when the agent stops
 session                # where this repo stands, and the one thing worth typing next
 session week           # one row per session, where the work went, what drifted
+session pr             # the pull request body, from the record — pipe it into gh
 ```
 
 `scan` is the one command that answers before you have recorded anything: it
@@ -59,6 +60,7 @@ Without a declaration there is one entry in the ledger — what the machine prod
 | `session debt` | Files that keep drifting outside the plan and were never declared since, per repo. |
 | `session survival` | How much of what merged is still there at 14 and 30 days. `--check` records the checks that are due. |
 | `session cochange` | Files that keep changing together, and how reliably, per repo. Pairs whose files are gone from the branch tip are marked; `--current` leaves them out. |
+| `session pr [id]` | A pull request body, written from the record. Pipes into `gh pr create --body-file -`; `--copy`, `--out <path>`, `--template <path>`. |
 
 `session settle` and the due survival checks also run themselves — once a day per repo, off the back of the editor hook or the next `week`, `show` or bare `session` you type. Silent unless something was written, and both commands still work by hand.
 

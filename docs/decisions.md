@@ -19,6 +19,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 - [The files nobody plans for](#the-files-nobody-plans-for) — `debt`
 - [The files that move together](#the-files-that-move-together) — `cochange`
 - [Handing the week to someone else](#handing-the-week-to-someone-else) — `--md`
+- [The pull request writes itself](#the-pull-request-writes-itself) — `pr`
 - [Who the work was for](#who-the-work-was-for) — attribution
 - [The log is tamper-evident](#the-log-is-tamper-evident)
 - [Sharing them with the team](#sharing-them-with-the-team) — sync over git refs
@@ -466,6 +467,79 @@ No cost could be worked out: 2 sessions ran on a model with no rate (mystery-9).
 ```
 
 A week that genuinely cost nothing still reads `$0.00`, because that is a figure somebody measured — and it reads that way in every view, so a dash never appears over a column of noughts. The rule holds in the other views too: the terminal table puts a dash in its total and leaves the spend line out, the HTML page omits the money from its summary, and `estimate` says so in place of the median. All four ask the same function, so they cannot come to disagree about what a week cost.
+
+## The pull request writes itself
+
+By the time a session stops, everything a pull request body says is already on the record: what the developer set out to do, what they said they would touch, what actually changed, what went outside that, and what it cost. `session pr` prints it.
+
+```
+$ session pr
+
+rate limit the /orders endpoint
+
+## Declared scope
+
+- src/api/
+
+## Changed
+
+- src/api/limiter.ts
+- src/api/orders.ts
+
+## Outside declared scope
+
+- src/store.ts
+
+_$3.42 · 14 turns · 3 that changed no files_
+```
+
+Stdout by default, because the point is the pipe:
+
+```
+$ session pr | gh pr create --title "rate limit /orders" --body-file -
+```
+
+Nothing else goes to stdout — not even the daily sweep's notice, which every other read command is free to print. A line of ours above the heading is a line in somebody's pull request. `--copy` puts it on the clipboard and `--out <path>` writes it to a file; both say what they did instead of the document, since neither leaves anything to pipe.
+
+**No model writes a word of it.** This is the point of the command and the only interesting decision in it. Everything else here is a query over a record — file diffs, exit codes, token counts — and the tool has refused all the way through to say whether code is good, whether scope was met, or what a session meant. Generating a paragraph of prose about the diff would abandon that at the last step, in the worst possible place: pasted into a pull request, under somebody's name, where a plausible sentence about code nobody read is at its most expensive. So the document is a transcription. Its only sentences are the developer's own intent and a handful of file lists, and a reviewer reading it is reading the log rather than a summary of it.
+
+A captured intent is labelled in the summary line — `(captured from the first prompt, not declared)`. A declaration made before the work is a promise the diff can be held to; a first prompt is what somebody happened to type at an agent. Reading the second as the first is the misunderstanding `intentSource` exists to prevent, and a pull request is where it would do the most damage. The label goes in the line rather than in a note under it, so that it survives into a template that asked only for `{{intent}}`.
+
+A captured prompt is also **shortened**, and a declaration never is. Somebody typed a declaration as the whole of what they were setting out to do, and every word of it is the promise. A first prompt is not that: it arrives at any length — a paragraph of context, a stack trace, a pasted file — and opening a pull request with all of it buries every heading underneath and pushes the diff off the screen. So the line takes the first sentence or the first line, whichever ends sooner, and the rest is folded into a block a reviewer can open:
+
+`````
+Add session debt. (captured from the first prompt, not declared)
+
+<details><summary>Full prompt</summary>
+
+````
+Add session debt. For each repo, list files that appeared in drift across
+three or more sessions and were never subsequently declared in scope…
+````
+
+</details>
+`````
+
+Nothing is dropped and **no model is asked to summarise it** — which is why the rule is two lines of string handling rather than something cleverer. A generated précis of somebody's prompt, posted under their name, is exactly what invariant 3 refuses. A sentence ends at a full stop, question mark or exclamation mark followed by whitespace or nothing, which keeps `src/api/orders.ts` and `v1.2` whole and ends `...` where the run ends. It cuts early on an abbreviation — "e.g. the limiter" ends at `e.g.` — and that is a known miss, taken because the rule has to be one a reader can predict from the sentence describing it, and because the cost of being wrong is one click on a block holding every word.
+
+The block is fenced, and the fence is the point. A prompt can hold anything somebody typed at an agent, including a literal `</details>`, which would close the block early and spill the rest into the pull request as markup — the same class of failure as an unescaped `|` in the week table. Inside a fence it is all just characters, the prompt's own line breaks survive, and the fence is made longer than the longest run of backticks in the text so a prompt with a code block in it cannot close it from the inside either.
+
+In a template, `{{intent}}` is that same shortened line and `{{intent_full}}` is the whole text, unflattened. No block is added to a template — its author decides where the prompt goes, and `{{intent_full}}` is how they put it there.
+
+The drift section is dropped entirely when nothing went outside — a heading over "none" teaches a reviewer to skip the section, and the one time it matters is the one time they will not read it. It is dropped for a session that declared no scope too, whatever the record holds: drift is the distance between a declaration and reality, and a pull request telling a reviewer that twelve files went outside a plan nobody made is an accusation the log cannot support.
+
+Every path is listed, one per line — the one view here that does not cap. `show`'s cap exists because a terminal line has a width and a sentence naming twelve files is one nobody finishes; a pull request body has neither problem, and the list of files is not context around the point but the thing being reviewed. `40 files, mostly in src/` tells a reviewer to go and find out what they are, which is the work this document exists to have already done.
+
+They are grouped by directory and sorted inside each group, because sorting alone does not group: `src/a.ts`, `src/api/orders.ts` and `src/b.ts` sort in that order, dropping a file from another directory into the middle of `src/`. Over forty paths that reads as no order at all, and a reviewer checking whether anything unexpected was touched is scanning directories rather than filenames. Paths stay whole rather than becoming filenames under a directory heading — a path in a pull request gets copied into a `git log` or a search box, and half of one is no use there.
+
+`--template <path>` reads a Markdown file with `{{intent}}`, `{{intent_full}}`, `{{scope}}`, `{{changed}}`, `{{drift}}` and `{{cost}}` in it, so a team's own format is filled from the record rather than from a model. An unknown placeholder is refused **by name**, and every unknown one is named at once:
+
+```
+$ session pr --template .github/pr.md
+{{autor}} in .github/pr.md is not a placeholder. Use one of: {{intent}}, {{intent_full}}, {{scope}}, {{changed}}, {{drift}}, {{cost}}.
+```
+
+Leaving it in the output is the alternative, and it puts `{{autor}}` in a pull request where it is found by a reviewer rather than by the person who could have fixed the typo in one keystroke. Note `{{drift}}` in a template reads `Nothing went outside the declared scope.` where the default document would have dropped the section: the template's author wrote the heading themselves, and nothing underneath it would be a broken document.
 
 ## Who the work was for
 

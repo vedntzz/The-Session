@@ -35,13 +35,24 @@ export async function showSession(
   options: StoreOptions = {},
   gathered?: RepoFacts,
 ): Promise<Session> {
-  const sessions = await readSessions(options);
-
-  const wanted = id !== undefined ? findSession(sessions, id) : lastClosed(sessions);
+  const wanted = await pickSession(id, options);
   // `gathered` is the daily sweep's, taken over every session — this one
   // included. See `withOutcomes`.
   const [resolved] = await withOutcomes([wanted], options.cwd ?? process.cwd(), gathered);
   return resolved as Session;
+}
+
+/**
+ * The same choice of session, without asking the repository anything.
+ *
+ * For the commands that do not need an outcome: resolving one walks the
+ * default branch's history for every path the session touched, which is the
+ * most expensive thing this tool does and is wasted on a document about work
+ * that has not landed yet. `session pr` is the caller — see `render/pr.ts`.
+ */
+export async function pickSession(id?: string, options: StoreOptions = {}): Promise<Session> {
+  const sessions = await readSessions(options);
+  return id !== undefined ? findSession(sessions, id) : lastClosed(sessions);
 }
 
 function lastClosed(sessions: readonly Session[]): Session {

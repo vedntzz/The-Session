@@ -187,6 +187,62 @@ a change to the output. `plainPalette` is the same construction as
 `ansiPalette` with the ink switched off, not a second hand-written table —
 built the other way the two could come to disagree about what a role wraps.
 
+## The pull request body
+
+Rationale and a worked example:
+[The pull request writes itself](../../../docs/decisions.md#the-pull-request-writes-itself).
+
+`render/pr.ts` is pure — one session and the rates in, one Markdown string out,
+no trailing newline, like `render/markdown.ts`. **No model writes any of it**,
+and nothing here may ever call one: the document's whole claim is that it is a
+transcription of the record, and its only sentences are the developer's own
+intent and a few file lists.
+
+It is the one view that does **not** lead with where the work went. There is
+nowhere for it to have gone yet — the document exists to open the pull request
+that would land it — so the summary line is the intent. Everything after that is
+the usual order: what was declared, what changed, what went outside it, and the
+money last, unemphasised, on one line.
+
+- A **captured** intent is labelled in the summary line itself, not in a note
+  under it, so it survives into a `--template` that asked only for
+  `{{intent}}`. `CAPTURED_INTENT` is the wording, shared with `show`.
+- A **captured** intent is also shortened to its first sentence or first line,
+  whichever ends sooner, with the whole text folded into a `<details>` block
+  under it. **A declaration is never shortened and never gets the block** — it
+  is the promise the diff is held to, in full. Nothing is dropped and no model
+  summarises anything: `summarize` is the only place this is decided. The block
+  is fenced, with the fence longer than any run of backticks in the prompt, so
+  a `</details>` or a code block somebody pasted cannot break out of it — the
+  same class of failure as an unescaped `|` in the week table. Templates get
+  the short line as `{{intent}}` and the whole text as `{{intent_full}}`, and
+  no block: the author places it.
+- The drift section is **omitted entirely** when nothing went outside, and also
+  when no scope was declared — whatever `drift` holds. Same rule `driftOf` and
+  `show` follow: without a declaration there is no distance to measure.
+- File lists are **not** capped and must not go through `summarizePaths`: every
+  path prints, one per line, grouped by directory and sorted inside each group.
+  That cap is for a terminal line, and there is no line here — the file list is
+  what a reviewer is reviewing. Sorting alone does not group, so the grouping is
+  its own step. Paths stay whole; never a directory heading with bare filenames
+  under it, which cannot be copied into a search.
+- The cost line obeys the unpriced rule through `unpricedTokens`, the same
+  function `week`, `scan` and `stop` name an unpriced model with. A session
+  nothing was captured for says so rather than printing `$0.00 · 0 turns`.
+
+**Stdout carries the document and nothing else** — no sweep notice, no
+confirmation — because `session pr | gh pr create --body-file -` is what the
+command is for. `--copy` and `--out` print what they did *instead of* the
+document, since neither leaves anything to pipe.
+
+`--template` fills `{{intent}}`, `{{scope}}`, `{{changed}}`, `{{drift}}` and
+`{{cost}}`. Values arrive plain — no headings, no emphasis — since the author
+supplied their own. An unknown placeholder is **refused by name**, every
+unknown one at once, never left in the output: `{{autor}}` reaching a pull
+request is found by a reviewer rather than by the person who could have fixed
+it. `{{drift}}` has a sentence for the empty case, unlike the default document
+which drops the section, because a template's heading is not ours to drop.
+
 ## Markdown
 
 Rationale and a worked example:
