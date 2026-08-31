@@ -48,6 +48,8 @@ declared.
 
 Without a declaration there is one entry in the ledger — what the machine produced — and no way to tell whether it was what anyone wanted. With one there are two, and the gap between them becomes visible. That gap is where nearly every agent bug lives, which is why `intent` is written once at `session start` and can never be edited afterwards.
 
+One session's gap is an anecdote. **Intent debt** is the accumulated gap between what was planned and what was touched, counted per file: the paths work keeps landing in that nobody ever declared. One file drifting once is an accident; the same file, session after session, with nobody ever writing it into a scope, is a fact about the repository rather than about any of those sessions. `session debt` is what lists it.
+
 ## Commands
 
 | | |

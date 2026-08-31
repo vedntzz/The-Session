@@ -20,7 +20,7 @@ Node 20+, TypeScript, ESM. `commander` for the CLI, `picocolors` for output. Sto
 
 ```
 src/  cli.ts registration   commands/ start stop show week scan debt cochange survival pr sweep
-      verify key config settle estimate intent home   render/ palette.ts (semantic colour)
+      verify key config settle estimate intent home hook   render/ palette.ts (semantic)
       terminal.ts html.ts markdown.ts pr.ts (a pull request body, from the record)
       capture/ hook.ts, adapters/claude-code.ts, transcript.ts
       (what a transcript line means — the adapter and scan.ts both read through it)
@@ -41,7 +41,7 @@ src/  cli.ts registration   commands/ start stop show week scan debt cochange su
 type Session = {
   id: string; repo: string; startCommit: string
   startedAt: string; endedAt: string | null
-  intent: string               // immutable
+  intent: string | null        // immutable; null until a passive session's first prompt
   intentSource?: IntentSource  // 'declared' | 'captured'; absent reads as declared
   scope: string[]              // declared, may be empty
   baseline: string[]           // dirty at start, subtracted from reality

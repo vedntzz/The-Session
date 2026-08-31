@@ -7,14 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.6.0] — 2026-08-31
+
 ### Added
 
-- `session` with no arguments: a state screen, not a menu — one sentence on
-  where the repo stands and at most two commands worth typing next.
-- `session help all`, listing every command with its description, read off the
-  command tree rather than a hand-kept list.
-- `session week --md`, a Markdown table for meeting notes, Slack, Notion or
-  Confluence, and `--copy` to put it on the clipboard instead of stdout.
+- `session debt`: the files work keeps landing in that nobody ever declared.
+  Per repository, a path that drifted in three or more sessions and has been
+  declared in none since — a later declaration clears it, because that is the
+  tool working. Docs, config and build files are never listed; they are touched
+  by everything and owned by nobody. A repo with fewer than three recorded
+  sessions is told its history is too short rather than shown an empty list,
+  since "found nothing" and "could not look" are different statements.
+- `session survival`: whether merged work is still there 14 and 30 days later,
+  checked against the default branch per path and written into the log as a
+  dated observation. `--check` runs the checks that have fallen due. The one
+  figure in the tool that is not recomputed on every view, and cannot be — the
+  branch says what it holds today, never what it held on day 14.
+- `session cochange`: the files that keep changing together, per repository,
+  and how reliably. A pair has to have moved together in three or more sessions
+  and account for at least 70% of the commoner file's history, so a file that
+  changes in everything is not reported as the partner of everything. Pairs
+  whose files are no longer at the branch tip are marked `(gone)`, and
+  `--current` lists only the pairs still there.
+- `session pr [id]`: a pull request body written from the record — the intent,
+  the declared scope, every changed path, what went outside the plan, and what
+  it cost. Prints to stdout so it pipes into `gh pr create --body-file -`;
+  `--copy` for the clipboard, `--out <path>` for a file, and `--template
+  <path>` for a team's own format, filled from `{{intent}}`, `{{intent_full}}`,
+  `{{scope}}`, `{{changed}}`, `{{drift}}` and `{{cost}}`. An unknown
+  placeholder is refused by name rather than left in the output. No model
+  writes any of it: the document is a transcription of the record, which is
+  invariant 3 held at the point where breaking it would be most expensive.
+- Automatic settling and due survival checks, once a day per repository, from
+  the editor hook and opportunistically from `week`, `show` and the bare
+  screen. Silent unless something was written, and both commands still work by
+  hand.
+
+### Changed
+
+- `session week`, `session show` and `session` with no arguments now settle
+  outcomes and run due survival checks on the way past, at most once a day per
+  repo. They say so only when something was actually written, and never fail
+  their host command.
+- A captured intent in `session pr` is shortened to its first sentence or its
+  first line, whichever ends sooner, with the whole prompt folded into a
+  collapsed block beneath it. Nothing is dropped and nothing is summarised by a
+  model. A declared intent is never shortened — it is the promise the diff is
+  held to, in full.
+
+### Fixed
+
+- A repository that gained an origin remote changed identity and began a second
+  log under the new key, leaving every report reading only one of the two
+  halves. `week`, `estimate`, `show`, `settle` and `debt` now fold both into one
+  history at read time. Nothing on disk is moved: the two hash chains stay
+  intact and `session verify` can still walk each line by line. Left unfixed,
+  months of history could sit split across two files with each half below the
+  threshold at which any report will speak.
+
+## [0.5.0] — 2026-08-25
+
+### Changed
+
+- Every view reordered around what it is for. Where the work went and how far
+  it went outside the plan now come first; what it cost is one dim line at the
+  bottom and nowhere else. The agents meter their own spend, so a view that
+  opened on a dollar figure was answering a question its reader had already had
+  answered. `session show` leads with a sentence about where the work landed,
+  `week` and `scan` with counts, and the totals row leaves its cost cell empty.
+- `session week --md` follows the same order: the headline carries no money at
+  all, and what the week cost is the closing line. The terminal view and the
+  document now share one `spentFigure`, so the two cannot come to disagree
+  about what a week cost.
+- `session week`'s table geometry moved to `render/terminal/week/table.ts`,
+  apart from the arithmetic and the notes under the table, with no change in
+  behaviour.
+
+## [0.4.1] — 2026-08-23
+
+### Changed
+
+- Readme documents `session scan`. No code changed in this release.
+
+## [0.4.0] — 2026-08-23
+
+### Added
+
 - `session scan`: what the agent sessions already on this machine have cost,
   with no setup and nothing recorded beforehand. Reads Claude Code's
   transcripts, groups by repository, and reports the spend, the share of it
@@ -41,11 +121,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caps its sentence: three or fewer paths are named, and past that the line
   gives the count and the two directories most of them are in. Both views go
   through one summariser, so the rule cannot come to differ between them.
-
-- `session --help` now lists four entry points instead of fifteen. Nothing was
-  removed from the parser; `session help all` lists the rest.
-- `session show` is two sentences and three figures by default. The labelled
-  layout moved behind `--full`, which `--tokens` now implies.
 - Every function in `src/` refactored below 20 lines of code, with no change in
   behaviour and no test modified.
 - What a Claude Code transcript line means moved to `capture/transcript.ts`,
@@ -61,6 +136,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read from `package.json` at runtime, resolved against the module rather than
   the working directory, so a global install run inside another repo still
   reports its own version and a release cannot bump one without the other.
+
+## [0.3.1] — 2026-08-21
+
+### Added
+
+- `session` with no arguments: a state screen, not a menu — one sentence on
+  where the repo stands and at most two commands worth typing next.
+- `session help all`, listing every command with its description, read off the
+  command tree rather than a hand-kept list.
+- `session week --md`, a Markdown table for meeting notes, Slack, Notion or
+  Confluence, and `--copy` to put it on the clipboard instead of stdout.
+
+### Changed
+
+- `session --help` now lists four entry points instead of fifteen. Nothing was
+  removed from the parser; `session help all` lists the rest.
+- `session show` is two sentences and three figures by default. The labelled
+  layout moved behind `--full`, which `--tokens` now implies.
+
+### Fixed
+
+- A total nothing could be priced rendered as `$0.00`, which reads as a week
+  that cost nothing rather than one nobody knows the cost of. Every view that
+  prints a total now tests both halves — nought only where nothing was spent,
+  an em dash where no rate covered the models — through one `unpricedThroughout`
+  rather than the two-clause test spelled out in each renderer.
 
 ## [0.3.0] — 2026-08-19
 
@@ -145,7 +246,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The hook now fires reliably on `SessionEnd`, under a 10-second timeout.
 - `week --open` no longer paints the waste hue over a figure of zero.
 
-[Unreleased]: https://github.com/vedntzz/The-Session/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/vedntzz/The-Session/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/vedntzz/The-Session/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/vedntzz/The-Session/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/vedntzz/The-Session/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/vedntzz/The-Session/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/vedntzz/The-Session/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/vedntzz/The-Session/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/vedntzz/The-Session/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vedntzz/The-Session/releases/tag/v0.1.0
