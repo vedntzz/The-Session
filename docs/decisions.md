@@ -98,12 +98,22 @@ The four counters bill at four different rates, so they are priced separately an
 ```
 $ session show --tokens
 
-  cost        $4.04                                     14 turns, 3 without edits
-  no edits    $0.54                                     96 api calls, 61 without edits
+  cost        $4.04                                     14 turns
+  no edits    not measured                              96 api calls
   tokens      12,000 in · 1,100,000 cache read · 180,000 cache write · 200,000 out
 ```
 
-`no edits` is the cost of the turns that wrote nothing — **counted at capture, not apportioned**. Which turn every API call belonged to is known while the transcript is being read, so the empty turns' tokens are added up directly. Taking the session total and multiplying by the share of turns that were empty would be a number nobody measured, and it would be wrong in the direction that matters: the expensive empty turn is the one worth seeing.
+`no edits` is the cost of the turns that wrote nothing, and for a session that changed files it reads `not measured`. That is a retreat from a figure this tool used to print with confidence, and the retreat is the point.
+
+**A transcript cannot say whether a call wrote a file.** It records which tool the agent called, and the first version of this asked exactly that: a turn was productive if an `Edit`, `Write`, `MultiEdit` or `NotebookEdit` block appeared in it. But agents write files through the shell constantly — a heredoc, a `sed`, a script — and a survey of 27 real transcripts on one machine put `Bash` at 2,414 calls against `Edit`'s 657 and `Write`'s 198. A session that changed seven files through the shell was recorded as *two turns, both empty; twenty-eight calls, all without edits*: every figure about waste reading 100% for a session that did all of its work, on a record that is signed and append-only.
+
+So the question is put to git instead, at `stop`, where the diff is already in hand. What the diff settles is whether the **session** wrote anything — never which of its turns did. That is enough for the figure the line exists for, a session that spent money and left nothing behind, and it is not enough to divide the waste between turns. The second is therefore not reported at all rather than estimated into existence, and `emptySource: "git"` on the record says which rule looked.
+
+Where every turn *was* empty the split is still a measurement and not an apportionment: it is the session's own total, because every token it moved was moved in a turn that ended with nothing written. Taking the total and multiplying by the share of turns that were empty would be a number nobody observed, and it would be wrong in the direction that matters — the expensive empty turn is the one worth seeing.
+
+The count of **calls** that wrote no files is gone from every view. It was the same guess at a finer grain, where git cannot help at all, and a figure that cannot be checked is worse than an absent one. The field stays on old records; nothing prints it.
+
+Records written before this carry the old rule's figures, and they are kept — for a session that really did use `Edit` and `Write` the number is right, and discarding every one of them would throw away the months that are. The exception is the figure git can refute outright: a session that changed files cannot have had *every* turn produce nothing. That is exactly the shape a shell-driven session left behind, and those read `not measured` like the rest.
 
 ### Where the prices come from
 
@@ -490,7 +500,7 @@ rate limit the /orders endpoint
 
 - src/store.ts
 
-_$3.42 · 14 turns · 3 that changed no files_
+_$3.42 · 14 turns_
 ```
 
 Stdout by default, because the point is the pipe:
@@ -539,7 +549,17 @@ $ session pr --template .github/pr.md
 {{autor}} in .github/pr.md is not a placeholder. Use one of: {{intent}}, {{intent_full}}, {{scope}}, {{changed}}, {{drift}}, {{cost}}.
 ```
 
-Leaving it in the output is the alternative, and it puts `{{autor}}` in a pull request where it is found by a reviewer rather than by the person who could have fixed the typo in one keystroke. Note `{{drift}}` in a template reads `Nothing went outside the declared scope.` where the default document would have dropped the section: the template's author wrote the heading themselves, and nothing underneath it would be a broken document.
+Leaving it in the output is the alternative, and it puts `{{autor}}` in a pull request where it is found by a reviewer rather than by the person who could have fixed the typo in one keystroke.
+
+`{{drift}}` is the one value that always says *something*, where the default document would have dropped the section: the template's author wrote the heading themselves, and nothing underneath it would be a broken document. There are **three** states and three sentences, because the default body's two-way choice — print the section or drop it — becomes a three-way one as soon as something has to be written under a heading that is already there:
+
+| the session | `{{drift}}` reads |
+| --- | --- |
+| declared a scope, stayed inside it | `Nothing went outside the declared scope.` |
+| declared a scope, went outside it | the paths, one per line |
+| declared no scope | `no scope — nothing was declared to drift from` |
+
+The third is the one worth stating, because the obvious implementation gets it wrong: `Nothing went outside the declared scope` under a session that declared none is a false sentence about a declaration nobody made, and listing the paths the record happens to hold would be the accusation two paragraphs above. The wording is the same string `{{scope}}` and `## Declared scope` use, so a template printing both reads as one document rather than as two answers to the same question.
 
 ## Who the work was for
 

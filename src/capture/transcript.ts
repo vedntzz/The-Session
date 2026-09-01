@@ -9,9 +9,6 @@
 import { zeroCost, type SessionCost, type TokenCounts } from "../store.js";
 import { addTokens, dominant } from "./adapter.js";
 
-/** Tool calls that write to the working tree. */
-export const EDITING_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
-
 export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -23,7 +20,14 @@ function num(value: unknown): number {
 /**
  * One API call, folded across however many transcript lines reported it.
  * Streaming writes the same `requestId` several times with an identical usage
- * block, so usage is taken once while tool use is OR-ed across fragments.
+ * block, so usage is taken once rather than added up per fragment.
+ *
+ * **Nothing here says whether the call wrote a file**, and nothing can. A
+ * transcript records which tool was called, not what the call did to the disk:
+ * `Bash` writes files through a heredoc or a `sed` as readily as it runs `git
+ * status`, and it is the most-used tool by a wide margin. Whether work was
+ * produced is settled against the diff instead, in `empty.ts`, once there is a
+ * diff to settle it against.
  */
 export interface Call {
   inputTokens: number;
@@ -31,7 +35,6 @@ export interface Call {
   cacheCreationTokens: number;
   outputTokens: number;
   model: string;
-  edited: boolean;
   /** Which developer turn this call belongs to. */
   turn: number;
 }
@@ -83,21 +86,6 @@ export function isUserAuthored(entry: Record<string, unknown>): boolean {
     return false;
   }
   return !content.some((block) => isObject(block) && block["type"] === "tool_result");
-}
-
-/** True when the assistant message contains a tool call that writes files. */
-export function touchesFiles(message: Record<string, unknown>): boolean {
-  const content = message["content"];
-  if (!Array.isArray(content)) {
-    return false;
-  }
-  return content.some(
-    (block) =>
-      isObject(block) &&
-      block["type"] === "tool_use" &&
-      typeof block["name"] === "string" &&
-      EDITING_TOOLS.has(block["name"]),
-  );
 }
 
 /**
@@ -191,19 +179,13 @@ export function recordCall(
     return false;
   }
   const { requestId, message } = call;
-  const edited = touchesFiles(message);
 
-  const existing = calls.get(requestId);
-  if (existing) {
-    // Same call, another fragment: usage is already counted, but a later
-    // fragment may be the one carrying the tool call.
-    existing.edited ||= edited;
-    return true;
+  if (calls.has(requestId)) {
+    return true; // same call, another fragment: its usage is already counted
   }
   calls.set(requestId, {
     ...readUsage(message["usage"]),
     model: typeof message["model"] === "string" ? message["model"] : "",
-    edited,
     turn,
   });
   return true;
@@ -224,43 +206,28 @@ function assistantCall(
 /**
  * Adds the calls up into one session's cost.
  *
- * Which turns produced nothing is settled first, before anything is counted: a
- * turn counts once it has a call in the window, edits anywhere in it make the
- * whole turn productive, and whether a call belongs to a wasted turn therefore
- * depends on calls that may come after it.
+ * Four token counters, how many turns had a call in the window, how many calls
+ * there were, and which model did most of them. **Nothing about what was
+ * produced**, which is not a question a transcript answers — see `Call`. That
+ * is reconciled against the diff in `empty.ts`, and a session whose cost was
+ * never reconciled says so by carrying no `emptySource` rather than by
+ * carrying a nought.
  */
-
 export function costOfCalls(calls: readonly Call[]): SessionCost {
-  const turnEdited = new Map<number, boolean>();
-  for (const call of calls) {
-    turnEdited.set(call.turn, (turnEdited.get(call.turn) ?? false) || call.edited);
-  }
-
   const cost = zeroCost();
+  const turns = new Set<number>();
   const callsByModel = new Map<string, number>();
+
   for (const call of calls) {
-    addCall(cost, call, turnEdited.get(call.turn) === false);
+    addTokens(cost, call);
+    turns.add(call.turn);
     if (call.model !== "") {
       callsByModel.set(call.model, (callsByModel.get(call.model) ?? 0) + 1);
     }
   }
 
   cost.apiCalls = calls.length;
-  cost.turns = turnEdited.size;
-  cost.emptyTurns = [...turnEdited.values()].filter((edited) => !edited).length;
+  cost.turns = turns.size;
   cost.model = dominant(callsByModel);
   return cost;
-}
-
-/** One call's tokens, and its tokens again where its whole turn wrote nothing. */
-function addCall(cost: SessionCost, call: Call, turnWroteNothing: boolean): void {
-  addTokens(cost, call);
-  if (turnWroteNothing) {
-    // Every token this call moved was spent inside a turn that ended with
-    // nothing written. That is what the waste figure is made of.
-    addTokens(cost.emptyTurnTokens as TokenCounts, call);
-  }
-  if (!call.edited) {
-    cost.callsWithoutEdits += 1;
-  }
 }

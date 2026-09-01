@@ -28,18 +28,15 @@ const RATES: RateTable = parseRates(
   "test rates",
 );
 
-/** A cost with the four counters set, and a share of it spent on nothing. */
+/** A cost with the four counters set, as an adapter reports one. */
 function cost(over: Partial<SessionCost> = {}): SessionCost {
   return {
     ...zeroCost(),
     inputTokens: 100_000,
     outputTokens: 10_000,
     turns: 10,
-    emptyTurns: 2,
     apiCalls: 20,
-    callsWithoutEdits: 4,
     model: "claude-opus-5",
-    emptyTurnTokens: { ...zeroTokens(), inputTokens: 20_000, outputTokens: 1_000 },
     ...over,
   };
 }
@@ -62,9 +59,12 @@ describe("spendOfScanned", () => {
     expect(spendOfScanned([session()], RATES).usd).toBeCloseTo(0.75, 10);
   });
 
-  it("reports what the turns that changed no files cost", () => {
-    // 20,000 input at $5/M is $0.10; 1,000 output at $25/M is $0.025.
-    expect(spendOfScanned([session()], RATES).emptyUsd).toBeCloseTo(0.125, 10);
+  it("reports no share of the money as waste, having no diff to divide it by", () => {
+    // There was a figure here: what the turns that changed no files cost. It
+    // rested on the transcript knowing which turns those were, which it never
+    // did — see `emptyTurnsOf`. A scan has no base commit to diff against, so
+    // the field is gone rather than reported as nought.
+    expect("emptyUsd" in spendOfScanned([session()], RATES)).toBe(false);
   });
 
   it("counts a model no rate covers rather than pricing it at a guess", () => {
@@ -123,17 +123,20 @@ describe("spendOfScanned", () => {
 describe("summarizeScan", () => {
   const week = [
     session({ id: "a", repo: "/dev/one" }),
-    session({ id: "b", repo: "/dev/one", cost: cost({ turns: 4, emptyTurns: 1 }) }),
+    session({ id: "b", repo: "/dev/one", cost: cost({ turns: 4 }) }),
     session({ id: "c", repo: "/dev/two", cost: cost({ model: "claude-haiku-4-5" }) }),
   ];
 
-  it("counts every session, and the turns that produced nothing", () => {
+  it("counts every session and every turn, and nothing about what they produced", () => {
     const report = summarizeScan(week, RATES, 30);
 
     expect(report.sessions).toBe(3);
     expect(report.turns).toBe(24);
-    expect(report.emptyTurns).toBe(5);
     expect(report.days).toBe(30);
+    // `scan` reads transcripts and has no diff to reconcile against — there is
+    // no `session start` behind these, so no base commit and no reality. The
+    // figure is not on the report at all rather than being carried as a nought.
+    expect("emptyTurns" in report).toBe(false);
   });
 
   it("groups by repository, dearest first", () => {
@@ -141,7 +144,7 @@ describe("summarizeScan", () => {
 
     expect(report.repos.map((row) => row.repo)).toEqual(["/dev/one", "/dev/two"]);
     expect(report.repos[0]?.sessions).toBe(2);
-    expect(report.repos[0]?.emptyTurns).toBe(3);
+    expect(report.repos[0]?.turns).toBe(14);
     expect(report.repos[1]?.sessions).toBe(1);
   });
 

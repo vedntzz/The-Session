@@ -7,6 +7,7 @@ import {
   type SessionOutcome,
 } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
+import { emptyTurnsOf } from "../../empty.js";
 import { costCell, NO_RATES, wasteCell, type View } from "./cost.js";
 import { CAPTURED_MARKER, intentOf } from "./intent.js";
 import { summarizePaths } from "./paths.js";
@@ -136,7 +137,8 @@ function wentOutside(session: Session): { before: string; paths: string; after: 
  * the figure that is always there, and colouring what is always there says
  * nothing.
  */
-function figures(cost: SessionCost, rates: RateTable): string | undefined {
+function figures(session: Session, rates: RateTable): string | undefined {
+  const { cost } = session;
   if (cost.turns === 0 && cost.apiCalls === 0) {
     // Nothing was captured for this session. A row of zeroes would read as a
     // measurement of nothing rather than as an absence of measurement.
@@ -144,7 +146,12 @@ function figures(cost: SessionCost, rates: RateTable): string | undefined {
   }
   const spent = costCell(cost, priceSession(cost, rates));
   const turns = plural(cost.turns, "turn", "turns");
-  return [spent, turns, `${cost.emptyTurns} produced nothing`].join(FIGURE_GAP);
+  // Three figures where the third can be had, two where it cannot. A
+  // `— produced nothing` in a line read at a glance is a shape the reader has
+  // to stop and decode; the labelled view is where an absence is spelled out.
+  const empty = emptyTurnsOf(session);
+  const counts = empty === undefined ? [spent, turns] : [spent, turns, `${empty} produced nothing`];
+  return counts.join(FIGURE_GAP);
 }
 
 /**
@@ -178,7 +185,7 @@ export function formatBrief(
     `${INDENT}${outside.before}${palette.drift(outside.paths)}${outside.after}`,
   ];
 
-  const line = figures(session.cost, view.rates ?? NO_RATES);
+  const line = figures(session, view.rates ?? NO_RATES);
   if (line !== undefined) {
     lines.push("", `${INDENT}${palette.meta(line)}`);
   }

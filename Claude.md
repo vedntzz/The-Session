@@ -9,7 +9,7 @@
 1. **`intent` is immutable.** Written once at `session start`, never edited afterward. A declaration you can revise after seeing the result is a rationalisation. No `--edit-intent` flag, ever.
 2. **No server, no database, no account.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service, and anything needing one is wrong.
 3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else.
-4. **Turns that produced nothing are first-class.** Turns and API calls that changed no files are counted and displayed, never dropped.
+4. **Turns that produced nothing are first-class.** Turns that changed no files are counted and displayed, never dropped — and where the record cannot say which turns those were, *that* is displayed rather than a nought. A transcript names the tool a call used, never what it did to the disk, so the question goes to git: `empty.ts` is the one rule, and no view reads `cost.emptyTurns` itself.
 5. **Cross-tool.** Nothing may assume Claude Code specifically. Adapters go behind an interface; the core reads a normalised shape.
 
 ## Stack
@@ -25,6 +25,7 @@ src/  cli.ts registration   commands/ start stop show week scan debt cochange su
       capture/ hook.ts, adapters/claude-code.ts, transcript.ts
       (what a transcript line means — the adapter and scan.ts both read through it)
       store.ts JSONL   outcome.ts merged/abandoned/open   classify.ts path+intent rules
+      empty.ts which turns produced nothing, settled against the diff at stop
       pricing.ts money   observe.ts repo facts   scan.ts aggregation   git.ts diff, HEAD
       scope.ts what a declared scope covers (stop and debt share the one rule)
       debt.ts paths that keep drifting and were never declared since, per repo
@@ -65,10 +66,17 @@ type Session = {
 type TokenCounts = { inputTokens: number; cacheReadTokens: number
                      cacheCreationTokens: number; outputTokens: number }
 type SessionCost = TokenCounts & {
-  turns: number; emptyTurns: number   // turns that wrote no files
-  apiCalls: number; callsWithoutEdits: number  // a call is the fragments sharing a requestId
+  turns: number; emptyTurns?: number  // turns that wrote no files; absent = the
+                                // record cannot say, which is every session that
+                                // changed files. Read it through empty.ts, never raw
+  apiCalls: number; callsWithoutEdits?: number  // a call is the fragments sharing a
+                                // requestId. The second is never written or shown
+                                // again: no transcript can say what a call wrote
   model: string                 // the model that did the most calls
   emptyTurnTokens?: TokenCounts // the four counters over the turns that wrote nothing
+  emptySource?: EmptySource     // 'git' | 'tools'; absent reads as tools, the old
+                                // rule that called a turn empty when it named no
+                                // Edit/Write tool — wrong for anything using a shell
 }
 ```
 

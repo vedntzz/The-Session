@@ -14,6 +14,8 @@ import {
 import { isPriced, priceSession, type RateTable } from "../pricing.js";
 import { inScope } from "../scope.js";
 import { describePaths, intentOf, unpricedTokens } from "../render/terminal.js";
+import { plural } from "../render/terminal/text.js";
+import { emptyTurnsOf, reconcileEmpty } from "../empty.js";
 
 /** What `session stop` needs, on top of where the store lives. */
 export interface StopOptions extends StoreOptions {
@@ -78,10 +80,14 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
   const changed = await diffSince(open.startCommit, cwd);
   const reality = computeReality(changed, open.baseline);
   const endedAt = new Date().toISOString();
-  const cost = await captureCost(
+  const captured = await captureCost(
     { from: open.startedAt, to: endedAt, cwd },
     options.adapters ?? undefined,
   );
+  // The one place both halves are in hand: what the agent spent, and what the
+  // repository has to show for it. An adapter cannot do this for itself — a
+  // transcript names the tool a call used, never what it did to the disk.
+  const cost = reconcileEmpty(captured, reality.length > 0);
 
   return updateSession(open.id, await closingPatch(open, reality, cost, endedAt, cwd), options);
 }
@@ -174,11 +180,16 @@ export function formatStopped(session: Session, rates?: RateTable): string[] {
     lines.push(`  outside  ${describePaths(session.drift, "  ")}`);
   }
   if (session.cost.apiCalls > 0) {
-    const { turns, emptyTurns, apiCalls, callsWithoutEdits } = session.cost;
+    const { turns, apiCalls } = session.cost;
+    // No count of calls that changed nothing, here or anywhere: a transcript
+    // cannot say which call wrote a file, and the figure it used to print was
+    // the tool-name guess. The turn figure is dropped the same way when the
+    // diff cannot settle it — see `emptyTurnsOf`.
+    const empty = emptyTurnsOf(session);
+    const produced = empty === undefined ? "" : `, ${empty} that produced nothing`;
     lines.push(
       `  cost     ${tokensSpent(session.cost, rates)}  ` +
-        `${turns} turns, ${emptyTurns} without edits  ` +
-        `(${apiCalls} api calls, ${callsWithoutEdits} without edits)`,
+        `${plural(turns, "turn", "turns")}${produced}  (${plural(apiCalls, "api call", "api calls")})`,
     );
   }
   return lines;

@@ -4,6 +4,7 @@ import { attributionEntries } from "../../config.js";
 import { formatUsd, priceSession, type Price, type RateTable } from "../../pricing.js";
 import { isCaptured, totalTokens, type Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
+import { emptyTurnsOf } from "../../empty.js";
 import { breakdown, costCell, NO_RATES, outcomeInk, wasteCell, type View } from "./cost.js";
 import { CAPTURED_INTENT, DRIFT_MARKER, intentOf, NO_SCOPE, SCOPE_HINT } from "./intent.js";
 import { clock, figure, gap, INDENT, label, padRight, plural, width } from "./text.js";
@@ -149,21 +150,33 @@ function costLines(session: Session, palette: Palette, view: View): string[] {
  * what is always there says nothing.
  */
 function spentLine(session: Session, palette: Palette, price: Price): string {
-  const { turns, emptyTurns } = session.cost;
+  const { turns } = session.cost;
   const cell = costCell(session.cost, price);
   const spent = `${INDENT}${label("cost")}${cell}`;
-  const counts = `${plural(turns, "turn", "turns")}, ${emptyTurns} without edits`;
+  const empty = emptyTurnsOf(session);
+  const counts =
+    empty === undefined
+      ? plural(turns, "turn", "turns")
+      : `${plural(turns, "turn", "turns")}, ${empty} that produced nothing`;
   return (
     `${INDENT}${palette.meta(label("cost"))}${cell}` + `${gap(spent)}${palette.meta(counts)}`
   );
 }
 
-/** What the turns that wrote nothing cost, with the api calls beside it. */
+/**
+ * What the turns that produced nothing cost, with the api calls beside it.
+ *
+ * The api calls are a count and nothing more. There was a second figure here —
+ * how many of them wrote no files — and it is gone rather than corrected: a
+ * transcript reports the tool a call used, never what the call did to the
+ * disk, so the figure was the tool-name guess with a number's face on. Kept on
+ * old records, printed nowhere.
+ */
 function wasteLine(session: Session, palette: Palette, price: Price): string {
-  const { apiCalls, callsWithoutEdits } = session.cost;
-  const waste = wasteCell(session.cost, price);
+  const { apiCalls } = session.cost;
+  const waste = wasteCell(session, price);
   const wasted = `${INDENT}${label("no edits")}${waste.text}`;
-  const counts = `${plural(apiCalls, "api call", "api calls")}, ${callsWithoutEdits} without edits`;
+  const counts = plural(apiCalls, "api call", "api calls");
   return (
     `${INDENT}${palette.meta(label("no edits"))}${waste.spent ? palette.waste(waste.text) : waste.text}` +
     `${gap(wasted)}` +

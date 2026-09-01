@@ -184,7 +184,7 @@ describe("scanSessions", () => {
     });
   });
 
-  it("segments turns at each prompt and counts the ones that wrote nothing", async () => {
+  it("segments turns at each prompt, and claims nothing about what they wrote", async () => {
     await writeTranscript("aaaa", [
       prompt(ago(60), "first", "/dev/one"),
       reply(ago(59), "req-1", "/dev/one", { edited: true }),
@@ -196,21 +196,28 @@ describe("scanSessions", () => {
     const { sessions } = await scanSessions(30, RATES, { root: projects, now: clock });
 
     expect(sessions[0]?.cost.turns).toBe(2);
-    expect(sessions[0]?.cost.emptyTurns).toBe(1);
-    expect(sessions[0]?.cost.callsWithoutEdits).toBe(2);
+    expect(sessions[0]?.cost.apiCalls).toBe(3);
+    // Whether the second turn produced anything is a question for a diff, and
+    // `scan` has none — the same refusal that keeps `merged` out of this
+    // report. An `Edit` in the first turn does not change that.
+    expect(sessions[0]?.cost.emptyTurns).toBeUndefined();
+    expect(sessions[0]?.cost.callsWithoutEdits).toBeUndefined();
   });
 
-  it("counts the whole turn as productive when any call in it wrote a file", async () => {
+  it("reads a transcript that only ever called Bash exactly the same way", async () => {
+    // The shape the tool-name rule got wrong: real agents write files through
+    // the shell, and a scan of them used to report every turn as empty.
     await writeTranscript("aaaa", [
       prompt(ago(60), "first", "/dev/one"),
       reply(ago(59), "req-1", "/dev/one"),
-      reply(ago(58), "req-2", "/dev/one", { edited: true }),
+      reply(ago(58), "req-2", "/dev/one"),
     ]);
 
     const { sessions } = await scanSessions(30, RATES, { root: projects, now: clock });
 
-    expect(sessions[0]?.cost.emptyTurns).toBe(0);
-    expect(sessions[0]?.cost.emptyTurnTokens?.inputTokens).toBe(0);
+    expect(sessions[0]?.cost.turns).toBe(1);
+    expect(sessions[0]?.cost.emptyTurns).toBeUndefined();
+    expect(sessions[0]?.cost.emptyTurnTokens).toBeUndefined();
   });
 
   it("leaves out calls from before the window", async () => {

@@ -95,6 +95,7 @@ describe("formatSession", () => {
         outputTokens: 1_000,
         turns: 3,
         emptyTurns: 1,
+        emptySource: "tools",
         apiCalls: 41,
         callsWithoutEdits: 30,
         emptyTurnTokens: {
@@ -115,13 +116,16 @@ describe("formatSession", () => {
       "  changed     api/middleware/rate_limit.py  api/orders.py",
       "  outside     ! db/schema.py                            ← you did not declare this",
       "",
-      "  cost        $0.42                                     3 turns, 1 without edits",
-      "  no edits    $0.05                                     41 api calls, 30 without edits",
+      "  cost        $0.42                                     3 turns, 1 that produced nothing",
+      "  no edits    $0.05                                     41 api calls",
     ]);
   });
 
   it("leads with the money, and keeps the counts beside it", () => {
-    const lines = render({ cost: cost({ outputTokens: 1_000_000, turns: 2, apiCalls: 5 }) });
+    const lines = render({
+      reality: ["api/orders.py"],
+      cost: cost({ outputTokens: 1_000_000, turns: 2, apiCalls: 5, emptySource: "git" }),
+    });
 
     // $75 per million output tokens, so this is a whole million of them.
     expect(line(lines, "cost")).toContain("$75.00");
@@ -130,10 +134,12 @@ describe("formatSession", () => {
 
   it("prices the turns that changed no files from what was counted, not from a share", () => {
     const lines = render({
+      reality: ["api/orders.py"],
       cost: cost({
         outputTokens: 1_000_000,
         turns: 4,
         emptyTurns: 1,
+        emptySource: "tools",
         apiCalls: 5,
         // A quarter of the turns, but four fifths of the money. Apportioning by
         // the turn count would have reported $18.75 and called it a measurement.
@@ -144,11 +150,22 @@ describe("formatSession", () => {
     expect(line(lines, "no edits")).toContain("$60.00");
   });
 
-  it("says the split is not recorded rather than inventing one", () => {
+  it("says the split is not measured rather than inventing one", () => {
     const old = cost({ outputTokens: 1_000_000, turns: 4, emptyTurns: 2, apiCalls: 5 });
     delete old.emptyTurnTokens;
 
-    expect(line(render({ cost: old }), "no edits")).toContain("not recorded");
+    expect(line(render({ reality: ["a.ts"], cost: old }), "no edits")).toContain("not measured");
+  });
+
+  it("says the split is not measured for a session that changed files", () => {
+    // The new rule: git settles that the session wrote something, and nothing
+    // on the record says which of its turns did. A dollar figure here would be
+    // a share of the session invented to fill the row.
+    const reconciled = cost({ outputTokens: 1_000_000, turns: 4, apiCalls: 5, emptySource: "git" });
+
+    const lines = render({ reality: ["api/orders.py"], cost: reconciled });
+    expect(line(lines, "no edits")).toContain("not measured");
+    expect(line(lines, "cost")).not.toContain("produced nothing");
   });
 
   it("reports tokens and names the unpriced model rather than guessing a price", () => {
@@ -272,18 +289,29 @@ describe("formatSession", () => {
     expect(lines.some((text) => text.includes("api call"))).toBe(false);
   });
 
-  it("counts turns and calls that produced nothing, rather than dropping them", () => {
-    const lines = render({ cost: cost({ turns: 4, emptyTurns: 4, apiCalls: 9, callsWithoutEdits: 9 }) });
+  it("counts turns that produced nothing, rather than dropping them", () => {
+    // A session that changed nothing: git settles that every one of its turns
+    // produced nothing, which is the case the figure exists for.
+    const lines = render({
+      reality: [],
+      cost: cost({ turns: 4, apiCalls: 9, emptySource: "git", emptyTurns: 4 }),
+    });
 
-    expect(line(lines, "cost")).toContain("4 turns, 4 without edits");
-    expect(line(lines, "no edits")).toContain("9 api calls, 9 without edits");
+    expect(line(lines, "cost")).toContain("4 turns, 4 that produced nothing");
+    // No count of calls that wrote nothing, here or anywhere: a transcript
+    // names the tool a call used, never what it did to the disk.
+    expect(line(lines, "no edits")).toContain("9 api calls");
+    expect(line(lines, "no edits")).not.toContain("without edits");
   });
 
   it("keeps a single turn and a single call singular", () => {
-    const lines = render({ cost: cost({ turns: 1, emptyTurns: 0, apiCalls: 1 }) });
+    const lines = render({
+      reality: ["a.ts"],
+      cost: cost({ turns: 1, apiCalls: 1, emptySource: "git" }),
+    });
 
-    expect(line(lines, "cost")).toContain("1 turn, 0 without edits");
-    expect(line(lines, "no edits")).toContain("1 api call, 0 without edits");
+    expect(line(lines, "cost")).toContain("1 turn");
+    expect(line(lines, "no edits")).toContain("1 api call");
   });
 
   it("totals the four token counters when it cannot price them", () => {
@@ -321,22 +349,46 @@ describe("formatSession", () => {
 /** The three sessions the week tests read against. */
 function week(): Session[] {
   return [
+    // Two sessions that changed files, carrying figures from the tool-name
+    // rule that git does not contradict, and one that changed nothing at all —
+    // where git settles that every turn in it produced nothing.
     session({
       intent: "add rate limiting to /orders",
       startedAt: at(9, 14),
-      cost: cost({ inputTokens: 84_200, turns: 3, emptyTurns: 1, apiCalls: 41 }),
+      reality: ["api/orders.py"],
+      cost: cost({
+        inputTokens: 84_200,
+        turns: 3,
+        emptyTurns: 1,
+        emptySource: "tools",
+        apiCalls: 41,
+      }),
       outcome: "open",
     }),
     session({
       intent: "refactor the transcript store adapter",
       startedAt: at(11, 2),
-      cost: cost({ inputTokens: 412_900, turns: 12, emptyTurns: 5, apiCalls: 130 }),
+      reality: ["src/store.ts"],
+      cost: cost({
+        inputTokens: 412_900,
+        turns: 12,
+        emptyTurns: 5,
+        emptySource: "tools",
+        apiCalls: 130,
+      }),
       outcome: "merged",
     }),
     session({
       intent: "try the websocket thing",
       startedAt: at(8, 31, 16),
-      cost: cost({ inputTokens: 103_110, turns: 4, emptyTurns: 4, apiCalls: 22 }),
+      reality: [],
+      cost: cost({
+        inputTokens: 103_110,
+        turns: 4,
+        apiCalls: 22,
+        emptySource: "git",
+        emptyTurns: 4,
+      }),
       outcome: "abandoned",
     }),
   ];
@@ -747,7 +799,10 @@ describe("formatWeek", () => {
   });
 
   it("keeps a lone turn singular in the waste line", () => {
-    const one = session({ cost: cost({ turns: 1, emptyTurns: 0, apiCalls: 1 }) });
+    const one = session({
+      reality: ["a.ts"],
+      cost: cost({ turns: 1, emptyTurns: 0, emptySource: "tools", apiCalls: 1 }),
+    });
     expect(formatWeek([one], 7, plainPalette, {}, priced).at(-2)).toBe("  0 of 1 turn changed no files");
   });
 
@@ -1045,13 +1100,32 @@ describe("formatBrief", () => {
 
   it("puts the cost, the turns and the empty turns on one line and stops", () => {
     const lines = brief({
-      cost: cost({ inputTokens: 100_000, turns: 9, emptyTurns: 3, apiCalls: 40 }),
+      reality: ["src/api/orders.ts"],
+      cost: cost({
+        inputTokens: 100_000,
+        turns: 9,
+        emptyTurns: 3,
+        emptySource: "tools",
+        apiCalls: 40,
+      }),
     });
 
     expect(lines.at(-1)).toBe("  $1.50 · 9 turns · 3 produced nothing");
     // The api-call counters and the token breakdown are --full's business.
     expect(lines.join("\n")).not.toContain("api call");
     expect(lines.join("\n")).not.toContain("no edits");
+  });
+
+  it("gives two figures rather than a dash where the turns cannot be counted", () => {
+    const lines = brief({
+      reality: ["src/api/orders.ts"],
+      cost: cost({ inputTokens: 100_000, turns: 9, apiCalls: 40, emptySource: "git" }),
+    });
+
+    // A `— produced nothing` in a line read at a glance is a puzzle about the
+    // tool rather than a fact about the session. `--full` spells the absence
+    // out; this line simply stops.
+    expect(lines.at(-1)).toBe("  $1.50 · 9 turns");
   });
 
   it("reports an unpriced model rather than pricing it at a guess", () => {

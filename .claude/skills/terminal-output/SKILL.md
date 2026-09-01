@@ -71,9 +71,18 @@ the state, because in each state there is one obvious next move and at most one
 other worth knowing. Commander would print the help here — the right answer to
 "what is this" and the wrong one to "where am I".
 
-`session show` is three sentences and a line of three figures: where the work
-ended up, what was asked for, what went outside what was declared, and then
-cost / turns / turns that produced nothing. The labelled layout is `--full`,
+`session show` is three sentences and a line of figures: where the work ended
+up, what was asked for, what went outside what was declared, and then cost /
+turns / turns that produced nothing — that last one only where the diff can
+say, which is a session that changed nothing. Every view reads it through
+`emptyTurnsOf`, never off `cost.emptyTurns`; see the `measurement-rules` skill
+under "Which turns produced nothing". The brief line simply stops at two
+figures where the third is unknown, while `show --full` spells the absence out
+as `not measured`: a dash in a line read at a glance is a puzzle about the
+tool, and the labelled view is where an absence belongs. `week`'s column and
+its totals take the dash, with a note under the table naming how many sessions
+could not be counted. No view prints a count of calls that changed no files —
+that figure is gone. The labelled layout is `--full`,
 and `--tokens` implies it rather than being quietly ignored.
 
 The outcome sentence is read off `outcome`, which by the time a view runs holds
@@ -240,8 +249,18 @@ document, since neither leaves anything to pipe.
 supplied their own. An unknown placeholder is **refused by name**, every
 unknown one at once, never left in the output: `{{autor}}` reaching a pull
 request is found by a reviewer rather than by the person who could have fixed
-it. `{{drift}}` has a sentence for the empty case, unlike the default document
-which drops the section, because a template's heading is not ours to drop.
+it. `{{drift}}` always says something, unlike the default document which drops the
+section, because a template's heading is not ours to drop — and it has
+**three** states where the body has two: the paths, `Nothing went outside the
+declared scope.`, and `NO_SCOPE` for a session that declared none. That last is
+the one an implementation gets wrong, and it is the same string `{{scope}}` and
+`## Declared scope` use.
+
+A `--template` that will not open says **which** way it failed: missing (with
+the note that the path is read from the working directory), a directory, or
+permission denied, and anything else keeps the errno's own message. One
+sentence over all of them sends half the readers to the wrong fix — a typo'd
+path looks like a permissions fault, and a real file looks like a typo.
 
 ## Markdown
 

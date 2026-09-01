@@ -13,6 +13,7 @@ import {
 import { isCaptured, totalTokens, type Session } from "../../store.js";
 import { intentOf } from "../terminal.js";
 import { documentHead, isWasteful } from "./style.js";
+import { emptyTurnsOf, emptyTurnsTotal, unmeasuredEmpty } from "../../empty.js";
 import { escapeHtml } from "./text.js";
 
 /** Shortest a row gets, so a cheap session is still a readable line. */
@@ -86,17 +87,24 @@ export function costCells(session: Session, rates: RateTable, tokens: boolean): 
     return `<span class="figure nocost quiet">—</span>`;
   }
 
-  const { turns, emptyTurns } = session.cost;
+  const { turns } = session.cost;
   const price = priceSession(session.cost, rates);
   const raw = tokens
     ? `<span class="figure tokens">${escapeHtml(figure(totalTokens(session.cost)))} tokens</span>`
     : "";
+  // A dash where the diff cannot say which turn wrote a file, and no hue on
+  // it: the waste ink means there is something here, and not knowing is not
+  // something here.
+  const empty = emptyTurnsOf(session);
+  const emptyCell =
+    empty === undefined
+      ? `<span class="figure empty quiet">— produced nothing</span>`
+      : `<span class="figure empty ${hue(empty)}">${escapeHtml(figure(empty))} produced nothing</span>`;
 
   return (
     `<span class="figure cost">${escapeHtml(price.priced ? formatUsd(price.usd) : "—")}</span>` +
     `<span class="figure turns">${escapeHtml(plural(turns, "turn", "turns"))}</span>` +
-    `<span class="figure empty ${hue(emptyTurns)}">` +
-    `${escapeHtml(figure(emptyTurns))} without edits</span>` +
+    emptyCell +
     raw
   );
 }
@@ -224,7 +232,7 @@ export function rowsBlock(sessions: readonly Session[], rates: RateTable, showTo
 /** What the rows do not say: the split of the money, the waste, the marker. */
 export function footerBlock(sessions: readonly Session[], spend: Spend): string {
   const turns = sum(sessions, (session) => session.cost.turns);
-  const empty = sum(sessions, (session) => session.cost.emptyTurns);
+  const empty = emptyTurnsTotal(sessions);
   // Not in the waste hue. Red is for money that is definitely gone, and most
   // of this figure is work that has simply not landed yet. Omitted where the
   // total is nought, whether because nothing was spent or because nothing
@@ -233,11 +241,17 @@ export function footerBlock(sessions: readonly Session[], spend: Spend): string 
     spend.usd > 0
       ? `<p>${escapeHtml(formatUsd(spend.usd))} spent, ${escapeHtml(shippedNote(spend))}</p>`
       : "";
+  // Said either way, like the terminal's note: a page that drops the line
+  // reads as a week where nothing was wasted.
   const wasted =
-    turns > 0
-      ? `<p><span class="${hue(empty)}">${escapeHtml(figure(empty))}</span> of ` +
-        `${escapeHtml(plural(turns, "turn", "turns"))} changed no files</p>`
-      : "";
+    turns === 0
+      ? ""
+      : empty !== undefined
+        ? `<p><span class="${hue(empty)}">${escapeHtml(figure(empty))}</span> of ` +
+          `${escapeHtml(plural(turns, "turn", "turns"))} changed no files</p>`
+        : `<p class="quiet">${escapeHtml(plural(unmeasuredEmpty(sessions), "session", "sessions"))} ` +
+          "cannot say which turns changed no files — the diff answers for the session, " +
+          "not for the turn</p>";
   // The legend for the marker on those rows, and only when there are any.
   const captured = sessions.filter(isCaptured).length;
   const recorded =

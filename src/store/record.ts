@@ -22,26 +22,66 @@ export interface TokenCounts {
 export interface SessionCost extends TokenCounts {
   /** Developer turns: one per prompt, covering everything it set off. */
   turns: number;
-  /** Turns that wrote no files — a whole prompt that produced nothing. */
-  emptyTurns: number;
+  /**
+   * Turns that wrote no files — a whole prompt that produced nothing.
+   *
+   * **Absent where nothing can say.** Under the `git` rule that is every
+   * session that changed files: git settles whether the session wrote
+   * anything, never which turn wrote it, and a nought here would claim no turn
+   * was wasted. Nought is what this field means when it means nought.
+   */
+  emptyTurns?: number;
   /** API calls observed, after streaming fragments are collapsed. */
   apiCalls: number;
-  /** Calls that wrote no files: they cost tokens and changed nothing. */
-  callsWithoutEdits: number;
+  /**
+   * Calls that wrote no files.
+   *
+   * **Never written again, and never displayed.** A transcript reports which
+   * tool a call used, not what the tool did to the disk, so a call that wrote
+   * a file through a shell command is indistinguishable from one that ran
+   * `git status` — see `emptySource`. Kept on the type because records already
+   * hold it, and a field dropped from the type is a field `verify` can no
+   * longer hash back.
+   */
+  callsWithoutEdits?: number;
   model: string;
   /**
    * The same four counters, restricted to the turns that wrote no files.
    *
-   * Counted at capture, where which turn a call belonged to is still known, so
-   * that what the waste cost is a measurement. The alternative — taking the
-   * session's total and multiplying by the share of turns that were empty —
-   * would be a number nobody observed: empty turns are not average turns, and
-   * the expensive ones are exactly the ones worth seeing.
+   * A measurement, never an apportionment: under the `git` rule it is present
+   * only when *every* turn was empty, where it is the session's own total.
+   * Taking the total times the share of turns that were empty would be a
+   * number nobody observed — empty turns are not average turns, and the
+   * expensive one is the whole point.
    *
-   * Absent on sessions captured before this existed. Nothing infers it.
+   * Absent where `emptyTurns` is absent, and on sessions captured before this
+   * existed. Nothing infers it.
    */
   emptyTurnTokens?: TokenCounts;
+  /**
+   * Which rule decided `emptyTurns`, so a reader can tell a measurement from
+   * a guess that has already been made.
+   *
+   * `git` — reconciled against the diff the session actually left. Absent
+   * reads as `tools`: the record was written when a turn was called empty
+   * because no `Edit`, `Write`, `MultiEdit` or `NotebookEdit` block appeared
+   * in it. That test cannot see a file written through the shell, which is how
+   * most files are written, so those records report sessions that changed
+   * seven files as seven files' worth of nothing. `emptyTurnsOf` is where the
+   * two are told apart; no view reads this field directly.
+   */
+  emptySource?: EmptySource;
 }
+
+/**
+ * What decided a session's empty turns.
+ *
+ * `git` is the diff. `tools` is the tool names in the transcript, which is
+ * what records written before this carry — absent reads as `tools`, the same
+ * shape `intentSource` uses, and for the same reason: nothing else could have
+ * written those records, so it is a fact about them rather than a guess.
+ */
+export type EmptySource = "git" | "tools";
 
 /** Every token the session moved. For display only — never for pricing. */
 export function totalTokens(tokens: TokenCounts): number {
@@ -57,15 +97,10 @@ export function zeroTokens(): TokenCounts {
 
 /** A cost record with nothing counted yet. */
 export function zeroCost(): SessionCost {
-  return {
-    ...zeroTokens(),
-    turns: 0,
-    emptyTurns: 0,
-    apiCalls: 0,
-    callsWithoutEdits: 0,
-    model: "",
-    emptyTurnTokens: zeroTokens(),
-  };
+  // Only the counters a transcript can answer on its own. Empty turns are not
+  // among them — they are reconciled against git once there is a diff to
+  // reconcile against, and until then their absence is the honest reading.
+  return { ...zeroTokens(), turns: 0, apiCalls: 0, model: "" };
 }
 
 /**

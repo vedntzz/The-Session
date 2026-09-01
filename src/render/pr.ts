@@ -1,5 +1,6 @@
 // The pull request a session's record already describes. Pure: one session and
 // the rates in, one Markdown document out.
+import { emptyTurnsOf } from "../empty.js";
 import { formatUsd, isPriced, priceSession, type RateTable } from "../pricing.js";
 import { isCaptured, type Session } from "../store.js";
 import { unpricedTokens } from "./terminal/cost.js";
@@ -91,6 +92,21 @@ export const PR_PLACEHOLDERS = [
 ] as const;
 
 export type PrPlaceholder = (typeof PR_PLACEHOLDERS)[number];
+
+/**
+ * The placeholders, in prose, for anything that has to name them to a reader.
+ *
+ * Read off the list the filler checks against rather than written out beside
+ * it: a sentence naming five of six placeholders is one somebody trusts, and
+ * the sixth is then a flag nobody knows exists. The same reason `session help
+ * all` is read off the command tree. The help line and the error about a
+ * template that is a directory both say it this way, which is one list rather
+ * than two that can drift apart.
+ */
+export function placeholderList(): string {
+  const named = PR_PLACEHOLDERS.map((name) => `{{${name}}}`);
+  return `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`;
+}
 
 /**
  * The five values, plain: no emphasis, no headings.
@@ -335,18 +351,25 @@ function grouped(paths: readonly string[]): string[] {
 }
 
 /**
- * The closing line: what it cost, how many turns that took, and how many of
- * those changed no files.
+ * The closing line: what it cost, how many turns that took, and — where the
+ * record can say — how many of those changed no files.
  *
- * The three figures `show` closes on, in its order and for its reasons. The
- * money is last and unemphasised — the agents meter their own spend, so a
- * document that opened on a dollar figure would answer a question its reader
- * has already had answered.
+ * The figures `show` closes on, in its order and for its reasons. The money is
+ * last and unemphasised — the agents meter their own spend, so a document that
+ * opened on a dollar figure would answer a question its reader has already had
+ * answered.
  *
  * A model no rate covers reads as its tokens and its name, through the one
  * function `week`, `scan` and `stop` all say that with. Never `$0.00`: nought
  * is what this tool prints when it means nought, and a session nobody can
  * price is one nobody knows the cost of.
+ *
+ * The third figure is **dropped rather than dashed**, which is this document's
+ * own rule rather than the terminal's: a pull request body is read by somebody
+ * deciding whether to approve a diff, and `— that changed no files` in front of
+ * them is a puzzle about this tool rather than a fact about the change. A
+ * document opening a pull request is nearly always a session that changed
+ * files, which is exactly the case the figure cannot be had for.
  */
 function costLine(session: Session, rates: RateTable): string {
   const { cost } = session;
@@ -357,7 +380,10 @@ function costLine(session: Session, rates: RateTable): string {
   const price = priceSession(cost, rates);
   const spent = isPriced(price) ? formatUsd(price.usd) : unpricedTokens(cost);
   const turns = cost.turns === 1 ? "1 turn" : `${cost.turns} turns`;
-  return `${spent} · ${turns} · ${cost.emptyTurns} that changed no files`;
+  const empty = emptyTurnsOf(session);
+  return empty === undefined
+    ? `${spent} · ${turns}`
+    : `${spent} · ${turns} · ${empty} that changed no files`;
 }
 
 /** Joins the blocks that have anything in them, one blank line between. */

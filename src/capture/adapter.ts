@@ -31,24 +31,20 @@ export interface Adapter {
  * Adds costs from several adapters together. The reported model is whichever
  * did the most calls, so a session that mixed tools still names the one that
  * did the bulk of the work; ties break alphabetically to stay deterministic.
+ *
+ * Only what an adapter can observe on its own is added up here: tokens, turns
+ * and calls. **Nothing about what was produced**, which no adapter reports any
+ * more — that is settled against the diff at `stop`, once for the session,
+ * rather than being summed out of figures no transcript could supply.
  */
 export function mergeCosts(costs: readonly SessionCost[]): SessionCost {
   const callsByModel = new Map<string, number>();
   const total = zeroCost();
 
-  const empty = total.emptyTurnTokens as TokenCounts;
-
   for (const cost of costs) {
     addTokens(total, cost);
-    // An adapter too old to report the split contributes nothing to it, rather
-    // than having a share of its total invented on its behalf.
-    if (cost.emptyTurnTokens) {
-      addTokens(empty, cost.emptyTurnTokens);
-    }
     total.turns += cost.turns;
-    total.emptyTurns += cost.emptyTurns;
     total.apiCalls += cost.apiCalls;
-    total.callsWithoutEdits += cost.callsWithoutEdits;
     if (cost.model !== "") {
       callsByModel.set(cost.model, (callsByModel.get(cost.model) ?? 0) + cost.apiCalls);
     }

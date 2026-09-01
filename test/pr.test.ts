@@ -349,6 +349,20 @@ describe("prParts", () => {
     expect(prParts(session({ drift: [] }), RATES).drift).toBe(NO_DRIFT);
   });
 
+  it("says there was nothing to drift from when no scope was declared", () => {
+    // The third state, and neither of the other two sentences is true in it.
+    // "Nothing went outside the declared scope" claims a declaration that was
+    // never made, and a list of paths would accuse the work of leaving a plan
+    // nobody wrote. The wording is the one `{{scope}}` and `## Declared scope`
+    // already use, so a template that prints both reads as one document.
+    const parts = prParts(session({ scope: [], drift: ["src/store.ts"] }), RATES);
+
+    expect(parts.drift).toBe("no scope — nothing was declared to drift from");
+    expect(parts.drift).toBe(parts.scope);
+    expect(parts.drift).not.toBe(NO_DRIFT);
+    expect(parts.drift).not.toContain("src/store.ts");
+  });
+
   it("hands a template the whole prompt as well as the line", () => {
     const parts = prParts(
       session({ intentSource: "captured", intent: "fix the limiter\n\nit 429s early" }),

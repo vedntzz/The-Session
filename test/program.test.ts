@@ -254,6 +254,52 @@ describe("session", () => {
     expect(lines[1]).toBe("  scope    api/orders.py  api/mw/");
   });
 
+  /**
+   * What ends up on the line on disk, off real argv.
+   *
+   * The record is what every later view reads and what the chain signs, so it
+   * is the only thing worth asserting here — a confirmation line that reads
+   * correctly over a record that does not is the failure these are for.
+   */
+  describe("what --scope records", () => {
+    /** The scope on the one session in the store. */
+    async function recordedScope(): Promise<readonly string[]> {
+      const [session] = await readSessions(store);
+      return (session as Session).scope;
+    }
+
+    it("records one path from one flag, as a one-element array", async () => {
+      await run("start", "touch the api", "--scope", "api/orders.py");
+
+      await expect(recordedScope()).resolves.toEqual(["api/orders.py"]);
+    });
+
+    it("accumulates repeated flags in the order they were given", async () => {
+      await run("start", "touch the api", "--scope", "a.ts", "--scope", "b.ts", "--scope", "c.ts");
+
+      await expect(recordedScope()).resolves.toEqual(["a.ts", "b.ts", "c.ts"]);
+    });
+
+    it("records an empty scope when the flag is left off", async () => {
+      await run("start", "look around");
+
+      // The one way a session legally has no scope: nobody asked for one.
+      await expect(recordedScope()).resolves.toEqual([]);
+    });
+
+    it("refuses a --scope that holds nothing, rather than recording none", async () => {
+      // What a shell does with `--scope "$paths"` when `paths` is unset. The
+      // developer declared a scope; recording `[]` would sign a session saying
+      // they declared nothing, which is the opposite fact and cannot be undone.
+      await expect(run("start", "touch the api", "--scope", "")).rejects.toThrow(
+        "--scope was given but held no paths. Run: session start " +
+          '"what you are about to do" --scope src/api/ — or leave --scope off to declare none.',
+      );
+
+      await expect(readSessions(store)).resolves.toEqual([]);
+    });
+  });
+
   it("start requires an intent argument", async () => {
     const program = buildProgram(store).exitOverride();
     program.configureOutput({ writeErr: () => {} });
@@ -995,12 +1041,32 @@ describe("session, priced", () => {
     const lines = await run("show", "--full");
 
     expect(lines.find((line) => line.includes("cost"))).toContain("$15.00");
-    expect(lines.find((line) => line.includes("no edits"))).toContain("$3.75");
+    // This session changed a file. What that cost is known; which of its turns
+    // produced nothing is not, and a dollar figure here would be a share of
+    // the session invented to fill the row.
+    expect(lines.find((line) => line.includes("no edits"))).toContain("not measured");
     expect(lines.some((line) => line.includes("tokens"))).toBe(false);
   });
 
-  it("show puts the cost, the turns and the empty turns on one line", async () => {
+  it("show --full prices the waste when the session produced nothing at all", async () => {
+    await spentOnNothing();
+    const lines = await run("show", "--full");
+
+    // Every turn was empty, so every dollar was spent on one. A measurement,
+    // and the whole of the session's own total rather than a share of it.
+    expect(lines.find((line) => line.includes("cost"))).toContain("$15.00");
+    expect(lines.find((line) => line.includes("no edits"))).toContain("$15.00");
+  });
+
+  it("show puts the cost and the turns on one line for a session that wrote files", async () => {
     await spent();
+    const lines = await run("show");
+
+    expect(lines.at(-1)).toMatch(/^ {2}\$15\.00 · \d+ turns?$/);
+  });
+
+  it("show adds the empty turns to that line when the diff can say", async () => {
+    await spentOnNothing();
     const lines = await run("show");
 
     expect(lines.at(-1)).toMatch(/^ {2}\$15\.00 · \d+ turns? · \d+ produced nothing$/);

@@ -159,7 +159,7 @@ describe("claude-code adapter", () => {
     expect(cost.outputTokens).toBe(50);
   });
 
-  it("credits a call that edited in any one of its fragments", async () => {
+  it("counts a fragmented call once, whatever its fragments named", async () => {
     await transcript("a", [
       assistant({ requestId: "req_1", timestamp: T.during, tokens: { output: 10 } }),
       assistant({ requestId: "req_1", timestamp: T.during, tokens: { output: 10 }, tool: "Edit" }),
@@ -167,10 +167,10 @@ describe("claude-code adapter", () => {
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
     expect(cost.apiCalls).toBe(1);
-    expect(cost.callsWithoutEdits).toBe(0);
+    expect(cost.outputTokens).toBe(10);
   });
 
-  it("counts calls that wrote no files", async () => {
+  it("says nothing about what the calls wrote, whichever tools they named", async () => {
     await transcript("a", [
       assistant({ requestId: "req_1", timestamp: T.during, tool: "Edit" }),
       assistant({ requestId: "req_2", timestamp: T.during, tool: "Write" }),
@@ -180,7 +180,12 @@ describe("claude-code adapter", () => {
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
     expect(cost.apiCalls).toBe(4);
-    expect(cost.callsWithoutEdits).toBe(2);
+    // A transcript names the tool a call used, never what it did to the disk.
+    // `Bash` writes files as readily as `Edit` does, so the tool name settles
+    // nothing and no figure is derived from it. Absent, not nought.
+    expect(cost.callsWithoutEdits).toBeUndefined();
+    expect(cost.emptyTurns).toBeUndefined();
+    expect(cost.emptyTurnTokens).toBeUndefined();
   });
 
   it("ignores activity outside the window", async () => {
@@ -316,14 +321,12 @@ describe("turn segmentation", () => {
     expect(cost.apiCalls).toBe(3);
   });
 
-  it("counts a turn as empty only when none of its calls edited", async () => {
+  it("cuts turns at each prompt and leaves what they produced to the diff", async () => {
     await transcript("a", [
-      // Productive: the edit lands on the third call of the turn.
       prompt(at(1)),
       assistant({ requestId: "req_1", timestamp: at(2), tool: "Read" }),
       assistant({ requestId: "req_2", timestamp: at(3), tool: "Bash" }),
       assistant({ requestId: "req_3", timestamp: at(4), tool: "Edit" }),
-      // Empty: a whole turn that only looked around.
       prompt(at(5)),
       assistant({ requestId: "req_4", timestamp: at(6), tool: "Read" }),
       assistant({ requestId: "req_5", timestamp: at(7), tool: "Bash" }),
@@ -331,18 +334,17 @@ describe("turn segmentation", () => {
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
     expect(cost.turns).toBe(2);
-    expect(cost.emptyTurns).toBe(1);
-    // The per-call view of the same transcript is much coarser.
     expect(cost.apiCalls).toBe(5);
-    expect(cost.callsWithoutEdits).toBe(4);
+    // The second turn ran `Bash`, which may have written the whole feature or
+    // nothing at all. The transcript cannot tell them apart, so the adapter
+    // does not guess — `reconcileEmpty` answers it from the diff at `stop`.
+    expect(cost.emptyTurns).toBeUndefined();
   });
 
-  it("counts what the empty turns cost, not what share of the turns they were", async () => {
+  it("keeps every token in the total, whichever turn moved it", async () => {
     await transcript("a", [
-      // One cheap productive turn.
       prompt(at(1)),
       assistant({ requestId: "req_1", timestamp: at(2), tool: "Edit", tokens: { input: 100 } }),
-      // One expensive turn that wrote nothing: half the turns, most of the money.
       prompt(at(3)),
       assistant({
         requestId: "req_2",
@@ -354,31 +356,14 @@ describe("turn segmentation", () => {
 
     const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
 
-    expect(cost.emptyTurns).toBe(1);
-    expect(cost.emptyTurnTokens).toEqual({
-      inputTokens: 900,
-      cacheReadTokens: 50_000,
-      cacheCreationTokens: 2_000,
-      outputTokens: 300,
-    });
-    // Half the turns were empty; 98% of the tokens went on them.
-    expect(totalTokens(cost.emptyTurnTokens ?? zeroTokens())).toBeGreaterThan(
-      totalTokens(cost) * 0.9,
-    );
-  });
-
-  it("credits the whole of a productive turn, including the calls that wrote nothing", async () => {
-    await transcript("a", [
-      prompt(at(1)),
-      assistant({ requestId: "req_1", timestamp: at(2), tool: "Read", tokens: { input: 500 } }),
-      assistant({ requestId: "req_2", timestamp: at(3), tool: "Edit", tokens: { input: 100 } }),
-    ]);
-
-    const cost = await createClaudeCodeAdapter({ root: projects }).capture(WINDOW);
-
-    // The reading was part of getting the edit written. It is not waste.
-    expect(cost.callsWithoutEdits).toBe(1);
-    expect(cost.emptyTurnTokens).toEqual(zeroTokens());
+    expect(cost.inputTokens).toBe(1000);
+    expect(cost.cacheReadTokens).toBe(50_000);
+    expect(totalTokens(cost)).toBe(53_300);
+    // No split here. Where every turn was empty the split is the total, and
+    // that is settled against the diff; anything else would be the session's
+    // total times the share of turns that were empty, which is a number
+    // nobody observed.
+    expect(cost.emptyTurnTokens).toBeUndefined();
   });
 
   it("segments in timestamp order even when lines are out of order", async () => {
@@ -455,14 +440,16 @@ describe("captureCost", () => {
     const stub = (name: string, outputTokens: number, apiCalls: number) => ({
       name,
       isAvailable: async () => true,
-      capture: async () => ({ ...zeroCost(), outputTokens, apiCalls, callsWithoutEdits: 1, model: name }),
+      capture: async () => ({ ...zeroCost(), outputTokens, apiCalls, model: name }),
     });
 
+    // Tokens, turns and calls: what an adapter can observe on its own. What a
+    // session produced is not summed out of adapters here — it is settled once
+    // against the diff at `stop`.
     await expect(captureCost(WINDOW, [stub("a", 100, 3), stub("b", 50, 1)])).resolves.toEqual({
       ...zeroCost(),
       outputTokens: 150,
       apiCalls: 4,
-      callsWithoutEdits: 2,
       model: "a",
     });
   });

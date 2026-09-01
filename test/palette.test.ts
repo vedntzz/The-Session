@@ -60,6 +60,7 @@ const drifted = session({
     outputTokens: 9_400,
     turns: 7,
     emptyTurns: 2,
+    emptySource: "tools",
     apiCalls: 31,
     callsWithoutEdits: 9,
     emptyTurnTokens: { ...zeroTokens(), inputTokens: 12_000, outputTokens: 800 },
@@ -79,6 +80,7 @@ const clean = session({
     outputTokens: 100,
     turns: 3,
     emptyTurns: 0,
+    emptySource: "tools",
     apiCalls: 4,
     callsWithoutEdits: 0,
     emptyTurnTokens: zeroTokens(),
@@ -127,8 +129,8 @@ const GOLDEN: readonly string[] = [
   "  changed     api/middleware/rate_limit.py  api/orders.py",
   "  outside     ! db/schema.py                            ← you did not declare this",
   "",
-  "  cost        $3.69                                     7 turns, 2 without edits",
-  "  no edits    $0.24                                     31 api calls, 9 without edits",
+  "  cost        $3.69                                     7 turns, 2 that produced nothing",
+  "  no edits    $0.24                                     31 api calls",
   "  tokens      84,200 in · 1,000,000 cache read · 12,000 cache write · 9,400 out",
   "  client      Acme",
   "  project     orders-api",
@@ -139,8 +141,8 @@ const GOLDEN: readonly string[] = [
   "  declared    src/store.ts",
   "  changed     src/store.ts",
   "",
-  "  cost        $0.02                                     3 turns, 0 without edits",
-  "  no edits    $0.00                                     4 api calls, 0 without edits",
+  "  cost        $0.02                                     3 turns, 0 that produced nothing",
+  "  no edits    $0.00                                     4 api calls",
   "",
   "  try the new model                                     10:00 → 10:30",
   "",
@@ -148,8 +150,8 @@ const GOLDEN: readonly string[] = [
   "  declared    none declared",
   "  changed     nothing",
   "",
-  "  cost        500 tokens, gpt-9 unpriced                1 turn, 0 without edits",
-  "  no edits    0 tokens                                  1 api call, 0 without edits",
+  "  cost        500 tokens, gpt-9 unpriced                1 turn, 1 that produced nothing",
+  "  no edits    500 tokens                                1 api call",
   "",
   "  add rate limiting to /orders                          14:02 → 14:39",
   "",
@@ -162,10 +164,10 @@ const GOLDEN: readonly string[] = [
   "  started      intent                        class  outcome    drift files  turns     tokens  empty   cost",
   "  01-15 14:02  add rate limiting to /orders  api    merged               1      7  1,105,600      2  $3.69",
   "  01-16 08:31  extract the store             other  abandoned            0      3      1,100      0  $0.02",
-  "  01-17 10:00  try the new model             other  open                 0      1        500      0      —",
+  "  01-17 10:00  try the new model             other  open                 0      1        500      1      —",
   "",
-  "  3 sessions                                                             1     11  1,107,200      2",
-  "  2 of 11 turns changed no files",
+  "  3 sessions                                                             1     11  1,107,200      3",
+  "  3 of 11 turns changed no files",
   "  $3.72 spent, $0.02 of it on changes that never merged",
   "  1 session unpriced: gpt-9 — save this as ~/.session/rates.json",
   "  {",
@@ -319,7 +321,13 @@ describe("red is kept for figures that are not zero", () => {
   /** The `no edits` line, which is the only dollar figure that can be waste. */
   function wasteLine(overrides: Partial<SessionCost>): string {
     const marked: Palette = { ...plainPalette, waste: (text) => `<waste>${text}</waste>` };
-    const lines = formatSession(session({ cost: cost(overrides) }), marked, priced);
+    // A session that changed files, carrying a figure from the tool-name rule:
+    // the one shape where the recorded split is still what gets priced.
+    const lines = formatSession(
+      session({ reality: ["src/store.ts"], cost: cost({ emptySource: "tools", ...overrides }) }),
+      marked,
+      priced,
+    );
     return lines.find((line) => line.includes("no edits")) as string;
   }
 
@@ -339,6 +347,7 @@ describe("red is kept for figures that are not zero", () => {
     const line = wasteLine({
       inputTokens: 1000,
       turns: 3,
+      emptyTurns: 0,
       apiCalls: 4,
       emptyTurnTokens: zeroTokens(),
     });
@@ -348,7 +357,7 @@ describe("red is kept for figures that are not zero", () => {
   });
 
   it("marks unpriced waste by its tokens, and leaves nought tokens alone", () => {
-    const unpricedCost = { model: "gpt-9", inputTokens: 500, turns: 2, apiCalls: 2 };
+    const unpricedCost = { model: "gpt-9", inputTokens: 500, turns: 2, emptyTurns: 1, apiCalls: 2 };
 
     expect(
       wasteLine({ ...unpricedCost, emptyTurnTokens: { ...zeroTokens(), inputTokens: 300 } }),
@@ -356,7 +365,7 @@ describe("red is kept for figures that are not zero", () => {
     expect(wasteLine({ ...unpricedCost, emptyTurnTokens: zeroTokens() })).not.toContain("<waste>");
   });
 
-  it("leaves a session that never recorded the split alone", () => {
+  it("leaves a session whose split was never measured alone", () => {
     const line = wasteLine({
       inputTokens: 1000,
       turns: 3,
@@ -364,7 +373,7 @@ describe("red is kept for figures that are not zero", () => {
       emptyTurnTokens: undefined,
     });
 
-    expect(line).toContain("not recorded");
+    expect(line).toContain("not measured");
     expect(line).not.toContain("<waste>");
   });
 });

@@ -53,8 +53,6 @@ export interface ScannedSession {
  */
 export interface ScanSpend {
   usd: number;
-  /** Of that, what went on turns that changed no files. */
-  emptyUsd: number;
   /** How many sessions carried a model no rate covers. */
   unpriced: number;
   /** Which models those were, distinct and sorted. */
@@ -67,8 +65,6 @@ export interface RepoRow {
   sessions: number;
   spend: ScanSpend;
   turns: number;
-  /** Turns that produced nothing — the figure the table is for. */
-  emptyTurns: number;
 }
 
 /** What `scan` found, in the order it is reported. */
@@ -77,7 +73,6 @@ export interface ScanReport {
   sessions: number;
   spend: ScanSpend;
   turns: number;
-  emptyTurns: number;
   /** One row per repository, dearest first. */
   repos: RepoRow[];
   /** The three dearest sessions. Fewer where fewer could be priced. */
@@ -113,7 +108,7 @@ export interface TopSession {
 export const UNKNOWN_REPO = "";
 
 function emptyScanSpend(): ScanSpend {
-  return { usd: 0, emptyUsd: 0, unpriced: 0, unpricedModels: [] };
+  return { usd: 0, unpriced: 0, unpricedModels: [] };
 }
 
 /**
@@ -145,10 +140,6 @@ export function spendOfScanned(
       continue;
     }
     spend.usd += price.usd;
-    // Absent only on a cost captured before the split was recorded, which a
-    // scan never produces — it reads the transcript itself, where which turn
-    // a call belonged to is still known. Guarded anyway rather than asserted.
-    spend.emptyUsd += price.emptyUsd ?? 0;
   }
 
   spend.unpricedModels = [...models].sort();
@@ -181,7 +172,6 @@ export function summarizeScan(
     sessions: sessions.length,
     spend: spendOfScanned(sessions, rates),
     turns: sum(sessions, (cost) => cost.turns),
-    emptyTurns: sum(sessions, (cost) => cost.emptyTurns),
     repos: repoRows(sessions, rates),
     landed: sessions.filter((session) => session.landed === true).length,
     landingUnknown: sessions.filter((session) => session.landed === undefined).length,
@@ -218,7 +208,6 @@ function repoRows(sessions: readonly ScannedSession[], rates: RateTable): RepoRo
       sessions: group.length,
       spend: spendOfScanned(group, rates),
       turns: sum(group, (cost) => cost.turns),
-      emptyTurns: sum(group, (cost) => cost.emptyTurns),
     }))
     .sort((a, b) => b.spend.usd - a.spend.usd || a.repo.localeCompare(b.repo));
 }

@@ -174,12 +174,25 @@ describe("session pr", () => {
     );
   });
 
-  it("says which template it could not read", async () => {
+  it("says a missing template is missing, and where it looked", async () => {
     await record("rate limit the /orders endpoint", "a.txt");
     const missing = path.join(root, "nowhere.md");
 
+    // Not "could not read": that sentence in front of a path somebody typo'd
+    // sends them to look at permissions on a file that was never there.
     await expect(run("pr", "--template", missing)).rejects.toThrow(
-      `Could not read the template ${missing}.`,
+      `No template at ${missing}. Check the path — it is read from the directory you ran session in.`,
+    );
+  });
+
+  it("says a directory is a directory, and what a template is instead", async () => {
+    await record("rate limit the /orders endpoint", "a.txt");
+
+    // The other half of the same mistake: the path exists, so "no template
+    // here" would be a lie and the reader would retype a correct path.
+    await expect(run("pr", "--template", root)).rejects.toThrow(
+      `${root} is a directory. --template takes a Markdown file with ` +
+        "{{intent}}, {{intent_full}}, {{scope}}, {{changed}}, {{drift}} and {{cost}} in it.",
     );
   });
 });

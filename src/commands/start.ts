@@ -14,14 +14,43 @@ export interface StartOptions extends StoreOptions {
   scope?: string[];
 }
 
-/** Drops blanks and repeats, keeping the order the developer declared them in. */
-function normalizeScope(scope: readonly string[] = []): string[] {
+/**
+ * Drops blanks and repeats, keeping the order the developer declared them in.
+ *
+ * **A `--scope` that survives none of that is refused, not recorded as an
+ * empty one.** The two look identical on the record — `scope: []` either way —
+ * and they are opposite facts about the person who ran the command. Nobody
+ * passing `--scope` is declaring that they have nothing to declare; something
+ * they typed was lost, most often a shell that expanded `--scope "$paths"` to
+ * a single empty string. Writing `[]` there puts a session in the log that
+ * says no scope was declared when one was, and every view downstream then
+ * tells the truth about a record that is wrong: `show` says nothing was
+ * declared to drift from, `debt` counts the paths as never declared and starts
+ * building a case against files the developer did declare. The record is
+ * append-only and signed, so it is also the one mistake here that cannot be
+ * taken back.
+ *
+ * A session with no scope stays completely legal — that is what leaving the
+ * flag off means, and `undefined` is how it arrives.
+ */
+function normalizeScope(scope: readonly string[] | undefined): string[] {
+  if (scope === undefined) {
+    return [];
+  }
+
   const declared = new Set<string>();
   for (const entry of scope) {
     const trimmed = entry.trim();
     if (trimmed !== "") {
       declared.add(trimmed);
     }
+  }
+
+  if (declared.size === 0) {
+    throw new Error(
+      "--scope was given but held no paths. Run: session start " +
+        '"what you are about to do" --scope src/api/ — or leave --scope off to declare none.',
+    );
   }
   return [...declared];
 }
@@ -64,13 +93,17 @@ async function openingFacts(cwd: string): Promise<Pick<NewSession, "startedAt" |
 export async function startSession(intent: string, options: StartOptions = {}): Promise<Session> {
   const declared = intent.trim();
   const cwd = options.cwd ?? process.cwd();
+  // Before anything is read or written: what is wrong with the arguments is
+  // wrong whatever the repository turns out to look like, and this is the one
+  // check that costs nothing to make.
+  const scope = normalizeScope(options.scope);
   await refuseUnlessStartable(declared, cwd, options);
 
   return appendSession(
     {
       intent: declared,
       intentSource: "declared",
-      scope: normalizeScope(options.scope),
+      scope,
       ...(await openingFacts(cwd)),
     },
     options,

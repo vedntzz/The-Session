@@ -1,6 +1,7 @@
 // `session week`: where the week's work went, one row per session, and what
 // the rows do not say. The geometry of the table is in `week/table.ts`.
 import type { SessionFilter } from "../../commands/week.js";
+import { emptyTurnsTotal, unmeasuredEmpty } from "../../empty.js";
 import {
   formatUsd,
   shippedNote,
@@ -16,6 +17,7 @@ import { CAPTURED_MARKER } from "./intent.js";
 import { figure, INDENT, plural } from "./text.js";
 import {
   cellsFor,
+  emptyCell,
   HEADINGS,
   measure,
   sessionRow,
@@ -177,9 +179,31 @@ function weekTotals(sessions: readonly Session[]): WeekCells {
     drift: figure(sum(sessions, (session) => session.drift.length)),
     turns: figure(sum(sessions, (session) => session.cost.turns)),
     tokens: figure(sum(sessions, (session) => totalTokens(session.cost))),
-    empty: figure(sum(sessions, (session) => session.cost.emptyTurns)),
+    empty: emptyCell(emptyTurnsTotal(sessions)),
     cost: "",
   };
+}
+
+/**
+ * How many turns changed no files, or why the week cannot put a number on it.
+ *
+ * Never dropped, whichever it is. A week that says nothing here reads as a
+ * week where nothing was wasted, and turns that produced nothing are the one
+ * thing this tool measures that the agents do not report themselves. What the
+ * diff settles is whether a *session* wrote files; which of its turns did is
+ * not on the record, so a week holding any session that changed files says so
+ * and names how many.
+ */
+function emptyNote(sessions: readonly Session[], turns: number): string {
+  const empty = emptyTurnsTotal(sessions);
+  if (empty !== undefined) {
+    return `${figure(empty)} of ${plural(turns, "turn", "turns")} changed no files`;
+  }
+  const unmeasured = unmeasuredEmpty(sessions);
+  return (
+    `${plural(unmeasured, "session", "sessions")} cannot say which turns changed no files — ` +
+    "the diff answers for the session, not for the turn"
+  );
 }
 
 /** One row per session, inked by what became of the session. */
@@ -282,10 +306,7 @@ function turnNotes(sessions: readonly Session[], palette: Palette): string[] {
   const lines: string[] = [];
   const turns = sum(sessions, (session) => session.cost.turns);
   if (turns > 0) {
-    const empty = figure(sum(sessions, (session) => session.cost.emptyTurns));
-    lines.push(
-      palette.meta(`${INDENT}${empty} of ${plural(turns, "turn", "turns")} changed no files`),
-    );
+    lines.push(palette.meta(`${INDENT}${emptyNote(sessions, turns)}`));
   }
   // Only when a row carries one. A legend for a marker nobody used is a line
   // the reader has to check the table against to find out it says nothing.

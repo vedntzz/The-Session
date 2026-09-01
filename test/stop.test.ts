@@ -176,7 +176,9 @@ describe("stopSession", () => {
 
     const stopped = await stopSession(options);
 
-    expect(stopped.cost).toEqual(zeroCost());
+    // Reconciled even when nothing was captured: the diff still settles that
+    // this session wrote a file, so the record says which rule looked.
+    expect(stopped.cost).toEqual({ ...zeroCost(), emptySource: "git" });
     expect(stopped.outcome).toBe("open");
   });
 
@@ -195,33 +197,38 @@ describe("stopSession", () => {
             cacheCreationTokens: 12_000,
             outputTokens: 1_000,
             turns: 3,
-            emptyTurns: 2,
             apiCalls: 41,
-            callsWithoutEdits: 30,
             model: "claude-opus-5",
           }),
         },
       ],
     });
 
+    // Nothing was written in this session, so git settles that all three turns
+    // produced nothing and every token was spent inside one. That is a
+    // measurement of the split, not a share of the total taken on trust.
     expect(stopped.cost).toEqual({
       inputTokens: 1_200,
       cacheReadTokens: 70_000,
       cacheCreationTokens: 12_000,
       outputTokens: 1_000,
       turns: 3,
-      emptyTurns: 2,
+      emptyTurns: 3,
+      emptySource: "git",
       apiCalls: 41,
-      callsWithoutEdits: 30,
       model: "claude-opus-5",
-      // The stub reports no split, so the empty-turn counters stay at nothing
-      // rather than taking a share of the total it did report.
-      emptyTurnTokens: zeroTokens(),
+      emptyTurnTokens: {
+        inputTokens: 1_200,
+        cacheReadTokens: 70_000,
+        cacheCreationTokens: 12_000,
+        outputTokens: 1_000,
+      },
     });
   });
 
-  it("records what an adapter says the wasted turns cost", async () => {
+  it("records no empty-turn figure for a session that changed files", async () => {
     await startSession("spend some tokens", options);
+    await write("api/orders.py", "changed");
 
     const stopped = await stopSession({
       ...options,
@@ -234,21 +241,21 @@ describe("stopSession", () => {
             inputTokens: 1_000,
             outputTokens: 500,
             turns: 3,
-            emptyTurns: 1,
             apiCalls: 4,
             model: "claude-opus-5",
-            emptyTurnTokens: { ...zeroTokens(), inputTokens: 400, outputTokens: 100 },
           }),
         },
       ],
     });
 
-    expect(stopped.cost.emptyTurnTokens).toEqual({
-      inputTokens: 400,
-      cacheReadTokens: 0,
-      cacheCreationTokens: 0,
-      outputTokens: 100,
-    });
+    // The diff says the session wrote something; nothing says which of its
+    // three turns did. Absent rather than nought — a nought here is the claim
+    // that no turn was wasted, and it is the claim the tool-name rule made
+    // backwards for every session that worked through the shell.
+    expect(stopped.cost.emptySource).toBe("git");
+    expect(stopped.cost.emptyTurns).toBeUndefined();
+    expect(stopped.cost.emptyTurnTokens).toBeUndefined();
+    expect(stopped.cost.turns).toBe(3);
   });
 
   it("passes the session's own window to the adapter", async () => {
@@ -291,7 +298,8 @@ describe("stopSession", () => {
     });
 
     expect(stopped.endedAt).not.toBeNull();
-    expect(stopped.cost).toEqual(zeroCost());
+    expect(stopped.cost).toEqual({ ...zeroCost(), emptySource: "git", emptyTurns: 0,
+      emptyTurnTokens: zeroTokens() });
   });
 
   it("preserves intent and scope from start", async () => {
@@ -578,17 +586,18 @@ describe("formatStopped", () => {
             cacheCreationTokens: 12_000,
             outputTokens: 1_000,
             turns: 3,
-            emptyTurns: 2,
             apiCalls: 41,
-            callsWithoutEdits: 30,
             model: "claude-opus-5",
           }),
         },
       ],
     });
 
+    // This session changed a file, so no count of turns that produced nothing
+    // and no count of calls that wrote none: neither is on the record, and
+    // both used to be printed off the tool names in the transcript.
     expect(formatStopped(stopped).at(-1)).toBe(
-      "  cost     84,200 tokens  3 turns, 2 without edits  (41 api calls, 30 without edits)",
+      "  cost     84,200 tokens  3 turns  (41 api calls)",
     );
   });
 

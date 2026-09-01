@@ -46,14 +46,14 @@ function week(): Session[] {
       scope: ["api/"],
       reality: ["api/orders.py", "db/schema.py"],
       drift: ["db/schema.py"],
-      cost: cost({ inputTokens: 84_200, turns: 3, emptyTurns: 1, apiCalls: 41 }),
+      cost: cost({ inputTokens: 84_200, turns: 3, emptyTurns: 1, emptySource: "tools", apiCalls: 41 }),
     }),
     session({
       intent: "refactor the transcript store adapter",
       startedAt: at(11, 2),
       scope: ["src/"],
       reality: ["src/store.ts"],
-      cost: cost({ inputTokens: 412_900, turns: 12, emptyTurns: 5, apiCalls: 130 }),
+      cost: cost({ inputTokens: 412_900, turns: 12, emptyTurns: 5, emptySource: "tools", apiCalls: 130 }),
       outcome: "merged",
     }),
     session({
@@ -61,7 +61,9 @@ function week(): Session[] {
       startedAt: at(8, 31, 16),
       reality: ["web/app.ts", "db/schema.py"],
       drift: ["web/app.ts", "db/schema.py"],
-      cost: cost({ inputTokens: 103_110, turns: 4, emptyTurns: 4, apiCalls: 22 }),
+      // Three of four. Four of four over a session that changed files is the
+      // one old figure git refutes outright, and it would render as a dash.
+      cost: cost({ inputTokens: 103_110, turns: 4, emptyTurns: 3, emptySource: "tools", apiCalls: 22 }),
       outcome: "abandoned",
     }),
   ];
@@ -73,7 +75,7 @@ function clean(overrides: Partial<Session> = {}): Session {
     scope: ["api/"],
     reality: ["api/orders.py"],
     drift: [],
-    cost: cost({ inputTokens: 1_000, turns: 3, emptyTurns: 0, apiCalls: 9 }),
+    cost: cost({ inputTokens: 1_000, turns: 3, emptyTurns: 0, emptySource: "tools", apiCalls: 9 }),
     ...overrides,
   });
 }
@@ -230,13 +232,13 @@ describe("renderWeek", () => {
   it("shows the turns that produced nothing in the waste hue", () => {
     const listed = rows(renderWeek(week(), 7, {}, priced));
 
-    expect(listed[0]).toContain('<span class="figure empty waste">1 without edits</span>');
+    expect(listed[0]).toContain('<span class="figure empty waste">1 produced nothing</span>');
   });
 
   it("leaves a session that wasted nothing unmarked", () => {
     const listed = rows(renderWeek([clean()], 7, {}, priced));
 
-    expect(listed[0]).toContain('<span class="figure empty quiet">0 without edits</span>');
+    expect(listed[0]).toContain('<span class="figure empty quiet">0 produced nothing</span>');
   });
 
   it("counts every session, dollar and turn in the summary", () => {
@@ -265,7 +267,7 @@ describe("renderWeek", () => {
   it("names the turns that changed no files", () => {
     const html = renderWeek(week(), 7, {}, priced);
 
-    expect(html).toContain('<span class="waste">10</span> of 19 turns changed no files');
+    expect(html).toContain('<span class="waste">9</span> of 19 turns changed no files');
   });
 
   it("omits the waste sentence when no turns were captured", () => {
@@ -332,7 +334,7 @@ describe("renderWeek: the waste hue never lands on a zero", () => {
   });
 
   it("reddens the footer count as soon as one turn was empty", () => {
-    const html = renderWeek([clean({ cost: cost({ turns: 3, emptyTurns: 1, apiCalls: 9 }) })], 7, {}, priced);
+    const html = renderWeek([clean({ cost: cost({ turns: 3, emptyTurns: 1, emptySource: "tools", apiCalls: 9 }) })], 7, {}, priced);
 
     expect(html).toContain('<span class="waste">1</span> of 3 turns changed no files');
   });
@@ -512,7 +514,7 @@ describe("renderWeek: the figure columns", () => {
     expect(listed[0]).toContain('<span class="figure nocost quiet">—</span>');
     expect(listed[0]).not.toContain("0 turns");
     expect(listed[0]).not.toContain("0 tokens");
-    expect(listed[0]).not.toContain("without edits");
+    expect(listed[0]).not.toContain("produced nothing");
   });
 
   it("still reports drift on a session with no captured cost", () => {

@@ -1,6 +1,7 @@
 // The cost cells and the ink every view puts them in.
 import { formatUsd, rateStub, USER_RATES_FILE, type Price, type RateTable } from "../../pricing.js";
-import { totalTokens, type SessionCost, type SessionOutcome } from "../../store.js";
+import { emptyTokensOf } from "../../empty.js";
+import { totalTokens, type Session, type SessionCost, type SessionOutcome } from "../../store.js";
 import type { Palette } from "../palette.js";
 import { figure, INDENT } from "./text.js";
 
@@ -61,18 +62,24 @@ export interface Cell {
  * teach the reader to ignore the colour, and then the one that wasted $40
  * would not be seen either. Red has to mean there is something there.
  */
-export function wasteCell(cost: SessionCost, price: Price): Cell {
+export function wasteCell(session: Pick<Session, "cost" | "reality">, price: Price): Cell {
+  const tokens = emptyTokensOf(session);
+  if (tokens === undefined) {
+    // Either captured before the split was recorded, or a session that changed
+    // files — where which turn produced nothing is not on the record. A share
+    // of the total worked out from the turn count would look like a
+    // measurement and would not be one.
+    return { text: NOT_MEASURED, spent: false };
+  }
   if (price.priced && price.emptyUsd !== undefined) {
     return { text: formatUsd(price.emptyUsd), spent: price.emptyUsd > 0 };
   }
-  if (cost.emptyTurnTokens) {
-    const tokens = totalTokens(cost.emptyTurnTokens);
-    return { text: `${figure(tokens)} tokens`, spent: tokens > 0 };
-  }
-  // Captured before the split was recorded. A share of the total worked out
-  // from the turn count would look like a measurement and would not be one.
-  return { text: "not recorded", spent: false };
+  const moved = totalTokens(tokens);
+  return { text: `${figure(moved)} tokens`, spent: moved > 0 };
 }
+
+/** What a figure reads when nothing on the record can supply it. */
+export const NOT_MEASURED = "not measured";
 
 /** The four counters, spelled out. Only ever shown when `--tokens` asks. */
 export function breakdown(cost: SessionCost): string {

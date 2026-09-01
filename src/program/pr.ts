@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import type { Command } from "commander";
 import { prBody } from "../commands/pr.js";
 import { copyToClipboard } from "../commands/week.js";
-import { PR_PLACEHOLDERS } from "../render/pr.js";
+import { placeholderList } from "../render/pr.js";
 import type { ProgramOptions } from "./options.js";
 
 /** What `session pr` accepts, as commander hands it over. */
@@ -25,19 +25,6 @@ export type PrFlags = {
  * what they did on stdout instead of the document, since neither leaves
  * anything to pipe.
  */
-/**
- * The placeholders, as the help text names them.
- *
- * Read off the list the filler checks against rather than written out beside
- * it: a help line naming five of six placeholders is one somebody trusts, and
- * the sixth is then a flag nobody knows exists. The same reason `session help
- * all` is read off the command tree.
- */
-function placeholderList(): string {
-  const named = PR_PLACEHOLDERS.map((name) => `{{${name}}}`);
-  return `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`;
-}
-
 export function registerPr(program: Command, options: ProgramOptions): void {
   program
     .command("pr")

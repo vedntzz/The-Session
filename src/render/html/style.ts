@@ -1,4 +1,5 @@
 // The sheet, inlined: one file so a colour is changed in one place.
+import { emptyTurnsOf } from "../../empty.js";
 import type { Session } from "../../store.js";
 import { escapeHtml } from "./text.js";
 
@@ -108,9 +109,16 @@ export function styleSheet(wasteful: boolean): string {
   return wasteful ? `${BASE_STYLE}\n${WASTE_STYLE}` : BASE_STYLE;
 }
 
-/** True when anything on the page is worth marking in the waste hue. */
+/**
+ * True when anything on the page is worth marking in the waste hue.
+ *
+ * A session whose empty turns are unknown is not wasteful here. Not knowing is
+ * not something to mark — the same reason the cell itself takes no hue.
+ */
 export function isWasteful(sessions: readonly Session[]): boolean {
-  return sessions.some((session) => session.cost.emptyTurns > 0 || session.drift.length > 0);
+  return sessions.some(
+    (session) => (emptyTurnsOf(session) ?? 0) > 0 || session.drift.length > 0,
+  );
 }
 
 /** Everything above `<body>`: the meta tags and the sheet, inlined. */

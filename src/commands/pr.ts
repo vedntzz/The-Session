@@ -2,7 +2,7 @@
 // template file if there is one.
 import { readFile } from "node:fs/promises";
 import { loadRates } from "../pricing.js";
-import { fillTemplate, prParts, renderPr } from "../render/pr.js";
+import { fillTemplate, placeholderList, prParts, renderPr } from "../render/pr.js";
 import { pickSession } from "./show.js";
 import { storeHome, type StoreOptions } from "../store.js";
 
@@ -36,11 +36,39 @@ export async function prBody(
  * Named in the error, because the path is the whole of what went wrong: a
  * `--template` pointing at a file that is not there is a typo, and the fix is
  * to see which path was actually looked for.
+ *
+ * **A file that is missing and a file that will not open are different
+ * problems**, and one sentence over both sends the reader to the wrong fix.
+ * `Could not read .github/pr.md` in front of somebody who typed `nope.md`
+ * reads as a permissions or encoding fault, and they go looking at a file that
+ * was never there; the same sentence in front of a real file reads as a typo,
+ * and they retype a path that was already correct. So each case says which one
+ * it is and what to do about it, and the path is in every one of them —
+ * relative paths resolve against the working directory, which is the fact the
+ * typo usually turns on.
+ *
+ * Anything else keeps the system's own reason rather than being flattened into
+ * a guess: it is rare enough that the errno is more use than a sentence.
  */
 async function readTemplate(file: string): Promise<string> {
   try {
     return await readFile(file, "utf8");
   } catch (error) {
-    throw new Error(`Could not read the template ${file}.`, { cause: error });
+    throw new Error(templateProblem(file, error as NodeJS.ErrnoException), { cause: error });
+  }
+}
+
+/** What went wrong with the template, and what the reader does next. */
+function templateProblem(file: string, error: NodeJS.ErrnoException): string {
+  switch (error.code) {
+    case "ENOENT":
+      return `No template at ${file}. Check the path — it is read from the directory you ran session in.`;
+    case "EISDIR":
+      return `${file} is a directory. --template takes a Markdown file with ${placeholderList()} in it.`;
+    case "EACCES":
+    case "EPERM":
+      return `Cannot read the template ${file} — permission denied.`;
+    default:
+      return `Could not read the template ${file}: ${error.message}`;
   }
 }

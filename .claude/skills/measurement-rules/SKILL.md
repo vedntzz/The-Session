@@ -431,12 +431,59 @@ checks against, so a stub this tool prints cannot be one this tool rejects.
 Never fill a stub in with a nearby model's price; that is the guess the
 paragraph above refuses to make, arriving by another door.
 
-`emptyTurnTokens` is measured, not apportioned. The adapter knows which turn
-each call belonged to, so it adds the empty turns' tokens up directly; taking
-the session total times `emptyTurns / turns` would look like a measurement and
-would not be one. Empty turns are not average turns — the expensive one is the
-whole point. Don't "simplify" this into a ratio, and don't backfill it onto
-records that predate it.
+`emptyTurnTokens` is measured, not apportioned. Where every turn was empty it
+is the session's own total, because every token it moved was moved in a turn
+that ended with nothing written; taking the session total times `emptyTurns /
+turns` would look like a measurement and would not be one. Empty turns are not
+average turns — the expensive one is the whole point. Don't "simplify" this
+into a ratio, and don't backfill it onto records that predate it.
+
+## Which turns produced nothing
+
+**Settled against the diff, never against tool names.** `empty.ts` is the one
+rule and every view goes through it — `emptyTurnsOf`, `emptyTokensOf`,
+`emptyTurnsTotal`. Nothing reads `cost.emptyTurns` directly: what that field
+means depends on which rule wrote it.
+
+The rule this replaced asked the transcript whether a turn contained an `Edit`,
+`Write`, `MultiEdit` or `NotebookEdit` block. A transcript records which tool
+was called, not what the call did to the disk, and agents write files through
+`Bash` constantly — 2,414 `Bash` calls against 657 `Edit` and 198 `Write`
+across 27 real transcripts. So sessions that changed seven files were recorded
+as seven files' worth of nothing, at 100% waste, on a signed append-only
+record. Never reintroduce a tool-name test, and in particular never "fix" this
+by adding `Bash` to the set: that inverts the error, and an `emptyTurns` that
+is always nought is worse than one sometimes wrong, because nothing on the page
+would show it had stopped measuring.
+
+Three cases, and `stop` is the only place the first two are decided —
+`reconcileEmpty`, where the diff is already in hand:
+
+- **The session changed nothing.** Every turn produced nothing, and every token
+  went on one. Both figures are measurements.
+- **The session changed files.** *Which* turn wrote them is not on the record
+  and cannot be recovered: a diff is one answer for the whole session. No
+  figure, and no nought standing in for one.
+- **A record from the old rule** (`emptySource` absent, reading as `tools`)
+  keeps its figure — for a session that really used `Edit` it is right — except
+  where git refutes it outright: a session that changed files cannot have had
+  every turn produce nothing.
+
+`callsWithoutEdits` is **never written and never displayed**. It was the same
+guess at a grain git cannot help with at all. The field stays on the type so
+old records still hash back under `verify`.
+
+`scan` has no figure here at all, and its report carries no `emptyTurns` and no
+`emptyUsd` field. It reads transcripts and has no base commit to diff against —
+the same refusal that keeps the word `merged` out of that report. It says so on
+its own line rather than dropping it, since a report that printed nothing would
+read as a window in which nothing was wasted.
+
+Views render the absence rather than a nought: an em dash in `week`'s column
+and totals, a note under the table naming how many sessions could not be
+counted, `not measured` in `show --full`'s `no edits` row, and one figure fewer
+in the brief line and in the pull request body — the same rule as
+[A total nobody can work out](#a-total-nobody-can-work-out).
 
 ## A category with no members
 

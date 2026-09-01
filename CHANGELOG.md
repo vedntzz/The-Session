@@ -7,7 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **Turns that produced nothing are settled against git, not against tool
+  names.** The old rule called a turn productive when the transcript showed an
+  `Edit`, `Write`, `MultiEdit` or `NotebookEdit` block in it. Agents write
+  files through the shell constantly — `Bash` outnumbered `Edit` and `Write`
+  together by nearly 3:1 across 27 real transcripts — so a session that changed
+  seven files was recorded as two turns of two empty and twenty-eight calls of
+  twenty-eight without edits: 100% waste for a session that did all of its
+  work. `stop` now reconciles the captured cost against the diff it already
+  computed, and records `emptySource: "git"`.
+- What the diff settles is whether the *session* wrote anything, never which of
+  its turns did. So a session that changed files reports **no** empty-turn
+  figure rather than a nought: an em dash in `week`, `not measured` in `show
+  --full`, one figure fewer in `show` and in the pull request body, and a note
+  under the week table naming how many sessions could not be counted. A session
+  that changed nothing reports every turn as empty and its whole spend as
+  waste, which is a measurement.
+- `callsWithoutEdits` is no longer written or displayed anywhere. It was the
+  same guess at a grain git cannot help with. The field stays on the type so
+  existing records still verify.
+- Records written under the old rule keep their figures, since for a session
+  that really used `Edit` they are right — except the one git refutes outright:
+  a session that changed files cannot have had every turn produce nothing.
+  Those now read as not measured.
+- `session scan` no longer reports empty turns or what they cost. It reads
+  transcripts and has no base commit to diff against; it says so rather than
+  printing a figure, the same refusal that keeps `merged` out of that report.
+
+### Fixed
+
+- `session start --scope` with nothing in it — what a shell leaves behind when
+  `--scope "$paths"` expands to an empty string — is refused instead of
+  recording `scope: []`. That record says no scope was declared when one was,
+  and it is append-only and signed, so it is the one mistake here that cannot
+  be taken back: `show` would report nothing to drift from, and `debt` would
+  start building a case against files the developer had declared.
+
+### Changed
+
+- `session pr --template` says *which* way a template failed to open: missing
+  (naming the path, and that it is read from the working directory), a
+  directory, or permission denied — anything else keeps the system's own
+  message. One `Could not read` over all of them sent half the readers to the
+  wrong fix: a typo'd path read as a permissions fault, and a real file read as
+  a typo.
 
 ## [0.6.0] — 2026-08-31
 

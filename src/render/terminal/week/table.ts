@@ -5,6 +5,7 @@
 // the arithmetic of a week and the geometry of a table — and only the second is
 // what a reader chasing a misaligned column is looking for.
 import { classOf } from "../../../classify.js";
+import { emptyTurnsOf } from "../../../empty.js";
 import { formatUsd, priceSession, type RateTable } from "../../../pricing.js";
 import { isCaptured, totalTokens, type Session } from "../../../store.js";
 import { NO_PRICE } from "../cost.js";
@@ -113,7 +114,9 @@ export function cellsFor(session: Session, rates: RateTable): WeekCells {
     drift: figure(session.drift.length),
     turns: figure(session.cost.turns),
     tokens: figure(totalTokens(session.cost)),
-    empty: figure(session.cost.emptyTurns),
+    // An em dash where the diff cannot say which turn wrote a file, never a
+    // nought: a nought in this column is the claim that no turn was wasted.
+    empty: emptyCell(emptyTurnsOf(session)),
     cost: price.priced ? formatUsd(price.usd) : NO_PRICE,
   };
 }
@@ -209,4 +212,9 @@ export function measure(rows: readonly WeekCells[], totals: WeekCells): Widths {
     empty: column("empty"),
     cost: column("cost"),
   };
+}
+
+/** A turn count, or the dash every unknown figure in this tool is written with. */
+export function emptyCell(empty: number | undefined): string {
+  return empty === undefined ? NO_PRICE : figure(empty);
 }

@@ -14,7 +14,7 @@ import { figure, INDENT, padLeft, padRight, plural, width } from "./text.js";
  * no files are what the table is read for, and the money is the figure the
  * footnote under it carries.
  */
-const REPO_HEADINGS = ["repository", "sessions", "empty turns", "cost"] as const;
+const REPO_HEADINGS = ["repository", "sessions", "turns", "cost"] as const;
 
 /**
  * What `session scan` found, in the order somebody reads it: how many sessions
@@ -55,20 +55,29 @@ function scanWindow(report: ScanReport): string {
 }
 
 /**
- * How many turns changed no files — the fact, not what it cost.
+ * That this report has no figure for turns that changed no files, and why.
  *
- * Worded exactly as `week` words it, because it is the same fact about the
- * same kind of thing and a reader should not have to notice that two views
- * phrased it differently. What those turns came to in money is in the footnote
- * at the bottom with the rest of the money.
+ * `scan` reads transcripts and nothing else. Whether a turn produced anything
+ * is settled against the diff a session left, and a transcript is not a
+ * checkout — `scan` has no `session start` to have recorded a base commit, so
+ * there is no diff to reconcile against and no honest figure to print. It is
+ * the same refusal that keeps the word `merged` out of this report: overlapping
+ * a commit in time is not landing, and calling a turn empty because it used no
+ * tool named `Edit` is not measuring what it produced.
+ *
+ * Said rather than left out. A report that silently dropped the line would
+ * read as a window in which nothing was wasted, and the reader would have no
+ * way to tell that from a window nobody measured.
  */
 function emptyTurnLines(report: ScanReport, palette: Palette): string[] {
   if (report.turns === 0) {
     return [];
   }
   return [
-    `${INDENT}${figure(report.emptyTurns)} of ${plural(report.turns, "turn", "turns")} ` +
-      "changed no files",
+    palette.meta(
+      `${INDENT}${plural(report.turns, "turn", "turns")} · which of them changed no files ` +
+        "is not something a transcript can say — run session start to have a diff to measure against",
+    ),
   ];
 }
 
@@ -97,10 +106,9 @@ function totalLines(report: ScanReport, palette: Palette): string[] {
   }
 
   return [
-    palette.meta(
-      `${INDENT}${formatUsd(spend.usd)} spent, ${formatUsd(spend.emptyUsd)} of it on ` +
-        "turns that changed no files",
-    ),
+    // What it cost, and no share of it on turns that changed no files: which
+    // turns those were is settled against a diff, and a scan has none.
+    palette.meta(`${INDENT}${formatUsd(spend.usd)} spent`),
     ...(spend.unpriced > 0
       ? unpricedScanLines(spend.unpriced, spend.unpricedModels, palette)
       : []),
@@ -133,7 +141,7 @@ function repoTable(report: ScanReport, palette: Palette): string[] {
   const rows = report.repos.map((row) => [
     row.repo === UNKNOWN_REPO ? "(no directory recorded)" : row.repo,
     figure(row.sessions),
-    figure(row.emptyTurns),
+    figure(row.turns),
     unpricedThroughout(row.spend) ? "unpriced" : formatUsd(row.spend.usd),
   ]);
   const widths = columnWidths([[...REPO_HEADINGS], ...rows]);
