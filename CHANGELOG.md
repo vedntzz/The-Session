@@ -114,6 +114,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] — 2026-08-25
 
+**Tagged, never published.** This version exists as a local commit and a
+`v0.5.0` tag, and it never reached the registry: npm goes 0.4.1 (23 Aug) →
+0.6.0 (30 Aug), so `npm install @vedantzz/session@0.5.0` has never resolved and
+no user has ever run this version under this number.
+
+Nothing below is being backfilled and 0.5.0 will not be published now — a
+version number that was skipped is a fact about what happened, and quietly
+filling the hole four releases later would make the registry agree with a story
+rather than with events. The changes themselves are real and did ship: they
+reached users inside 0.6.0. The section stays here, under its own number, so
+that a reader following the tags is not left wondering what became of it.
+
 ### Changed
 
 - Every view reordered around what it is for. Where the work went and how far

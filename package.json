@@ -48,7 +48,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepack": "npm run clean && npm run build"
+    "prepack": "npm run clean && npm run build",
+    "release": "npm run build && npm test && git push origin master --follow-tags && npm publish && npm view @vedantzz/session version"
   },
   "dependencies": {
     "commander": "^14.0.0",
