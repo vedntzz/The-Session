@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The terminal week table and `week --md` disagreed about what a session with
+  nothing captured cost: the row read an em dash in the terminal — which means
+  nobody can put a figure on it — while the Markdown cell, the footnote
+  directly under the terminal row, and the count of unpriced sessions all read
+  `$0.00`. Nothing was captured for such a session, so it moved no tokens and
+  no rate is missing: `$0.00` is a measurement and the dash was an absence.
+  The carve-out had lived in the Markdown renderer alone; it is now
+  `sessionFigure`, beside the rates, and both tables ask it. Only the word for
+  a session that genuinely cannot be priced still differs — a dash in a column
+  read at a glance, `unpriced` in a document read cold.
+
+## [0.8.0] — 2026-09-01
+
 ### Changed
 
 - **Turns that produced nothing are settled against git, not against tool
@@ -35,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `session scan` no longer reports empty turns or what they cost. It reads
   transcripts and has no base commit to diff against; it says so rather than
   printing a figure, the same refusal that keeps `merged` out of that report.
+- `session pr --template` says *which* way a template failed to open: missing
+  (naming the path, and that it is read from the working directory), a
+  directory, or permission denied — anything else keeps the system's own
+  message. One `Could not read` over all of them sent half the readers to the
+  wrong fix: a typo'd path read as a permissions fault, and a real file read as
+  a typo.
 
 ### Fixed
 
@@ -45,16 +66,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   be taken back: `show` would report nothing to drift from, and `debt` would
   start building a case against files the developer had declared.
 
-### Changed
+## [0.7.0] — 2026-08-31
 
-- `session pr --template` says *which* way a template failed to open: missing
-  (naming the path, and that it is read from the working directory), a
-  directory, or permission denied — anything else keeps the system's own
-  message. One `Could not read` over all of them sent half the readers to the
-  wrong fix: a typo'd path read as a permissions fault, and a real file read as
-  a typo.
+No user-visible change. The release carries a stray whitespace edit to
+`src/git.ts` and the changelog re-sectioning that moved 0.6.0's entries out of
+`Unreleased`; nothing in the CLI, the record or the reports moved. It is listed
+rather than passed over because `npm install @vedantzz/session@0.7.0` resolves,
+and a version somebody can install with no entry here is a version they cannot
+check.
 
-## [0.6.0] — 2026-08-31
+## [0.6.0] — 2026-08-30
 
 ### Added
 
@@ -303,7 +324,9 @@ that a reader following the tags is not left wondering what became of it.
 - The hook now fires reliably on `SessionEnd`, under a 10-second timeout.
 - `week --open` no longer paints the waste hue over a figure of zero.
 
-[Unreleased]: https://github.com/vedntzz/The-Session/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/vedntzz/The-Session/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/vedntzz/The-Session/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/vedntzz/The-Session/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vedntzz/The-Session/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vedntzz/The-Session/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/vedntzz/The-Session/compare/v0.4.0...v0.4.1

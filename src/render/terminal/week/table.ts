@@ -6,7 +6,7 @@
 // what a reader chasing a misaligned column is looking for.
 import { classOf } from "../../../classify.js";
 import { emptyTurnsOf } from "../../../empty.js";
-import { formatUsd, priceSession, type RateTable } from "../../../pricing.js";
+import { sessionFigure, type RateTable } from "../../../pricing.js";
 import { isCaptured, totalTokens, type Session } from "../../../store.js";
 import { NO_PRICE } from "../cost.js";
 import { CAPTURED_MARKER, intentOf } from "../intent.js";
@@ -99,7 +99,6 @@ function widest(values: readonly string[]): number {
 }
 
 export function cellsFor(session: Session, rates: RateTable): WeekCells {
-  const price = priceSession(session.cost, rates);
   return {
     when: stamp(session.startedAt),
     // The marker is inside the column rather than beside it: a fourth column
@@ -117,7 +116,11 @@ export function cellsFor(session: Session, rates: RateTable): WeekCells {
     // An em dash where the diff cannot say which turn wrote a file, never a
     // nought: a nought in this column is the claim that no turn was wasted.
     empty: emptyCell(emptyTurnsOf(session)),
-    cost: price.priced ? formatUsd(price.usd) : NO_PRICE,
+    // Through `sessionFigure`, which is where the nought-versus-unknown call is
+    // made for every surface: a session nothing was captured for cost `$0.00`,
+    // and only one that ran on a model no rate covers gets the dash. The
+    // Markdown table asks the same function the same question.
+    cost: sessionFigure(session.cost, rates) ?? NO_PRICE,
   };
 }
 

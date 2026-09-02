@@ -36,6 +36,9 @@ export interface SessionCost extends TokenCounts {
   /**
    * Calls that wrote no files.
    *
+   * **Frozen.** Retained so records already on disk still hash and verify;
+   * written by nothing and displayed nowhere, and nothing new should read it.
+   *
    * **Never written again, and never displayed.** A transcript reports which
    * tool a call used, not what the tool did to the disk, so a call that wrote
    * a file through a shell command is indistinguishable from one that ran

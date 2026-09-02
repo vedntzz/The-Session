@@ -1,6 +1,6 @@
 import {
   formatUsd,
-  priceSession,
+  sessionFigure,
   spendOf,
   unpricedThroughout,
   USER_RATES_FILE,
@@ -288,14 +288,14 @@ function totalRow(count: number, merged: number, unplanned: number): string {
  * to be the same one: a cell reading `unpriced` under a note that counts no
  * unpriced sessions is a hole the reader can see and the report will not
  * admit to.
+ *
+ * The call itself is `sessionFigure`, beside the rates it needs and shared with
+ * the terminal table. Only the word is decided here: a document read cold by
+ * somebody who was not there says what it means, where the terminal column can
+ * spend an em dash on it.
  */
 function priced(session: Session, rates: RateTable): string {
-  const price = priceSession(session.cost, rates);
-  if (price.priced) {
-    return formatUsd(price.usd);
-  }
-  const measured = session.cost.turns > 0 || session.cost.apiCalls > 0;
-  return measured ? "unpriced" : formatUsd(0);
+  return sessionFigure(session.cost, rates) ?? "unpriced";
 }
 
 /**

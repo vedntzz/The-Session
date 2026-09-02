@@ -84,6 +84,15 @@ export type Price =
        * The part of `usd` spent on turns that changed no files. Undefined on a
        * session captured before that was recorded — an estimate from the turn
        * count would be a number nobody measured.
+       *
+       * **Never print this without asking `emptyTokensOf` first.** It is
+       * priced straight off `cost.emptyTurnTokens`, which is the raw field,
+       * and the raw field is exactly what `empty.ts` exists to stand in front
+       * of: a record written under the old `tools` rule can carry a whole
+       * session's tokens here while having changed files, a figure git refutes
+       * and `emptyTurnsOf` refuses. `wasteCell` guards, which is why nothing
+       * wrong is shown today. A second caller that reads this field and prints
+       * it resurrects the refuted figure — see invariant 4.
        */
       emptyUsd?: number;
     }
@@ -151,9 +160,10 @@ export function spendOf(sessions: readonly Session[], rates: RateTable): Spend {
     const price = priceSession(session.cost, rates);
     if (price.priced) {
       addSpend(spend, price.usd, session.outcome);
-    } else if (session.cost.apiCalls > 0 || session.cost.turns > 0) {
+    } else if (wasMeasured(session.cost)) {
       // A session that spent nothing at all needs no rate, and reporting it as
-      // unpriced would be reporting a gap that costs nobody anything.
+      // unpriced would be reporting a gap that costs nobody anything. The same
+      // call `sessionFigure` makes for the row, from the same function.
       spend.unpriced += 1;
       models.add(session.cost.model === "" ? "unknown" : session.cost.model);
     }
@@ -240,6 +250,44 @@ export function shippedNote(spend: Spend): string {
  */
 export function unpricedThroughout(spend: Pick<Spend, "usd" | "unpriced">): boolean {
   return spend.usd === 0 && spend.unpriced > 0;
+}
+
+/**
+ * Whether anything at all was captured for a session.
+ *
+ * The nought-versus-unknown test at the grain of one session, as
+ * `unpricedThroughout` is at the grain of a window. A session with no turns and
+ * no calls behind it moved no tokens, so there is no rate it is missing: it
+ * cost nothing, and that is a measurement rather than a gap. A session that ran
+ * and cannot be priced is the other thing entirely, and the two may never be
+ * printed the same way.
+ */
+export function wasMeasured(cost: Pick<SessionCost, "turns" | "apiCalls">): boolean {
+  return cost.turns > 0 || cost.apiCalls > 0;
+}
+
+/**
+ * One session's money, or nothing where it ran on a model no rate covers.
+ *
+ * Every surface that prints a per-session figure goes through here, for the
+ * same reason every surface that prints a total goes through
+ * `unpricedThroughout`. The terminal table and the Markdown one are two views
+ * of one record: a row reading an em dash in the terminal and `$0.00` in the
+ * document somebody pasted into Notion is this tool failing at the one thing it
+ * claims. That is what happened while this carve-out lived in the Markdown
+ * renderer alone — and the terminal row disagreed with the footer directly
+ * under it, which counted no unpriced sessions and said `$0.00 spent`.
+ *
+ * `undefined` rather than a word, because the word is the surface's own: a
+ * column read at a glance has an em dash to spare, a table read cold spells it
+ * out. What may not differ between them is which sessions get it.
+ */
+export function sessionFigure(cost: SessionCost, rates: RateTable): string | undefined {
+  const price = priceSession(cost, rates);
+  if (price.priced) {
+    return formatUsd(price.usd);
+  }
+  return wasMeasured(cost) ? undefined : formatUsd(0);
 }
 
 /**

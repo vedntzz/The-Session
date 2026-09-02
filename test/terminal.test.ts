@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RateTable } from "../src/pricing.js";
+import { renderMarkdownWeek } from "../src/render/markdown.js";
 import { plainPalette, type Palette } from "../src/render/palette.js";
 import {
   formatBrief,
@@ -984,6 +985,63 @@ describe("a week where nothing could be priced", () => {
 
     expect(money).toBe("  — spent: nothing here could be priced");
     expect(mixed.join("\n")).not.toContain("$0.00 spent");
+  });
+});
+
+describe("one record, what it cost, and every view of it", () => {
+  /**
+   * Nothing captured at all: no model, no turns, no calls. The rate table has
+   * nothing to say about it and nothing is missing — which is `$0.00`, a
+   * measurement, and not the em dash that means nobody can put a figure on it.
+   *
+   * It changed a file, so the empty-turn column is a dash for its own reason.
+   * That is why these assertions go at the cost cell rather than at the row.
+   */
+  const nothingCaptured = session({ cost: zeroCost(), outcome: "merged", reality: ["a.py"] });
+  const NOW = new Date(2026, 0, 15, 18, 0);
+
+  /** The last column of a terminal row, which is where the money is. */
+  const terminalCost = (row: string): string => row.trimEnd().split(/\s+/).at(-1) as string;
+
+  /** The same cell of the Markdown table, which puts money last as well. */
+  const markdownCost = (document: string): string =>
+    (document
+      .split("\n")
+      .find((line) => line.includes("rate limiting")) as string)
+      .split("|")
+      .map((cell) => cell.trim())
+      .at(-2) as string;
+
+  it("says the same thing in the row, in the footnote and in --md", () => {
+    // One record, three surfaces. A row reading an em dash under a footnote
+    // reading $0.00 is the failure this tool's whole claim rests on not
+    // making, and for a while it was what the terminal did: the carve-out
+    // lived in the Markdown renderer alone.
+    const lines = formatWeek([nothingCaptured], 7, plainPalette, {}, priced);
+    const row = lines.find((line) => line.includes("rate limiting")) as string;
+    const footnote = lines.find((line) => line.includes("spent")) as string;
+    const document = renderMarkdownWeek([nothingCaptured], 7, priced, NOW);
+
+    expect(terminalCost(row)).toBe("$0.00");
+    expect(footnote.trim().split(" ")[0]).toBe("$0.00");
+    expect(markdownCost(document)).toBe("$0.00");
+    expect(new Set([terminalCost(row), footnote.trim().split(" ")[0], markdownCost(document)]).size).toBe(1);
+  });
+
+  it("still refuses a figure for a session that ran on a model with no rate", () => {
+    // The other half of the same rule, so the carve-out cannot spread to the
+    // sessions it is not for: this one moved tokens, so a nought would be a
+    // claim about money rather than an admission that none can be worked out.
+    const ran = session({
+      cost: cost({ model: "mystery-9", inputTokens: 100_000, turns: 3, apiCalls: 9 }),
+      outcome: "merged",
+      reality: ["a.py"],
+    });
+    const lines = formatWeek([ran], 7, plainPalette, {}, priced);
+    const row = lines.find((line) => line.includes("rate limiting")) as string;
+
+    expect(terminalCost(row)).toBe("—");
+    expect(markdownCost(renderMarkdownWeek([ran], 7, priced, NOW))).toBe("unpriced");
   });
 });
 
