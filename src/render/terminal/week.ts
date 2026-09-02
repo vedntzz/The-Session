@@ -12,7 +12,15 @@ import {
 } from "../../pricing.js";
 import { isCaptured, totalTokens, type Session, type SessionOutcome } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
-import { NO_PRICE, NO_RATES, outcomeInk, RATES_HINT, stubLines, type View } from "./cost.js";
+import {
+  NO_PRICE,
+  NO_RATES,
+  outcomeInk,
+  pricesChecked,
+  RATES_HINT,
+  stubLines,
+  type View,
+} from "./cost.js";
 import { CAPTURED_MARKER } from "./intent.js";
 import { figure, INDENT, plural } from "./text.js";
 import {
@@ -115,7 +123,8 @@ export function formatWeek(
   const spend = spendOf(sessions, rates);
   const totals = weekTotals(sessions);
   const widths = measure(rows, totals);
-  return weekTable({ sessions, rows, totals, widths, show, spend, narrowed, palette });
+  const checked = view.checked;
+  return weekTable({ sessions, rows, totals, widths, show, spend, narrowed, checked, palette });
 }
 
 /** What a week is once the figures are in: the headline, the rows, the notes. */
@@ -127,6 +136,8 @@ interface WeekTable {
   show: Columns;
   spend: Spend;
   narrowed: string | undefined;
+  /** The date the prices under the table were checked, where the file gives one. */
+  checked: string | undefined;
   palette: Palette;
 }
 
@@ -146,6 +157,7 @@ function weekTable({
   show,
   spend,
   narrowed,
+  checked,
   palette,
 }: WeekTable): string[] {
   return [
@@ -158,7 +170,7 @@ function weekTable({
     "",
     totalsRow(totals, widths, show),
     ...turnNotes(sessions, palette),
-    ...spendNotes(spend, palette),
+    ...spendNotes(spend, checked, palette),
   ];
 }
 
@@ -172,6 +184,9 @@ function weekTable({
  */
 function weekTotals(sessions: readonly Session[]): WeekCells {
   return {
+    // The label of the totals row runs across the whole left block, starting
+    // in the id column, so the id cell has nothing of its own to hold.
+    id: "",
     when: plural(sessions.length, "session", "sessions"),
     intent: "",
     class: "",
@@ -244,13 +259,31 @@ function sessionRows(
  * asked for the detail.
  *
  * Always one line, whatever the week came to — see `moneyLine` for the three
- * things it can say. What could not be priced is named under it, because the
- * figure above is a total over the rest.
+ * things it can say. Under it, the date the prices behind it were checked, so
+ * the figure is not quoted at prices of no stated age; then what the figure
+ * does not cover, because it is a total over the rest — the sessions nothing
+ * was captured for, and the ones whose model no rate covers.
  */
-function spendNotes(spend: Spend, palette: Palette): string[] {
+function spendNotes(spend: Spend, checked: string | undefined, palette: Palette): string[] {
   const lines = [palette.meta(`${INDENT}${moneyLine(spend)}`)];
+  // Directly under the figure it dates, and only where there is a figure: a
+  // week nothing could be priced in has no money for a date to qualify.
+  if (checked !== undefined && !unpricedThroughout(spend)) {
+    lines.push(palette.meta(`${INDENT}${pricesChecked(checked)}`));
+  }
+  // Both said out loud, because the figure above is a total over the rest, and
+  // the two are different absences: a rate would fix the first and nothing
+  // would fix the second. A row reading `—` that no note underneath accounts
+  // for is a hole the reader can see and the table will not admit to.
+  if (spend.uncaptured > 0) {
+    lines.push(
+      palette.meta(
+        `${INDENT}${plural(spend.uncaptured, "session", "sessions")} uncaptured: ` +
+          "no turns on the record, so nothing to price",
+      ),
+    );
+  }
   if (spend.unpriced > 0) {
-    // Said out loud, because the figure above is over the rest.
     lines.push(
       palette.meta(
         `${INDENT}${plural(spend.unpriced, "session", "sessions")} unpriced: ` +

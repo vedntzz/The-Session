@@ -7,18 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Every view that shows a session now prints its id.** `session pr [id]` and
+  `session mark <id>` take one, and no view printed one: ids appeared only in
+  `settle`, `mark` and `survival --check` output, so writing a pull request
+  body for anything but the last session meant opening the JSONL by hand. The
+  id is now the first column of `session week` and a row of `session show
+  --full`, and it leads `show`'s bottom line — eight characters, the width
+  `settle` already prints, so one prefix works wherever an id is accepted. No
+  flag: a session nobody can name is missing information, not an option.
+- **The prices behind every money figure now carry their date.** `rates.json`
+  has always stated the day its prices were checked and warned that they go
+  stale the moment a vendor moves them; nothing surfaced either, so every
+  figure was quoted at prices of no stated age. `session week` and `session
+  show --tokens` now close with one dim line naming the date and where to
+  override it. It states the fact and stops — no staleness threshold and no
+  warning, because whether a fortnight is stale depends on whether a vendor
+  moved a price, which this tool cannot know. Printed only where there is a
+  figure to date.
+
 ### Fixed
 
-- The terminal week table and `week --md` disagreed about what a session with
-  nothing captured cost: the row read an em dash in the terminal — which means
-  nobody can put a figure on it — while the Markdown cell, the footnote
-  directly under the terminal row, and the count of unpriced sessions all read
-  `$0.00`. Nothing was captured for such a session, so it moved no tokens and
-  no rate is missing: `$0.00` is a measurement and the dash was an absence.
-  The carve-out had lived in the Markdown renderer alone; it is now
-  `sessionFigure`, beside the rates, and both tables ask it. Only the word for
-  a session that genuinely cannot be priced still differs — a dash in a column
-  read at a glance, `unpriced` in a document read cold.
+- `help all` leaked into every subcommand's help. Commander gives every command
+  with subcommands an implicit `help` of its own, and the term that renames the
+  root's matched on the name alone — so `session hook --help`, `session key
+  --help` and `session config --help` each listed a command called `help all`
+  with commander's stock description, advertising a `session hook help all`
+  that does not exist. The override is now guarded on the parent, and those
+  screens show commander's own `help [command]` again.
+- **A session with no transcript captured no longer costs `$0.00`.** `session
+  start` and `session stop` record what the diff says whether or not an adapter
+  found anything, so a log holds sessions that changed files, took an hour, and
+  have nothing on the record to price. Every view was calling that nought — a
+  claim that the work was free — because `wasMeasured` read "no turns and no
+  api calls" as "nothing was spent". It now keys on turns alone, and a session
+  with none gets no figure at all: an em dash in `week`, `not captured` in
+  `week --md`, no cost rows in `show`, a dash on the page `week --open` writes.
+  A session that has turns and prices to nothing keeps `$0.00` — that figure
+  was measured.
+
+  `spendOf` counts these apart from the unpriced ones as `uncaptured`, and the
+  notes under both tables name the two separately: a missing rate is somebody's
+  next five minutes, and pooling them would have sent that reader to
+  `~/.session/rates.json` to add a price for a model called `unknown`. Every
+  row carrying a dash is now counted by one of those notes. `debt` follows the
+  same rule, through the same function.
+
+- The terminal week table and `week --md` disagreed about which sessions could
+  be priced at all: the carve-out lived in the Markdown renderer alone, so a
+  row read an em dash in the terminal while the Markdown cell, the footnote
+  directly under the terminal row, and the count of unpriced sessions said
+  something else. It is now `sessionFigure`, beside the rates, and both tables
+  ask it. Only the word differs — a dash in a column read at a glance,
+  `unpriced` or `not captured` in a document read cold.
 
 ## [0.8.0] — 2026-09-01
 

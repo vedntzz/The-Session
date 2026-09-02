@@ -11,7 +11,7 @@ import {
   type WindowReport,
 } from "../../survival.js";
 import type { Palette } from "../palette.js";
-import { figure, INDENT, padRight, percent, plural, width } from "./text.js";
+import { figure, INDENT, padRight, percent, plural, shortId, width } from "./text.js";
 
 /**
  * What `session survival` prints.
@@ -290,7 +290,7 @@ function checkedLine(checked: Checked, palette: Palette): string {
         `${plural(counts.paths, "file", "files")} still there`;
 
   return line(
-    checked.session.id.slice(0, 8),
+    shortId(checked.session.id),
     `${padRight(`${checked.window} days`, 10)}${said}`,
   );
 }

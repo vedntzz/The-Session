@@ -58,6 +58,12 @@ exists. `BRIEF_COMMANDS` in `program.ts` is the whole of it, and the list is
 filtered out of the real command tree rather than written beside it, so a
 command renamed cannot silently fall off.
 
+The `help all` term is the **root command's own**. Commander gives every
+command with subcommands an implicit `help` of its own, and the override that
+renames ours is guarded on the parent rather than on the name — matched by name
+it renamed those too, and `session hook --help` went out advertising a `session
+hook help all` that does not exist.
+
 `session help all` is built by walking `program.commands`, parents and
 children. So is the sentence under the short help naming what it left out.
 A hand-kept list would be one release away from being wrong, and that sentence
@@ -71,9 +77,9 @@ the state, because in each state there is one obvious next move and at most one
 other worth knowing. Commander would print the help here — the right answer to
 "what is this" and the wrong one to "where am I".
 
-`session show` is three sentences and a line of figures: where the work ended
-up, what was asked for, what went outside what was declared, and then cost /
-turns / turns that produced nothing — that last one only where the diff can
+`session show` is three sentences and a bottom line: where the work ended
+up, what was asked for, what went outside what was declared, and then the
+session's id, the cost, the turns, and turns that produced nothing — that last one only where the diff can
 say, which is a session that changed nothing. Every view reads it through
 `emptyTurnsOf`, never off `cost.emptyTurns`; see the `measurement-rules` skill
 under "Which turns produced nothing". The brief line simply stops at two
@@ -137,7 +143,7 @@ one line that is always there, and colouring what is always there says nothing
 
 ## The week table
 
-Columns, left to right: `started`, `intent`, `class` (`--class` only),
+Columns, left to right: `id`, `started`, `intent`, `class` (`--class` only),
 `outcome`, `drift files`, `turns`, `tokens` (`--tokens` only), `empty`, `cost`.
 Outcome sits in the left block with the text; the figures are right-aligned so
 a column can be scanned. `drift files` carries its unit because a bare `drift`
@@ -153,6 +159,33 @@ The geometry lives in `render/terminal/week/table.ts`, the arithmetic and the
 notes under the table in `week.ts`. The split is what keeps either under 400
 lines; a reader chasing a misaligned column wants the first file and nothing
 in the second.
+
+## The id
+
+`pr [id]`, `show [id]` and `mark <id>` all take one, and every view that prints
+one prints the same eight characters, through `shortId` — `week`'s first
+column, `show`'s bottom line and its `id` row, `settle`, `mark`, `survival
+--check` and `verify`. One width is the whole point: a prefix read off a week
+row has to be a prefix those commands answer to, and until the column existed
+the only way to write a pull request body for anything but the last session was
+to open the JSONL. It is not a flag — a session nobody can name is missing
+information, not a preference.
+
+## How old the prices are
+
+Every money figure is quoted at a rate somebody wrote down on a day.
+`pricesChecked` is the one line that says which day: dim, under the figure it
+dates, in `week`'s footer and at the foot of `show --tokens`. It states the
+date the bundled `rates.json` carries and where to override it, and stops
+there — no threshold, no "these may be stale", no colour. Whether a fortnight
+is stale depends on whether a vendor moved a price, which this tool cannot
+know, and the reader holding the invoice can.
+
+Printed only where there is a figure to date: a week nothing could be priced in
+and a session whose model no rate covers both print no money, and a date under
+either would read as an explanation of why the money is missing. `week --md`
+carries none of it — the date belongs beside a figure being quoted, not in a
+document about a week.
 
 ## Colour
 
@@ -313,12 +346,15 @@ The one cell that totals nothing is `Cost`, left empty on purpose, the same as
 `week`'s. The closing line is the only total, so there is no second copy of it
 sitting in the middle of the columns the table is read for.
 
-A model with no rate is handled per row and per document. The cost cell says
-`unpriced`, the closing figure is over the rest, and the note above it says how
-much of the table the money covers and which models were left out — "below",
-since the figure it points at is the closing line. Note a session with no turns
-and no api calls is `$0.00` rather than `unpriced`: nothing was captured for
-it, so it moved no tokens and there is no rate it is missing. That has to agree
-with `spendOf`, which makes the same call — a cell reading `unpriced` under a
-note counting no unpriced sessions is a hole the reader can see and the report
-will not admit to.
+A session with no figure is handled per row and per document, and there are two
+kinds. A model with no rate reads `unpriced`; a session with **no turns on the
+record** reads `not captured` — nothing was found to price it with, and no rate
+would fill that. Never `$0.00` for the second: `start` and `stop` see the diff
+whether or not an adapter saw anything, so that session may well have changed
+files and been billed for them.
+
+The closing figure is over the rest, and `coverageNote` above it says how much
+of the table the money covers and what it leaves out, naming the two apart —
+"below", since the figure it points at is the closing line. Both come off
+`spendOf`'s counters, and they have to: a cell whose word no note underneath
+counts is a hole the reader can see and the report will not admit to.

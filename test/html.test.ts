@@ -585,11 +585,20 @@ describe("a page where nothing could be priced", () => {
   });
 
   it("keeps $0.00 in the summary for a week that genuinely cost nothing", () => {
-    // Nothing was captured, so no rate is missing and the nought is what the
-    // week cost. Dropping it here would render an absence and a nought the
-    // same way, and the page would have no way to say which it meant.
-    const free = session({ cost: cost() });
+    // A session that ran, on a model with a rate, and moved nothing worth
+    // charging for: the nought is what the week cost. Dropping it here would
+    // render an absence and a nought the same way, and the page would have no
+    // way to say which it meant.
+    const free = session({ cost: cost({ turns: 4, apiCalls: 9 }) });
 
     expect(summaryOf(renderWeek([free], 7, {}, priced))).toContain("$0.00");
+  });
+
+  it("leaves the money out for a week nothing was captured in", () => {
+    // No turns on the record: the rows carry a dash for their cost, and a
+    // summary reading $0.00 over them would be the page contradicting itself.
+    const uncaptured = session({ cost: zeroCost(), reality: ["src/git.ts"] });
+
+    expect(summaryOf(renderWeek([uncaptured], 7, {}, priced))).not.toContain("$");
   });
 });

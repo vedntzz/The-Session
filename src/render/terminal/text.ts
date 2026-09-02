@@ -43,6 +43,23 @@ export function day(iso: string): string {
   return `${at.getFullYear()}-${month}-${String(at.getDate()).padStart(2, "0")}`;
 }
 
+/**
+ * How much of a session id is printed, and so how much of one has to be typed.
+ *
+ * Ids are UUIDs and nobody types those; every command that takes one accepts
+ * an unambiguous prefix — see `findSession`. Eight is what `settle` and `mark`
+ * have always shown, and one width across every view is the whole point: a
+ * prefix copied off a `week` row has to be the prefix `pr` and `mark` answer
+ * to, or the reader learns the rule in one view and meets a different answer
+ * in the next.
+ */
+export const SHORT_ID = 8;
+
+/** A session id, as every view that prints one prints it. */
+export function shortId(id: string): string {
+  return id.slice(0, SHORT_ID);
+}
+
 export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }

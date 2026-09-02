@@ -22,10 +22,17 @@ export const BRIEF_COMMANDS = ["start", "week", "help"];
 /**
  * Narrows the top-level help to `BRIEF_COMMANDS` and nothing else.
  *
- * Only the top-level list is touched. `session config --help` and every other
- * subcommand's help go through commander's own rendering, because there is
- * nothing to hide there — a reader who has typed `session config` has already
- * chosen the topic.
+ * Both overrides are guarded on the command being rendered, because commander
+ * calls them for every help screen in the tree. `session config --help` and
+ * every other subcommand's help go through commander's own rendering, because
+ * there is nothing to hide there — a reader who has typed `session config` has
+ * already chosen the topic.
+ *
+ * The guard on `subcommandTerm` is the parent, not the name: commander gives
+ * every command with subcommands an implicit `help` of its own, and a term
+ * matched on the name alone renamed those too — `session hook --help` listed
+ * `help all`, advertising a `session hook help all` that does not exist. The
+ * implicit ones carry no parent; ours is a real command on the root.
  */
 export function configureHelp(program: Command): void {
   // A row for the bare screen. It is not a subcommand and there is nothing to
@@ -44,8 +51,11 @@ export function configureHelp(program: Command): void {
     },
     subcommandTerm(cmd) {
       // There is exactly one topic, so the term says it rather than leaving
-      // the reader to guess what a `[topic]` might be.
-      return cmd.name() === "help" ? "help all" : Help.prototype.subcommandTerm.call(this, cmd);
+      // the reader to guess what a `[topic]` might be. Only the root's own
+      // `help` — the one `registerHelp` added — takes the topic with it.
+      return cmd.name() === "help" && cmd.parent === program
+        ? "help all"
+        : Help.prototype.subcommandTerm.call(this, cmd);
     },
   });
 

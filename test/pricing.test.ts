@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   bundledRatesFile,
   formatUsd,
+  loadChecked,
   loadRates,
+  parseChecked,
   parseRates,
   priceSession,
   priceTokens,
@@ -238,13 +240,22 @@ describe("spendOf", () => {
       empty: 0,
       unpriced: 0,
       unpricedModels: [],
+      uncaptured: 0,
     });
   });
 });
 
 describe("shippedNote", () => {
   const note = (over: Partial<Spend>): string =>
-    shippedNote({ usd: 100, unmerged: 0, empty: 0, unpriced: 0, unpricedModels: [], ...over });
+    shippedNote({
+      usd: 100,
+      unmerged: 0,
+      empty: 0,
+      unpriced: 0,
+      unpricedModels: [],
+      uncaptured: 0,
+      ...over,
+    });
 
   it("gives the figure when some of the money never merged", () => {
     expect(note({ unmerged: 25 })).toBe("$25.00 of it on changes that never merged");
@@ -310,12 +321,25 @@ describe("unpricedThroughout", () => {
   });
 
   it("is false for a window that genuinely cost nothing", () => {
-    // Nothing captured, so no rate is missing and the nought is a fact. This
-    // is the half of the test that stops a view dashing out a real $0.00.
-    const spend = spendOf([session()], rates);
+    // A session that ran, on a model with a rate, whose tokens came to
+    // nothing: the nought is a measurement. This is the clause that stops a
+    // view dashing out a real $0.00.
+    const free = session({ cost: cost({ model: "claude-haiku-4-5", turns: 2, apiCalls: 3 }) });
+    const spend = spendOf([free], rates);
 
     expect(spend.usd).toBe(0);
     expect(unpricedThroughout(spend)).toBe(false);
+  });
+
+  it("is true where the window holds nothing but sessions with no turns", () => {
+    // Nothing was captured, so there is nothing to price and no rate is
+    // missing either — but `$0.00 spent` over a week that may have changed
+    // files and billed for it is the claim this whole rule refuses.
+    const spend = spendOf([session({ reality: ["src/git.ts"] })], rates);
+
+    expect(spend.uncaptured).toBe(1);
+    expect(spend.unpriced).toBe(0);
+    expect(unpricedThroughout(spend)).toBe(true);
   });
 
   it("is false as soon as one session could be priced", () => {
@@ -515,6 +539,26 @@ describe("rateStub", () => {
       "gpt-9",
       "mystery-9",
     ]);
+  });
+});
+
+describe("the date the prices carry", () => {
+  it("reads the checked date off the file", () => {
+    expect(parseChecked('{"checked": "2026-08-23", "models": {}}')).toBe("2026-08-23");
+  });
+
+  it("has nothing to say where the file states no date", () => {
+    // A hand-written or older file. A view with no date says nothing rather
+    // than guessing at one or calling the prices current.
+    expect(parseChecked('{"models": {}}')).toBeUndefined();
+    expect(parseChecked('{"checked": "", "models": {}}')).toBeUndefined();
+    expect(parseChecked('{"checked": 20260823, "models": {}}')).toBeUndefined();
+  });
+
+  it("is stated by the bundled table, so every view that quotes it can date it", async () => {
+    // The whole point of the footer line: without this field the money is
+    // quoted at prices of no stated age, which is where it came in.
+    expect(await loadChecked()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
 

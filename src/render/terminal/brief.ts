@@ -1,5 +1,5 @@
-// `session show`: three sentences and a line of three figures.
-import { formatUsd, priceSession, type RateTable } from "../../pricing.js";
+// `session show`: three sentences, then the id and a line of three figures.
+import { formatUsd, priceSession, wasMeasured, type RateTable } from "../../pricing.js";
 import {
   isCaptured,
   type Session,
@@ -11,7 +11,7 @@ import { emptyTurnsOf } from "../../empty.js";
 import { costCell, NO_RATES, wasteCell, type View } from "./cost.js";
 import { CAPTURED_MARKER, intentOf } from "./intent.js";
 import { summarizePaths } from "./paths.js";
-import { INDENT, plural } from "./text.js";
+import { INDENT, plural, shortId } from "./text.js";
 
 // --- the brief views -----------------------------------------------------
 
@@ -139,7 +139,7 @@ function wentOutside(session: Session): { before: string; paths: string; after: 
  */
 function figures(session: Session, rates: RateTable): string | undefined {
   const { cost } = session;
-  if (cost.turns === 0 && cost.apiCalls === 0) {
+  if (!wasMeasured(cost)) {
     // Nothing was captured for this session. A row of zeroes would read as a
     // measurement of nothing rather than as an absence of measurement.
     return undefined;
@@ -155,11 +155,30 @@ function figures(session: Session, rates: RateTable): string | undefined {
 }
 
 /**
+ * The bottom line: which session this was, and then the figures.
+ *
+ * The id leads it because it is the one part that is always there — a session
+ * nothing was captured for has no figures at all, and it is exactly that
+ * session somebody may still want to write a pull request body for. It is what
+ * `session pr`, `session show` and `session mark` take, at the width `settle`
+ * and `week` print, so a prefix read off any of them works in all of them.
+ *
+ * Dim, with the figures, because it is not a measurement: it is the handle on
+ * the record the measurements came from.
+ */
+function bottomLine(session: Session, rates: RateTable): string {
+  const counts = figures(session, rates);
+  return counts === undefined
+    ? shortId(session.id)
+    : `${shortId(session.id)}${FIGURE_GAP}${counts}`;
+}
+
+/**
  * The session as `session show` prints it without `--full`.
  *
  * Three sentences now, in the order the questions are asked: where the work
- * went, what was asked for, and what went outside what was declared. Then the
- * figures, dim, at the bottom.
+ * went, what was asked for, and what went outside what was declared. Then, dim
+ * at the bottom, the id this session answers to and the figures.
  *
  * Colour does the same work it does everywhere else and no more: the intent is
  * the line you look for first, the drift paths are the thing that is there,
@@ -185,9 +204,6 @@ export function formatBrief(
     `${INDENT}${outside.before}${palette.drift(outside.paths)}${outside.after}`,
   ];
 
-  const line = figures(session, view.rates ?? NO_RATES);
-  if (line !== undefined) {
-    lines.push("", `${INDENT}${palette.meta(line)}`);
-  }
+  lines.push("", `${INDENT}${palette.meta(bottomLine(session, view.rates ?? NO_RATES))}`);
   return lines;
 }

@@ -17,7 +17,7 @@ import {
   type SessionOutcome,
   type StoreOptions,
 } from "../store.js";
-import { intentOf } from "../render/terminal.js";
+import { intentOf, shortId } from "../render/terminal.js";
 import { findSession } from "./show.js";
 
 /**
@@ -301,7 +301,7 @@ export function formatSettle(result: SettleResult): string[] {
 function settledLine(settled: Settled): string {
   const mark = settled.recorded ? settled.outcome : `${settled.outcome} (already)`;
   const why = settled.verdict ? because(settled.verdict) : "";
-  return line(settled.session.id.slice(0, 8), `${mark.padEnd(20)}${why}`.trimEnd());
+  return line(shortId(settled.session.id), `${mark.padEnd(20)}${why}`.trimEnd());
 }
 
 /** The sessions nothing was written down about, and why there was nothing. */
@@ -328,7 +328,7 @@ function skippedLines(result: SettleResult): string[] {
 /** What `session mark` prints. */
 export function formatMark(settled: Settled): string[] {
   return [
-    line("marked", `${settled.session.id.slice(0, 8)}  ${settled.outcome}`),
+    line("marked", `${shortId(settled.session.id)}  ${settled.outcome}`),
     line("intent", intentOf(settled.session)),
     line("note", "recorded as a manual observation; it overrides what the repo says"),
   ];

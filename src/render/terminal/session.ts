@@ -1,13 +1,27 @@
 // `session show --full`: the labelled layout.
 import { classOf } from "../../classify.js";
 import { attributionEntries } from "../../config.js";
-import { formatUsd, priceSession, type Price, type RateTable } from "../../pricing.js";
+import {
+  formatUsd,
+  priceSession,
+  wasMeasured,
+  type Price,
+  type RateTable,
+} from "../../pricing.js";
 import { isCaptured, totalTokens, type Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { emptyTurnsOf } from "../../empty.js";
-import { breakdown, costCell, NO_RATES, outcomeInk, wasteCell, type View } from "./cost.js";
+import {
+  breakdown,
+  costCell,
+  NO_RATES,
+  outcomeInk,
+  pricesChecked,
+  wasteCell,
+  type View,
+} from "./cost.js";
 import { CAPTURED_INTENT, DRIFT_MARKER, intentOf, NO_SCOPE, SCOPE_HINT } from "./intent.js";
-import { clock, figure, gap, INDENT, label, padRight, plural, width } from "./text.js";
+import { clock, figure, gap, INDENT, label, padRight, plural, shortId, width } from "./text.js";
 
 /**
  * The session as `session show --full` prints it.
@@ -28,10 +42,16 @@ export function formatSession(
   palette: Palette = plainPalette,
   view: View = {},
 ): string[] {
-  // Cost and attribution share the last block, and a session no transcript was
-  // captured for has neither. The blank line above them goes with them, rather
-  // than being left hanging off the end of the view.
-  const footer = [...costLines(session, palette, view), ...attributionLines(session, palette)];
+  // The id, the cost and the attribution share the last block. A session no
+  // transcript was captured for has no cost rows and may have no attribution,
+  // but it always has an id, so the block — and the blank line above it — is
+  // always there.
+  const footer = [
+    idLine(session, palette),
+    ...costLines(session, palette, view),
+    ...attributionLines(session, palette),
+    ...pricesLines(session, palette, view),
+  ];
   return [
     "",
     headingLine(session, palette),
@@ -41,8 +61,25 @@ export function formatSession(
     declaredLine(session, palette),
     ...changedLines(session, palette),
     ...outsideLines(session, palette),
-    ...(footer.length > 0 ? ["", ...footer] : []),
+    "",
+    ...footer,
   ];
+}
+
+/**
+ * The id, in the footer with the rest of the bookkeeping.
+ *
+ * It is what `session pr`, `session show` and `session mark` take, and until
+ * this row existed no view printed one — the id was in the JSONL and nowhere
+ * else. Eight characters, the width `settle` and `week` print, which is enough
+ * of a prefix for any of those commands to find the session again.
+ *
+ * Not at the top: the first labelled row is where the work ended up, which is
+ * the question the reader opened the view with. An id is a handle, and a
+ * handle belongs beside what it costs and who it was for.
+ */
+function idLine(session: Session, palette: Palette): string {
+  return `${INDENT}${palette.meta(label("id"))}${shortId(session.id)}`;
 }
 
 /** The intent, with the times it ran between out in the gutter. */
@@ -132,8 +169,7 @@ function outsideLines(session: Session, palette: Palette): string[] {
  * transcript was captured for.
  */
 function costLines(session: Session, palette: Palette, view: View): string[] {
-  const { turns, apiCalls } = session.cost;
-  if (turns === 0 && apiCalls === 0) {
+  if (!wasMeasured(session.cost)) {
     return [];
   }
   const price = priceSession(session.cost, view.rates ?? NO_RATES);
@@ -142,6 +178,29 @@ function costLines(session: Session, palette: Palette, view: View): string[] {
     lines.push(`${INDENT}${palette.meta(label("tokens"))}${palette.meta(breakdown(session.cost))}`);
   }
   return lines;
+}
+
+/**
+ * How old the prices behind the cost row are, under everything else.
+ *
+ * Only where `--tokens` asked: it is the view somebody opens to see what the
+ * money is made of, and the age of the rates is part of that. Unlabelled and
+ * last, because it is a footnote about the view rather than another fact about
+ * the session — the same line `week` closes with, from the same function, so
+ * the two cannot come to word it differently.
+ *
+ * Only where there is a figure to date, too. A session nothing was captured
+ * for and one no rate covers both print no money, and dating prices under
+ * either would read as an explanation of why the money is missing.
+ */
+function pricesLines(session: Session, palette: Palette, view: View): string[] {
+  if (view.tokens !== true || view.checked === undefined || !wasMeasured(session.cost)) {
+    return [];
+  }
+  if (!priceSession(session.cost, view.rates ?? NO_RATES).priced) {
+    return [];
+  }
+  return [palette.meta(`${INDENT}${pricesChecked(view.checked)}`)];
 }
 
 /**

@@ -227,7 +227,11 @@ describe("debtOf", () => {
     expect(files?.[0]?.spend.usd).toBeCloseTo(1, 10);
   });
 
-  it("does not report a session that moved no tokens as unpriced", () => {
+  it("counts a session nothing was captured for apart from an unpriced model", () => {
+    // No rate is missing — there is no model on the record to want one for —
+    // so it is not reported as a gap a rates file would fill. It is still a
+    // hole in the total, and the cost cell reads `—` rather than `$0.00`:
+    // these sessions may have changed files and billed for it.
     const nothing = { cost: { ...zeroCost(), model: "" } };
     const files = filesOf([
       drifted(["src/store.ts"], nothing),
@@ -235,7 +239,12 @@ describe("debtOf", () => {
       drifted(["src/store.ts"], nothing),
     ]);
 
-    expect(files?.[0]?.spend).toEqual({ usd: 0, unpriced: 0, unpricedModels: [] });
+    expect(files?.[0]?.spend).toEqual({
+      usd: 0,
+      unpriced: 0,
+      unpricedModels: [],
+      uncaptured: 3,
+    });
   });
 
   it("declines to judge a repo with fewer than three sessions", () => {

@@ -17,6 +17,11 @@ export interface View {
   tokens?: boolean;
   /** Whether `--class` asked for the class column as well. */
   classes?: boolean;
+  /**
+   * The date the bundled prices were last checked — see `loadChecked`. Absent
+   * where the file states none, and where the view does not quote a price.
+   */
+  checked?: string;
 }
 
 export const NO_RATES: RateTable = new Map();
@@ -26,6 +31,23 @@ export const RATES_HINT = USER_RATES_FILE;
 
 /** Stands in for a session whose model carries no price. */
 export const NO_PRICE = "—";
+
+/**
+ * How old the prices behind a figure are, and where to correct them.
+ *
+ * One line, under the money and dim with it. It states the date and stops
+ * there: no threshold, no warning, no "these may be out of date". Whether a
+ * fortnight-old price is stale depends on whether a vendor moved one, which
+ * this tool cannot know — so it says when the numbers were checked and leaves
+ * the judgement to the reader, who is the one holding the invoice.
+ *
+ * Printed only under a figure. A view that could price nothing has no figure
+ * for a date to qualify, and dating the prices there would read as an
+ * explanation of why the money is missing.
+ */
+export function pricesChecked(checked: string): string {
+  return `prices checked ${checked} — override in ${RATES_HINT}`;
+}
 
 /** The money, or the tokens and the reason there is no money. */
 export function costCell(cost: SessionCost, price: Price): string {

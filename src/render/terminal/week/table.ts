@@ -10,7 +10,7 @@ import { sessionFigure, type RateTable } from "../../../pricing.js";
 import { isCaptured, totalTokens, type Session } from "../../../store.js";
 import { NO_PRICE } from "../cost.js";
 import { CAPTURED_MARKER, intentOf } from "../intent.js";
-import { clock, figure, INDENT, padLeft, padRight, width } from "../text.js";
+import { clock, figure, INDENT, padLeft, padRight, shortId, SHORT_ID, width } from "../text.js";
 
 /** Space between columns. Two, so the eye reads them as separate. */
 const COLUMN_GAP = "  ";
@@ -26,6 +26,7 @@ const ELLIPSIS = "…";
 
 /** One row's worth of already-stringified cells. */
 export interface WeekCells {
+  id: string;
   when: string;
   intent: string;
   class: string;
@@ -39,6 +40,7 @@ export interface WeekCells {
 
 /** Column widths, measured from the contents rather than guessed. */
 export interface Widths {
+  id: number;
   when: number;
   intent: number;
   class: number;
@@ -53,6 +55,13 @@ export interface Widths {
 /**
  * The headings, and with them the column order.
  *
+ * The id comes first because it is the handle: `session pr <id>`, `session
+ * show <id>` and `session mark <id>` all take one, and until this column
+ * existed no view printed one — the only way to write a pull request body for
+ * anything but the last session was to open the JSONL and read an id out of
+ * it. Eight characters of it, the width `settle` and `mark` already print, so
+ * one prefix works wherever an id is asked for.
+ *
  * Outcome sits in the left block beside the intent, and cost is the last
  * column of the table rather than the first figure in it. Where the work went
  * and how far it went outside what was declared are what the table is read
@@ -62,6 +71,7 @@ export interface Widths {
  * files, and a bare `drift` over a column of small integers reads as a score.
  */
 export const HEADINGS: WeekCells = {
+  id: "id",
   when: "started",
   intent: "intent",
   class: "class",
@@ -100,6 +110,7 @@ function widest(values: readonly string[]): number {
 
 export function cellsFor(session: Session, rates: RateTable): WeekCells {
   return {
+    id: shortId(session.id),
     when: stamp(session.startedAt),
     // The marker is inside the column rather than beside it: a fourth column
     // holding one character for some rows would cost more width than the fact
@@ -168,11 +179,12 @@ function tableRow(left: string, cells: WeekCells, widths: Widths, show: Columns)
 }
 
 /**
- * The left block: when it ran, what it was for, what it was working on, and
- * where the work went.
+ * The left block: which session it was, when it ran, what it was for, what it
+ * was working on, and where the work went.
  */
 function leftColumns(cells: WeekCells, widths: Widths, show: Columns, ink: RowInk): string[] {
   const left = [
+    padRight(cells.id, widths.id),
     padRight(cells.when, widths.when),
     ink.intent(padRight(cells.intent, widths.intent)),
   ];
@@ -205,6 +217,9 @@ export function measure(rows: readonly WeekCells[], totals: WeekCells): Widths {
   const column = (of: keyof WeekCells): number =>
     widest([HEADINGS[of], totals[of], ...rows.map((row) => row[of])]);
   return {
+    // Both fixed rather than measured: an id is `SHORT_ID` characters and a
+    // stamp is `MM-DD HH:MM`, whatever is in the rows.
+    id: SHORT_ID,
     when: WHEN_WIDTH,
     intent: column("intent"),
     class: column("class"),

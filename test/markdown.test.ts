@@ -271,14 +271,20 @@ describe("a week with sessions no rate covers", () => {
     expect(document).toContain("covers 1 of 2 sessions");
   });
 
-  it("calls a session with nothing captured $0.00 rather than unpriced", () => {
-    // Nothing ran, so it moved no tokens and there is no rate it is missing.
-    // Calling it unpriced would open a hole the note below would not count.
+  it("says a session with nothing captured was not captured, never $0.00", () => {
+    // No turns on the record, so nothing was captured to price — and it may
+    // still have changed files and been billed for. `$0.00` would say the work
+    // was free; `unpriced` would send the reader to a rates file that cannot
+    // help, since there is no model on the record to give a rate to.
     const document = renderMarkdownWeek([session({ cost: zeroCost() })], 7, priced, NOW);
 
-    expect(document).toContain("| $0.00 |");
-    expect(document).not.toContain("unpriced");
-    expect(document).not.toContain("The cost below covers");
+    expect(document).toContain("| not captured |");
+    expect(document).not.toContain("$0.00");
+    expect(document).not.toContain("no rate (");
+    // Counted, so no cell says something the note underneath does not.
+    expect(document).toContain(
+      "1 session had no turns on the record, so nothing was captured to price.",
+    );
   });
 });
 
@@ -338,9 +344,10 @@ describe("a week where nothing could be priced", () => {
   });
 
   it("leaves a week that genuinely cost nothing reading $0.00", () => {
-    // Nothing was captured, so no rate is missing and the nought is a fact.
-    // This is why the test is not simply `usd === 0`.
-    const free = session({ cost: zeroCost() });
+    // A session that ran, on a model with a rate, and moved nothing worth
+    // charging for: the nought was measured. This is why the test is not
+    // simply `usd === 0`, and why it is not `no tokens` either.
+    const free = session({ cost: cost() });
     const document = renderMarkdownWeek([free], 7, priced, NOW);
 
     expect(document.split("\n").at(-1)).toBe("**$0.00 spent**");
@@ -351,7 +358,7 @@ describe("a week where nothing could be priced", () => {
   it("says nothing could be priced when the only priced session cost nothing", () => {
     // One session with a rate and no tokens, one with tokens and no rate. The
     // total is $0.00 and it is not the week's cost, so it is not printed.
-    const free = session({ startedAt: on(12), cost: zeroCost() });
+    const free = session({ startedAt: on(12), cost: cost() });
     const document = renderMarkdownWeek([free, unpriced(13)], 7, priced, NOW);
 
     expect(document.split("\n").at(-1)).toBe("**— spent: nothing here could be priced**");
@@ -402,10 +409,24 @@ describe("sessions that changed nothing", () => {
   });
 
   it("leaves the cost off when they cost nothing", () => {
-    const free = session({ outcome: "empty", reality: [], cost: zeroCost() });
+    const free = session({ outcome: "empty", reality: [], cost: cost() });
     const document = renderMarkdownWeek([session(), free], 7, priced, NOW);
 
     expect(document).toContain("1 session changed no files and is not in the table.");
+  });
+
+  it("says nothing was captured rather than naming a model it does not have", () => {
+    // These sessions are not in the table, so this line is the only place the
+    // document can admit the gap. Silence would read like the free session
+    // above, and `an amount no rate covers ()` would admit a gap and then fail
+    // to say what it was.
+    const uncaptured = session({ outcome: "empty", reality: [], cost: zeroCost() });
+    const document = renderMarkdownWeek([session(), uncaptured], 7, priced, NOW);
+
+    expect(document).toContain(
+      "1 session changed no files and is not in the table, and nothing was captured " +
+        "to say what they cost.",
+    );
   });
 
   it("says the cost is uncoverable rather than dropping it, when no rate covers it", () => {

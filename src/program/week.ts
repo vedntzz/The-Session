@@ -12,7 +12,7 @@ import {
 } from "../commands/week.js";
 import { sweepFirst } from "../commands/sweep.js";
 import { parseOutcome } from "../outcome.js";
-import { loadRates } from "../pricing.js";
+import { loadChecked, loadRates } from "../pricing.js";
 import { renderWeek } from "../render/html.js";
 import { renderMarkdownWeek } from "../render/markdown.js";
 import type { Palette } from "../render/palette.js";
@@ -89,6 +89,8 @@ async function emitWeek(
   const sessions = await weekSessions(days, options, filter, facts);
   const view = {
     rates: await loadRates(storeHome(options)),
+    // What the money under the table is quoted at, and how old that is.
+    checked: await loadChecked(),
     tokens: flags.tokens,
     classes: flags.class !== undefined,
   };

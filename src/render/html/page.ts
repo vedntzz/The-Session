@@ -7,6 +7,7 @@ import {
   shippedNote,
   spendOf,
   unpricedThroughout,
+  wasMeasured,
   type RateTable,
   type Spend,
 } from "../../pricing.js";
@@ -68,9 +69,15 @@ export function hue(count: number): string {
   return count > 0 ? "waste" : "quiet";
 }
 
-/** True when the session has no captured cost to report, rather than a zero. */
+/**
+ * True when the session has no captured cost to report, rather than a zero.
+ *
+ * `wasMeasured` decides it, as it does for every other surface: a page that
+ * dashed a different set of sessions from the table beside it would be two
+ * answers to one question.
+ */
 export function uncosted(session: Session): boolean {
-  return session.cost.turns === 0 && session.cost.apiCalls === 0;
+  return !wasMeasured(session.cost);
 }
 
 export function figure(value: number): string {

@@ -4,6 +4,7 @@ import {
   spendOf,
   unpricedThroughout,
   USER_RATES_FILE,
+  wasMeasured,
   type RateTable,
   type Spend,
 } from "../pricing.js";
@@ -189,7 +190,7 @@ export function renderMarkdownWeek(
     headline(shown, merged, unplanned),
     weekTable(shown, rates, merged, unplanned),
     emptyNote(empties, rates),
-    unpricedNote(spend, shown.length),
+    coverageNote(spend, shown.length),
     capturedNote(shown),
     spentClosing(spend, merged),
   ]);
@@ -280,22 +281,29 @@ function totalRow(count: number, merged: number, unplanned: number): string {
 }
 
 /**
- * A session's cost, or a plain word where there is no rate to give one.
+ * A session's cost, or a plain word where there is none.
  *
- * A session with no turns and no api calls behind it is `$0.00`, not
- * `unpriced`. Nothing was captured for it, so it moved no tokens and there is
- * no rate it is missing — which is the same call `spendOf` makes, and it has
- * to be the same one: a cell reading `unpriced` under a note that counts no
- * unpriced sessions is a hole the reader can see and the report will not
- * admit to.
+ * Two words, because there are two ways to have no figure and they want
+ * different things from the reader. `unpriced` is a model with no rate, and a
+ * rate is what fixes it. `not captured` is a session with no turns on the
+ * record: nothing was found to price, no rate would fill it, and calling it
+ * `$0.00` would say a session that may well have changed files was free.
  *
- * The call itself is `sessionFigure`, beside the rates it needs and shared with
- * the terminal table. Only the word is decided here: a document read cold by
- * somebody who was not there says what it means, where the terminal column can
- * spend an em dash on it.
+ * Both are accounted for by `coverageNote` below, from the same counters. A
+ * cell whose word no note underneath counts is a hole the reader can see and
+ * the report will not admit to.
+ *
+ * The figure itself is `sessionFigure`, beside the rates it needs and shared
+ * with the terminal table. Only the words are decided here: a document read
+ * cold by somebody who was not there says what it means, where the terminal
+ * column can spend an em dash on it.
  */
 function priced(session: Session, rates: RateTable): string {
-  return sessionFigure(session.cost, rates) ?? "unpriced";
+  const figure = sessionFigure(session.cost, rates);
+  if (figure !== undefined) {
+    return figure;
+  }
+  return wasMeasured(session.cost) ? "unpriced" : "not captured";
 }
 
 /**
@@ -306,7 +314,7 @@ function priced(session: Session, rates: RateTable): string {
  * be a report whose total is smaller than the bill.
  *
  * Three shapes, for the same reason the headline has two. These sessions are
- * not in `shown`, so `unpricedNote` never counts them: this line is the only
+ * not in `shown`, so `coverageNote` never counts them: this line is the only
  * place the document can admit that some of the bill has no rate behind it,
  * and staying silent would drop the money exactly where it cannot be totalled.
  * A clause omitted because nothing was spent and a clause omitted because
@@ -318,11 +326,7 @@ function emptyNote(empties: readonly Session[], rates: RateTable): string | unde
     return undefined;
   }
   const spend = spendOf(empties, rates);
-  const cost = unpricedThroughout(spend)
-    ? `, costing an amount no rate covers (${spend.unpricedModels.join(", ")})`
-    : spend.usd > 0
-      ? `, costing ${formatUsd(spend.usd)}`
-      : "";
+  const cost = emptyCost(spend);
   return (
     `${plural(empties.length, "session", "sessions")} changed no files and ` +
     `${empties.length === 1 ? "is" : "are"} not in the table${cost}.`
@@ -330,29 +334,75 @@ function emptyNote(empties: readonly Session[], rates: RateTable): string | unde
 }
 
 /**
- * How much of the table the money covers.
+ * What that money was, where there is a figure for it at all.
+ *
+ * Three ways to have none, and each says which. A model with no rate names the
+ * model; a session with nothing captured names no model, because there is no
+ * model on the record to name — a clause reading `an amount no rate covers ()`
+ * would be this document admitting a gap and then failing to say what it was.
+ * A window that simply cost nothing says nothing, since the sentence above it
+ * has already said these sessions are not in the table.
+ */
+function emptyCost(spend: Spend): string {
+  if (unpricedThroughout(spend)) {
+    return spend.unpriced > 0
+      ? `, costing an amount no rate covers (${spend.unpricedModels.join(", ")})`
+      : ", and nothing was captured to say what they cost";
+  }
+  return spend.usd > 0 ? `, costing ${formatUsd(spend.usd)}` : "";
+}
+
+/**
+ * How much of the table the money covers, and what it leaves out.
  *
  * Said outright rather than folded in. The figure below is a total over the
  * sessions that could be priced, and a total with a silent hole in it is the
  * kind of number that ends up in an invoice — the whole reason `pricing.ts`
  * refuses to guess a rate.
  *
- * "Below", because the money is the closing line now. Two shapes, because "the
- * cost below covers 0 of 2 sessions" points at a cost that is not there; where
- * nothing could be priced the closing line says so itself, and what is left
- * here is how many sessions that was and what to do about it.
+ * Both holes are named, and named apart. A missing rate is somebody's next
+ * five minutes; a session with nothing captured is not, and pointing that
+ * reader at a rates file would be pointing them at a fix for a different
+ * problem. Between them they account for every cell in the column that is not
+ * a figure.
+ *
+ * "Below", because the money is the closing line. The count is dropped where
+ * nothing could be priced at all: "the cost below covers 0 of 2 sessions"
+ * points at a cost the document deliberately did not print, and the closing
+ * line already says so itself.
  */
-function unpricedNote(spend: Spend, shown: number): string | undefined {
-  if (spend.unpriced === 0) {
+function coverageNote(spend: Spend, shown: number): string | undefined {
+  const missing = spend.unpriced + spend.uncaptured;
+  if (missing === 0) {
     return undefined;
   }
-  const models = spend.unpricedModels.join(", ");
-  const ran = `${plural(spend.unpriced, "session", "sessions")} ran on a model with no rate (${models})`;
 
-  if (unpricedThroughout(spend)) {
-    return `${ran}. Add one to ${RATES_HINT}.`;
+  const nothingPriced = unpricedThroughout(spend);
+  const parts: string[] = [];
+
+  // Dropped where nothing could be priced at all: "the cost below covers 0 of
+  // 2 sessions" points at a figure the document deliberately did not print,
+  // and the closing line says so itself.
+  if (!nothingPriced) {
+    parts.push(`The cost below covers ${shown - missing} of ${shown} sessions.`);
   }
-  return `The cost below covers ${shown - spend.unpriced} of ${shown} sessions. ${ran}.`;
+  if (spend.unpriced > 0) {
+    const models = spend.unpricedModels.join(", ");
+    parts.push(
+      `${plural(spend.unpriced, "session", "sessions")} ran on a model with no rate (${models}).`,
+    );
+    if (nothingPriced) {
+      parts.push(`Add one to ${RATES_HINT}.`);
+    }
+  }
+  if (spend.uncaptured > 0) {
+    parts.push(
+      `${plural(spend.uncaptured, "session", "sessions")} had no turns on the record, ` +
+        "so nothing was captured to price.",
+    );
+  }
+
+  return parts.join(" ");
 }
 
 /** The legend for the marker, and only when a row carries one. */

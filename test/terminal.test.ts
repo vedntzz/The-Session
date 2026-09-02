@@ -8,6 +8,7 @@ import {
   formatHome,
   formatSession,
   formatWeek,
+  SHORT_ID,
   type View,
 } from "../src/render/terminal.js";
 import { zeroCost, zeroTokens, type Session, type SessionCost } from "../src/store.js";
@@ -117,6 +118,7 @@ describe("formatSession", () => {
       "  changed     api/middleware/rate_limit.py  api/orders.py",
       "  outside     ! db/schema.py                            ← you did not declare this",
       "",
+      "  id          11111111",
       "  cost        $0.42                                     3 turns, 1 that produced nothing",
       "  no edits    $0.05                                     41 api calls",
     ]);
@@ -176,6 +178,55 @@ describe("formatSession", () => {
 
     expect(line(lines, "cost")).toContain("84,200 tokens, claude-opus-5 unpriced");
     expect(lines.some((text) => text.includes("$"))).toBe(false);
+  });
+
+  it("names the id, so the session can be handed to pr, show or mark", () => {
+    // No view printed one before this row existed, and `session pr <id>` and
+    // `session mark <id>` both take one — the id was in the JSONL and nowhere
+    // a reader would look.
+    const lines = render({ reality: ["api/orders.py"] });
+
+    expect(visible(line(lines, "id") as string)).toBe("  id          11111111");
+  });
+
+  it("prints the id even where nothing was captured to cost", () => {
+    const lines = render({ cost: zeroCost() });
+
+    expect(visible(line(lines, "id") as string)).toBe("  id          11111111");
+    expect(lines.join("\n")).not.toContain("api call");
+  });
+
+  it("dates the prices under the counters --tokens asked for", () => {
+    const lines = render(
+      { cost: cost({ inputTokens: 1_200, turns: 3, apiCalls: 4 }) },
+      { ...priced, tokens: true, checked: "2026-08-23" },
+    );
+
+    // The date and where to override it, and no judgement about either: how
+    // stale a price is depends on whether a vendor moved one.
+    expect(visible(lines.at(-1) as string)).toBe(
+      "  prices checked 2026-08-23 — override in ~/.session/rates.json",
+    );
+  });
+
+  it("keeps the date out of the layout --tokens did not ask for", () => {
+    const lines = render(
+      { cost: cost({ inputTokens: 1_200, turns: 3, apiCalls: 4 }) },
+      { ...priced, checked: "2026-08-23" },
+    );
+
+    expect(lines.join("\n")).not.toContain("prices checked");
+  });
+
+  it("says nothing about the age of a price it could not apply", () => {
+    const lines = render(
+      { cost: cost({ model: "mystery-9", inputTokens: 1_200, turns: 3, apiCalls: 4 }) },
+      { ...priced, tokens: true, checked: "2026-08-23" },
+    );
+
+    // There is no figure for a date to qualify, and dating the prices here
+    // would read as an explanation of why the money is missing.
+    expect(lines.join("\n")).not.toContain("prices checked");
   });
 
   it("spells out the four counters when --tokens asks for them", () => {
@@ -354,6 +405,7 @@ function week(): Session[] {
     // rule that git does not contradict, and one that changed nothing at all —
     // where git settles that every turn in it produced nothing.
     session({
+      id: "a1b2c3d4-2222-3333-4444-555555555555",
       intent: "add rate limiting to /orders",
       startedAt: at(9, 14),
       reality: ["api/orders.py"],
@@ -367,6 +419,7 @@ function week(): Session[] {
       outcome: "open",
     }),
     session({
+      id: "b2c3d4e5-2222-3333-4444-555555555555",
       intent: "refactor the transcript store adapter",
       startedAt: at(11, 2),
       reality: ["src/store.ts"],
@@ -380,6 +433,7 @@ function week(): Session[] {
       outcome: "merged",
     }),
     session({
+      id: "c3d4e5f6-2222-3333-4444-555555555555",
       intent: "try the websocket thing",
       startedAt: at(8, 31, 16),
       reality: [],
@@ -457,6 +511,8 @@ describe("a session the hook recorded", () => {
       "  declared    no scope — nothing was declared to drift from" +
         "  ← session start --scope is what makes drift visible",
       "  changed     api/orders.py",
+      "",
+      "  id          11111111",
     ]);
   });
 
@@ -486,15 +542,50 @@ describe("formatWeek", () => {
       "",
       "  3 sessions · 1 landed on the default branch · 1 did not · 1 still open",
       "",
-      "  started      intent                        outcome    drift files  turns  empty   cost",
-      "  01-15 09:14  add rate limiting to /orders  open                 0      3      1  $1.26",
-      "  01-15 11:02  refactor the transcript sto…  merged               0     12      5  $6.19",
-      "  01-16 08:31  try the websocket thing       abandoned            0      4      4  $1.55",
+      "  id        started      intent                        outcome    drift files  turns  empty   cost",
+      "  a1b2c3d4  01-15 09:14  add rate limiting to /orders  open                 0      3      1  $1.26",
+      "  b2c3d4e5  01-15 11:02  refactor the transcript sto…  merged               0     12      5  $6.19",
+      "  c3d4e5f6  01-16 08:31  try the websocket thing       abandoned            0      4      4  $1.55",
       "",
-      "  3 sessions                                                      0     19     10",
+      "  3 sessions                                                                0     19     10",
       "  10 of 19 turns changed no files",
       "  $9.00 spent, $2.81 of it on changes that never merged",
     ]);
+  });
+
+  it("prints the id every command that takes one accepts, at settle's width", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
+
+    expect(lines[3]).toMatch(/^ {2}id {8}started/);
+    week().forEach((one, index) => {
+      const row = lines[4 + index] as string;
+      // A prefix of the real id, so it can be typed back at `pr` or `mark`.
+      expect(row.trim().split(/\s+/)[0]).toBe(one.id.slice(0, SHORT_ID));
+    });
+  });
+
+  it("dates the prices under the money, and says where to override them", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, checked: "2026-08-23" });
+
+    expect(lines.at(-2)).toContain("$9.00 spent");
+    expect(lines.at(-1)).toBe("  prices checked 2026-08-23 — override in ~/.session/rates.json");
+  });
+
+  it("says nothing about the age of prices where there is no figure to date", () => {
+    const unpriced = week().map((one) => ({
+      ...one,
+      cost: { ...one.cost, model: "mystery-9" },
+    }));
+    const lines = formatWeek(unpriced, 7, plainPalette, {}, { ...priced, checked: "2026-08-23" });
+
+    expect(lines.join("\n")).toContain("nothing here could be priced");
+    expect(lines.join("\n")).not.toContain("prices checked");
+  });
+
+  it("prints no date at all where the rates file states none", () => {
+    expect(formatWeek(week(), 7, plainPalette, {}, priced).join("\n")).not.toContain(
+      "prices checked",
+    );
   });
 
   it("leads with where the work went, before any figure", () => {
@@ -610,10 +701,10 @@ describe("formatWeek", () => {
     const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, tokens: true });
 
     expect(lines[3]).toBe(
-      "  started      intent                        outcome    drift files  turns   tokens  empty   cost",
+      "  id        started      intent                        outcome    drift files  turns   tokens  empty   cost",
     );
     expect(lines[4]).toBe(
-      "  01-15 09:14  add rate limiting to /orders  open                 0      3   84,200      1  $1.26",
+      "  a1b2c3d4  01-15 09:14  add rate limiting to /orders  open                 0      3   84,200      1  $1.26",
     );
   });
 
@@ -674,7 +765,7 @@ describe("formatWeek", () => {
   it("writes off abandoned sessions and leaves the others in normal weight", () => {
     const lines = formatWeek(week(), 7, tagged, {}, priced);
 
-    expect(lines[6]).toMatch(/^<abandoned> {2}01-16 08:31/);
+    expect(lines[6]).toMatch(/^<abandoned> {2}c3d4e5f6 {2}01-16 08:31/);
     expect(lines[6]).toMatch(/\$1\.55<\/abandoned>$/);
     expect(lines[5]).not.toContain("<abandoned>");
     expect(lines[4]).not.toContain("<abandoned>");
@@ -719,7 +810,9 @@ describe("formatWeek", () => {
 
   it("totals the drift files, turns and empty turns across the week", () => {
     const footer = formatWeek(week(), 7, plainPalette, {}, priced).at(-3) as string;
-    expect(footer).toBe("  3 sessions                                                      0     19     10");
+    expect(footer).toBe(
+      "  3 sessions                                                                0     19     10",
+    );
   });
 
   it("leaves the cost out of the totals row, so the footnote is the only total", () => {
@@ -823,7 +916,8 @@ describe("formatWeek", () => {
 
   it("dates each row, so a window wider than a day stays readable", () => {
     const rows = formatWeek(week(), 30, plainPalette, {}, priced).slice(4, 7);
-    expect(rows.map((row) => row.slice(2, 13))).toEqual([
+    // Past the indent and the id column, which is `SHORT_ID` wide plus its gap.
+    expect(rows.map((row) => row.slice(12, 23))).toEqual([
       "01-15 09:14",
       "01-15 11:02",
       "01-16 08:31",
@@ -934,6 +1028,8 @@ describe("a filtered week", () => {
 
 describe("a week where nothing could be priced", () => {
   const unpriced = cost({ model: "mystery-9", inputTokens: 100_000, turns: 3, apiCalls: 9 });
+  /** Ran, on a model with a rate, and moved nothing worth charging for. */
+  const free_ = cost({ turns: 9, apiCalls: 20 });
 
   it("puts a dash in the footnote rather than a nought", () => {
     const lines = formatWeek([session({ cost: unpriced })], 7, plainPalette, {}, priced);
@@ -953,19 +1049,22 @@ describe("a week where nothing could be priced", () => {
   });
 
   it("says nothing about rates for a week that genuinely cost nothing", () => {
-    // Nothing was captured, so no rate is missing and there is no gap to
-    // report — the distinction `--md` draws with the same two counters.
-    const free = formatWeek([session({ cost: cost() })], 7, plainPalette, {}, priced);
+    // A session that ran, on a model with a rate, whose tokens came to
+    // nothing. No rate is missing, so there is no gap to report — the
+    // distinction `--md` draws with the same counters.
+    const free = formatWeek([session({ cost: free_ })], 7, plainPalette, {}, priced);
 
     expect(free.join("\n")).not.toContain("unpriced");
   });
 
   it("footnotes a week that genuinely cost nothing at $0.00, not a dash", () => {
-    // The other half of the rule. The rows above read $0.00, so a dash is an
-    // absence written over a column of noughts the reader can see. No
-    // shipped-note either: "all of it shipped" over $0.00 is a claim about no
-    // money at all.
-    const free = formatWeek([session({ cost: cost() })], 7, plainPalette, {}, priced);
+    // The other half of the rule, and what `wasMeasured` protects: this
+    // session ran nine turns on a model with a rate and moved no tokens worth
+    // charging for, so the nought was measured. The rows above read $0.00, and
+    // a dash over a column of noughts is a table that visibly does not add up.
+    // No shipped-note either: "all of it shipped" over $0.00 is a claim about
+    // no money at all.
+    const free = formatWeek([session({ cost: free_ })], 7, plainPalette, {}, priced);
 
     expect(free.at(-1)).toBe("  $0.00 spent");
     expect(free.join("\n")).not.toContain("—");
@@ -975,7 +1074,7 @@ describe("a week where nothing could be priced", () => {
     // One session with a rate and no tokens, one with tokens and no rate.
     // The sum is nought and it is not what the week cost, so no figure.
     const mixed = formatWeek(
-      [session({ cost: cost() }), session({ cost: unpriced })],
+      [session({ cost: free_ }), session({ cost: unpriced })],
       7,
       plainPalette,
       {},
@@ -990,14 +1089,23 @@ describe("a week where nothing could be priced", () => {
 
 describe("one record, what it cost, and every view of it", () => {
   /**
-   * Nothing captured at all: no model, no turns, no calls. The rate table has
-   * nothing to say about it and nothing is missing — which is `$0.00`, a
-   * measurement, and not the em dash that means nobody can put a figure on it.
+   * Nothing captured at all: no model, no turns, no calls — and a file
+   * changed, which is the shape a real log holds by the dozen. `session start`
+   * and `session stop` see the diff whether or not an adapter found a
+   * transcript, so this session changed a file, may well have been billed for
+   * it, and has nothing on the record to price.
+   *
+   * So it gets no figure on any surface. `$0.00` here is a claim that the work
+   * was free; the em dash is the absence it actually is.
    *
    * It changed a file, so the empty-turn column is a dash for its own reason.
    * That is why these assertions go at the cost cell rather than at the row.
    */
-  const nothingCaptured = session({ cost: zeroCost(), outcome: "merged", reality: ["a.py"] });
+  const nothingCaptured = session({
+    cost: zeroCost(),
+    outcome: "merged",
+    reality: ["src/git.ts"],
+  });
   const NOW = new Date(2026, 0, 15, 18, 0);
 
   /** The last column of a terminal row, which is where the money is. */
@@ -1012,20 +1120,38 @@ describe("one record, what it cost, and every view of it", () => {
       .map((cell) => cell.trim())
       .at(-2) as string;
 
-  it("says the same thing in the row, in the footnote and in --md", () => {
-    // One record, three surfaces. A row reading an em dash under a footnote
-    // reading $0.00 is the failure this tool's whole claim rests on not
-    // making, and for a while it was what the terminal did: the carve-out
-    // lived in the Markdown renderer alone.
+  it("refuses a figure in the row, in the footnote and in --md alike", () => {
+    // One record, three surfaces, one answer: nobody can say what this cost.
+    // A row reading an em dash under a footnote reading $0.00 is the failure
+    // this tool's whole claim rests on not making.
     const lines = formatWeek([nothingCaptured], 7, plainPalette, {}, priced);
     const row = lines.find((line) => line.includes("rate limiting")) as string;
     const footnote = lines.find((line) => line.includes("spent")) as string;
     const document = renderMarkdownWeek([nothingCaptured], 7, priced, NOW);
 
-    expect(terminalCost(row)).toBe("$0.00");
-    expect(footnote.trim().split(" ")[0]).toBe("$0.00");
-    expect(markdownCost(document)).toBe("$0.00");
-    expect(new Set([terminalCost(row), footnote.trim().split(" ")[0], markdownCost(document)]).size).toBe(1);
+    expect(terminalCost(row)).toBe("—");
+    expect(footnote).toBe("  — spent: nothing here could be priced");
+    // The word is the surface's own — a column read at a glance can spend an
+    // em dash, a document read cold says what it means — but no surface may
+    // put a nought where none of them has a figure.
+    expect(markdownCost(document)).toBe("not captured");
+    expect(`${lines.join("\n")}\n${document}`).not.toContain("$0.00");
+  });
+
+  it("accounts for that row in the note under the table, on both surfaces", () => {
+    // A cell that says nothing, under a footer that counts nothing, is a hole
+    // the reader can see and the report will not admit to.
+    const lines = formatWeek([nothingCaptured], 7, plainPalette, {}, priced);
+    const document = renderMarkdownWeek([nothingCaptured], 7, priced, NOW);
+
+    expect(lines.join("\n")).toContain(
+      "1 session uncaptured: no turns on the record, so nothing to price",
+    );
+    expect(document).toContain("1 session had no turns on the record");
+    // Not sent to a rates file: no rate would fill this, and there is no
+    // model on the record to want one for.
+    expect(lines.join("\n")).not.toContain("unpriced");
+    expect(document).not.toContain("no rate (");
   });
 
   it("still refuses a figure for a session that ran on a model with no rate", () => {
@@ -1156,6 +1282,15 @@ describe("formatBrief", () => {
     );
   });
 
+  it("leads the bottom line with the id, at the width every other view prints", () => {
+    const lines = brief({
+      reality: ["src/api/orders.ts"],
+      cost: cost({ inputTokens: 100_000, turns: 9, apiCalls: 40 }),
+    });
+
+    expect((lines.at(-1) as string).trim().split(" ")[0]).toBe("11111111");
+  });
+
   it("puts the cost, the turns and the empty turns on one line and stops", () => {
     const lines = brief({
       reality: ["src/api/orders.ts"],
@@ -1168,7 +1303,7 @@ describe("formatBrief", () => {
       }),
     });
 
-    expect(lines.at(-1)).toBe("  $1.50 · 9 turns · 3 produced nothing");
+    expect(lines.at(-1)).toBe("  11111111 · $1.50 · 9 turns · 3 produced nothing");
     // The api-call counters and the token breakdown are --full's business.
     expect(lines.join("\n")).not.toContain("api call");
     expect(lines.join("\n")).not.toContain("no edits");
@@ -1183,7 +1318,7 @@ describe("formatBrief", () => {
     // A `— produced nothing` in a line read at a glance is a puzzle about the
     // tool rather than a fact about the session. `--full` spells the absence
     // out; this line simply stops.
-    expect(lines.at(-1)).toBe("  $1.50 · 9 turns");
+    expect(lines.at(-1)).toBe("  11111111 · $1.50 · 9 turns");
   });
 
   it("reports an unpriced model rather than pricing it at a guess", () => {
@@ -1194,12 +1329,13 @@ describe("formatBrief", () => {
     expect(lines.at(-1)).toContain("100,000 tokens, mystery-9 unpriced");
   });
 
-  it("leaves the figures out when nothing was captured", () => {
+  it("leaves the figures out when nothing was captured, and keeps the id", () => {
     // A row of zeroes reads as a measurement of nothing rather than as an
-    // absence of measurement.
+    // absence of measurement. The id is not a figure and is still the handle
+    // this session answers to, so it stays.
     const lines = brief({ cost: zeroCost() });
 
-    expect(lines).toHaveLength(4);
+    expect(lines.at(-1)).toBe("  11111111");
     expect(lines.join("\n")).not.toContain("turn");
   });
 

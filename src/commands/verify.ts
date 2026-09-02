@@ -1,4 +1,5 @@
 import { loadPublicKey, publicKeyFile, publicKeyFrom, type PublicKey } from "../keys.js";
+import { shortId } from "../render/terminal.js";
 import { readLog, readLogFile, storeHome, type StoreOptions } from "../store.js";
 import { linesOf, peerFingerprints, readPeerLogs } from "../sync.js";
 import { checkChain, isEmpty, isIntact, type ChainCheck } from "../verify.js";
@@ -286,7 +287,7 @@ function chainLines(check: ChainCheck): string[] {
   }
   const out = [line("broken", `line ${broken.line} ${broken.detail}`)];
   if (broken.id) {
-    out.push(line("record", `${broken.id.slice(0, 8)}${broken.at ? `  ${broken.at}` : ""}`));
+    out.push(line("record", `${shortId(broken.id)}${broken.at ? `  ${broken.at}` : ""}`));
   }
   const before = `${plural(check.verified, "record", "records")} verified before the break`;
   out.push(line("chain", before));

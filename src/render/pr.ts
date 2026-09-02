@@ -1,7 +1,13 @@
 // The pull request a session's record already describes. Pure: one session and
 // the rates in, one Markdown document out.
 import { emptyTurnsOf } from "../empty.js";
-import { formatUsd, isPriced, priceSession, type RateTable } from "../pricing.js";
+import {
+  formatUsd,
+  isPriced,
+  priceSession,
+  wasMeasured,
+  type RateTable,
+} from "../pricing.js";
 import { isCaptured, type Session } from "../store.js";
 import { unpricedTokens } from "./terminal/cost.js";
 import { CAPTURED_INTENT, intentOf, NO_SCOPE } from "./terminal/intent.js";
@@ -373,7 +379,9 @@ function grouped(paths: readonly string[]): string[] {
  */
 function costLine(session: Session, rates: RateTable): string {
   const { cost } = session;
-  if (cost.turns === 0 && cost.apiCalls === 0) {
+  // The one test for "nothing was captured", from `pricing.ts`, so this
+  // document and the tables cannot disagree about which sessions have a figure.
+  if (!wasMeasured(cost)) {
     return NOTHING_MEASURED;
   }
 

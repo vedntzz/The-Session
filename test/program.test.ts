@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import type { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOOKS } from "../src/capture/hook.js";
 import { sweepStampFile } from "../src/commands/sweep.js";
@@ -109,7 +110,41 @@ describe("session", () => {
     expect(lines[3]).toContain("started");
     expect(lines[4]).toContain("the first thing");
     expect(lines[5]).toContain("the second thing");
-    expect(lines.at(-2)).toContain("2 sessions");
+    // Third from the end now: the money line and the date under it close the
+    // view, in that order.
+    expect(lines.at(-3)).toContain("2 sessions");
+  });
+
+  it("prints an id in week that show and pr take back", async () => {
+    await run("start", "the first thing");
+    await run("stop");
+
+    const row = (await run("week")).find((line) => line.includes("the first thing")) as string;
+    const id = row.trim().split(/\s+/)[0] as string;
+
+    // The whole point of the column: what is printed is what the commands
+    // that take an id accept, without opening the JSONL to find a longer one.
+    const [recorded] = await readSessions(store);
+    expect((recorded as Session).id.startsWith(id)).toBe(true);
+    expect((await run("show", id)).join("\n")).toContain("the first thing");
+  });
+
+  it("prints the same id in show, so the last session can be handed on", async () => {
+    await run("start", "the first thing");
+    await run("stop");
+
+    const [recorded] = await readSessions(store);
+    const short = (recorded as Session).id.slice(0, 8);
+
+    expect((await run("show")).at(-1)).toContain(short);
+    expect((await run("show", "--full")).join("\n")).toContain(`id          ${short}`);
+  });
+
+  it("keeps the date out of week --md, which is a document about a week", async () => {
+    await run("start", "the first thing");
+    await run("stop");
+
+    expect((await run("week", "--md")).join("\n")).not.toContain("prices checked");
   });
 
   it("week says so when nothing is in the window", async () => {
@@ -123,7 +158,7 @@ describe("session", () => {
     const lines = await run("week", "--days", "1");
 
     expect(lines[4]).toContain("today's thing");
-    expect(lines.at(-2)).toContain("1 session");
+    expect(lines.at(-3)).toContain("1 session");
   });
 
   it("week refuses a --days that is not a whole number of days", async () => {
@@ -472,6 +507,22 @@ describe("session", () => {
       .outputHelp();
 
     expect(written.join("")).toMatch(/^.*session help all\./m);
+  });
+
+  it("keeps `help all` inside the top-level list it describes", () => {
+    // The override renames the root's own `help`, and commander gives every
+    // command with subcommands an implicit one. Matched on the name alone it
+    // renamed those too, and `session hook --help` advertised a `session hook
+    // help all` that does not exist.
+    const program = buildProgram(store);
+    for (const name of ["hook", "key", "config"]) {
+      const sub = program.commands.find((one) => one.name() === name) as Command;
+      const help = sub.helpInformation();
+
+      expect(help, name).not.toContain("help all");
+      expect(help, name).toContain("help [command]");
+    }
+    expect(program.helpInformation()).toContain("help all");
   });
 
   it("help all lists every command, including the ones --help leaves out", async () => {
@@ -1062,14 +1113,16 @@ describe("session, priced", () => {
     await spent();
     const lines = await run("show");
 
-    expect(lines.at(-1)).toMatch(/^ {2}\$15\.00 · \d+ turns?$/);
+    expect(lines.at(-1)).toMatch(/^ {2}[0-9a-f]{8} · \$15\.00 · \d+ turns?$/);
   });
 
   it("show adds the empty turns to that line when the diff can say", async () => {
     await spentOnNothing();
     const lines = await run("show");
 
-    expect(lines.at(-1)).toMatch(/^ {2}\$15\.00 · \d+ turns? · \d+ produced nothing$/);
+    expect(lines.at(-1)).toMatch(
+      /^ {2}[0-9a-f]{8} · \$15\.00 · \d+ turns? · \d+ produced nothing$/,
+    );
   });
 
   it("show --tokens spells the counters out as well, and implies --full", async () => {
@@ -1157,16 +1210,60 @@ describe("session, priced", () => {
   });
 
   it("week --md still totals a week that genuinely cost nothing at $0.00", async () => {
-    // The other half, through the same command: nothing was captured, so no
-    // rate is missing and the nought is a figure somebody measured.
+    // The other half, through the same command: four turns on the record, a
+    // model with a rate, and no tokens worth charging for. The nought is a
+    // figure somebody measured.
     await run("start", "cost nothing at all");
     await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    store = { ...store, adapters: spending("claude-opus-4-1", 0) };
     await run("stop");
+    store = { ...store, adapters: [] };
 
     const document = (await run("week", "--md")).join("\n");
 
     expect(document).toContain("$0.00 spent");
     expect(document).not.toContain("cost unavailable");
+  });
+
+  it("refuses a figure for a session no transcript was found for", async () => {
+    // The case a real log is full of: `start` and `stop` see the diff whether
+    // or not an adapter saw anything, so this session changed a file, may well
+    // have been billed for it, and has nothing on the record to price.
+    await run("start", "no transcript for this one");
+    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
+    await run("stop");
+
+    const lines = await run("week");
+    const row = lines.find((line) => line.includes("no transcript for this one")) as string;
+    const document = (await run("week", "--md")).join("\n");
+
+    expect(row.trimEnd().split(/\s+/).at(-1)).toBe("—");
+    expect(lines.at(-2)).toBe("  — spent: nothing here could be priced");
+    expect(lines.at(-1)).toBe(
+      "  1 session uncaptured: no turns on the record, so nothing to price",
+    );
+    expect(document).toContain("| not captured |");
+    expect(`${lines.join("\n")}\n${document}`).not.toContain("$0.00");
+  });
+
+  it("dates the prices under the money in week", async () => {
+    await spent();
+
+    const lines = await run("week");
+
+    expect(lines.at(-2)).toContain("spent");
+    expect(lines.at(-1)).toMatch(
+      /^ {2}prices checked \d{4}-\d{2}-\d{2} — override in ~\/\.session\/rates\.json$/,
+    );
+  });
+
+  it("keeps the date out of a week with no figure to put it under", async () => {
+    // Nothing captured, so there is no money for a date to qualify — and a
+    // date under a dash would read as an explanation of the missing figure.
+    await run("start", "no transcript for this one");
+    await run("stop");
+
+    expect((await run("week")).join("\n")).not.toContain("prices checked");
   });
 
   it("prices an unknown model once rates.json in the store names it", async () => {
@@ -1291,7 +1388,7 @@ describe("passive capture, end to end", () => {
     const lines = await run("week");
 
     expect(lines[4]).toContain("~ why does /orders 500");
-    expect(lines.at(-2)).toContain("1 session recorded by the hook");
+    expect(lines.at(-3)).toContain("1 session recorded by the hook");
   });
 
   it("says on show that the intent was captured and no scope was declared", async () => {

@@ -129,7 +129,16 @@ A `rates.json` ships with the package: dollars per million tokens, per model, pe
 }
 ```
 
-That file is merged over the bundled one **entry by entry**, so adding one model does not mean copying the whole table and inheriting its staleness. Models are matched exactly or by the longest key that is a prefix at a dash, which is how `claude-sonnet-4-5` prices the dated `claude-sonnet-4-5-20250929` a transcript actually reports.
+That file is merged over the bundled one **entry by entry**, so adding one model does not mean copying the whole table and inheriting its staleness.
+
+The bundled file also states the date its prices were last checked, and every view that quotes them says so: one dim line under the figure, in `week` and at the foot of `session show --tokens`.
+
+```
+  $9.00 spent, $2.81 of it on changes that never merged
+  prices checked 2026-08-23 — override in ~/.session/rates.json
+```
+
+It states the date and stops. No staleness threshold, no warning, no colour: whether a fortnight-old price is out of date depends on whether a vendor moved one, which this tool cannot know and the person holding the invoice can. A figure quoted at prices of no stated age is the thing being fixed, not a figure that needs a judgement attached. And it is printed only where there is a figure to date — a week nothing could be priced in has no money for a date to qualify. Models are matched exactly or by the longest key that is a prefix at a dash, which is how `claude-sonnet-4-5` prices the dated `claude-sonnet-4-5-20250929` a transcript actually reports.
 
 A model in neither file is not priced at whatever the nearest model costs. It says so:
 
@@ -478,7 +487,19 @@ Three things it will not do. It will not print a total that quietly omits sessio
 No cost could be worked out: 2 sessions ran on a model with no rate (mystery-9). Add one to ~/.session/rates.json.
 ```
 
-A week that genuinely cost nothing still reads `$0.00`, because that is a figure somebody measured — and it reads that way in every view, so a dash never appears over a column of noughts. The rule holds in the other views too: the terminal table puts a dash in its total and leaves the spend line out, the HTML page omits the money from its summary, and `estimate` says so in place of the median. All four ask the same function, so they cannot come to disagree about what a week cost.
+A week that genuinely cost nothing still reads `$0.00`, because that is a figure somebody measured — sessions that ran, on models with rates, whose tokens came to nothing. It reads that way in every view, so a dash never appears over a column of noughts. The rule holds in the other views too: the terminal table puts a dash in its total and leaves the spend line out, the HTML page omits the money from its summary, and `estimate` says so in place of the median. All four ask the same function, so they cannot come to disagree about what a week cost.
+
+**A session with no turns is the other absence, and it is not a nought either.** `session start` and `session stop` record what the diff says whether or not any transcript was found, so a log holds sessions that changed files, took an hour and had nothing captured for them. Printing `$0.00` there says the work was free; what happened is that nobody knows what it cost. Those rows read `—` in the terminal and `not captured` in the document, and the note under the table counts them apart from the unpriced ones — a missing rate is somebody's next five minutes, and this is not:
+
+```
+  d753f657  09-01 12:56  tidy the changelog links      abandoned            1      0      —       —
+
+  $182.25 spent, $3.63 of it on changes that never merged
+  prices checked 2026-08-23 — override in ~/.session/rates.json
+  8 sessions uncaptured: no turns on the record, so nothing to price
+```
+
+`wasMeasured` in `pricing.ts` is the whole of the test, and it is turns and nothing else: a turn is a prompt somebody sent, and a session with none had no transcript behind it.
 
 ## The pull request writes itself
 
@@ -757,6 +778,8 @@ Commands:
   week [options]            Summarize recent sessions, one row each
   help all                  Every command, not just the ones above
 ```
+
+`help all` is the term for the root's own `help` and no other. Commander gives every command with subcommands an implicit `help` of its own; the override that renames ours is guarded on the parent rather than the name, because matched by name it renamed those too and `session hook --help` went out advertising a `session hook help all` that does not exist.
 
 Nothing is removed by this. Every command below still runs, and `session help all` lists all of them with their descriptions. The short list is a decision about what a first reader can use, not a claim about what exists — a help screen with fifteen entries is one nobody finishes, and the commands that get lost in it are the ones a newcomer most needs.
 

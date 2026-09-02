@@ -2,7 +2,7 @@
 // rates in, one report out. Nothing here reads a file or runs git — see
 // `commands/debt.ts` for that half.
 import { classOfPath, type SessionClass } from "./classify.js";
-import { isPriced, priceSession, type RateTable } from "./pricing.js";
+import { isPriced, priceSession, wasMeasured, type RateTable } from "./pricing.js";
 import { inScope } from "./scope.js";
 import type { Session } from "./store.js";
 
@@ -67,6 +67,12 @@ export interface DebtSpend {
   unpriced: number;
   /** Which models those were, distinct and sorted. */
   unpricedModels: string[];
+  /**
+   * How many of them had nothing captured at all — no turns, so no tokens and
+   * no model. Kept apart from `unpriced` for the reason `Spend.uncaptured`
+   * is: a rate fixes one of these and nothing fixes the other.
+   */
+  uncaptured: number;
 }
 
 /** One file that keeps being changed by sessions that never declared it. */
@@ -259,16 +265,24 @@ function spendOfDebt(sessions: readonly Session[], rates: RateTable): DebtSpend 
   const models = new Set<string>();
   let usd = 0;
   let unpriced = 0;
+  let uncaptured = 0;
 
   for (const session of sessions) {
+    // `wasMeasured` first, as in `spendOf`: a session with no turns has no
+    // model to look up, and totalling it as nought would say the work on this
+    // file was free when what happened is that nothing was captured.
+    if (!wasMeasured(session.cost)) {
+      uncaptured += 1;
+      continue;
+    }
     const price = priceSession(session.cost, rates);
     if (isPriced(price)) {
       usd += price.usd;
-    } else if (session.cost.apiCalls > 0 || session.cost.turns > 0) {
+    } else {
       unpriced += 1;
       models.add(session.cost.model === "" ? "unknown" : session.cost.model);
     }
   }
 
-  return { usd, unpriced, unpricedModels: [...models].sort() };
+  return { usd, unpriced, unpricedModels: [...models].sort(), uncaptured };
 }

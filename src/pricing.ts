@@ -146,6 +146,18 @@ export interface Spend {
   unpriced: number;
   /** Which models those were, distinct and sorted, for a message worth acting on. */
   unpricedModels: string[];
+  /**
+   * How many sessions nothing was captured for — no turns, so no tokens and
+   * no model either.
+   *
+   * Counted apart from `unpriced` because the two absences want different
+   * answers from the reader. An unpriced session names a model and is fixed by
+   * a rate; this one names nothing, and no rate would fill it — there is
+   * nothing on the record to price. Folding them together would put a session
+   * with no transcript into a note telling somebody to add a rate for a model
+   * called `unknown`.
+   */
+  uncaptured: number;
 }
 
 /**
@@ -154,16 +166,27 @@ export interface Spend {
  */
 export function spendOf(sessions: readonly Session[], rates: RateTable): Spend {
   const models = new Set<string>();
-  const spend: Spend = { usd: 0, unmerged: 0, empty: 0, unpriced: 0, unpricedModels: [] };
+  const spend: Spend = {
+    usd: 0,
+    unmerged: 0,
+    empty: 0,
+    unpriced: 0,
+    unpricedModels: [],
+    uncaptured: 0,
+  };
 
   for (const session of sessions) {
+    // Asked first, and the same call `sessionFigure` makes for the row: a
+    // session with no turns has no model to look up and no tokens to multiply,
+    // so it is a hole in the total rather than a nought in it.
+    if (!wasMeasured(session.cost)) {
+      spend.uncaptured += 1;
+      continue;
+    }
     const price = priceSession(session.cost, rates);
     if (price.priced) {
       addSpend(spend, price.usd, session.outcome);
-    } else if (wasMeasured(session.cost)) {
-      // A session that spent nothing at all needs no rate, and reporting it as
-      // unpriced would be reporting a gap that costs nobody anything. The same
-      // call `sessionFigure` makes for the row, from the same function.
+    } else {
       spend.unpriced += 1;
       models.add(session.cost.model === "" ? "unknown" : session.cost.model);
     }
@@ -234,36 +257,50 @@ export function shippedNote(spend: Spend): string {
  * cost. Nought is a claim; unpriced is an absence, and no view may render the
  * first when it means the second.
  *
- * The test is both halves, never `usd === 0` alone. A window that genuinely
- * cost nothing — nothing captured, so no rate is missing — reads `$0.00`,
- * correctly, and that is the case the second half protects. A view that got
- * this the other way round would print an em dash over a column of noughts,
- * which is a table that visibly does not add up.
+ * The test is never `usd === 0` alone. A window that genuinely cost nothing —
+ * sessions that ran, on models with rates, whose tokens came to nothing —
+ * reads `$0.00`, correctly, and that is the case the other clauses protect. A
+ * view that got this the other way round would print an em dash over a column
+ * of noughts, which is a table that visibly does not add up.
+ *
+ * Both ways of having no figure count: a model no rate covers, and a session
+ * nothing was captured for. They are different absences and the notes under a
+ * view name them apart, but neither is a dollar, and a window holding only
+ * those has no total to print.
  *
  * It lives here rather than in any one renderer because every view that shows
- * a total obeys it, and three copies of a two-clause test are three chances
- * for the views to come to disagree about what a week cost.
+ * a total obeys it, and three copies of the test are three chances for the
+ * views to come to disagree about what a week cost.
  *
- * Takes the two fields it reads rather than a whole `Spend`, so `scan` — which
+ * Takes the fields it reads rather than a whole `Spend`, so `scan` — which
  * totals transcripts nobody recorded and so has no `unmerged` to report — is
  * held to the same rule instead of spelling it out again for itself.
+ * `uncaptured` is optional for the same reason: a scanned transcript is a
+ * session *because* it has turns in it, so that surface has no such category.
  */
-export function unpricedThroughout(spend: Pick<Spend, "usd" | "unpriced">): boolean {
-  return spend.usd === 0 && spend.unpriced > 0;
+export function unpricedThroughout(
+  spend: Pick<Spend, "usd" | "unpriced"> & Partial<Pick<Spend, "uncaptured">>,
+): boolean {
+  return spend.usd === 0 && (spend.unpriced > 0 || (spend.uncaptured ?? 0) > 0);
 }
 
 /**
  * Whether anything at all was captured for a session.
  *
  * The nought-versus-unknown test at the grain of one session, as
- * `unpricedThroughout` is at the grain of a window. A session with no turns and
- * no calls behind it moved no tokens, so there is no rate it is missing: it
- * cost nothing, and that is a measurement rather than a gap. A session that ran
- * and cannot be priced is the other thing entirely, and the two may never be
- * printed the same way.
+ * `unpricedThroughout` is at the grain of a window. **Turns, and nothing
+ * else.** A turn is a prompt somebody sent; a session with none of them had no
+ * transcript found for it, and every counter on it is a nought that nobody
+ * measured. It may still have changed files — the diff at `stop` sees those
+ * whether or not an adapter saw anything — so "it changed nothing" is not the
+ * reason and cannot be the test.
+ *
+ * A session with turns whose tokens come to nothing is the other case, and it
+ * keeps `$0.00`: that figure was measured. Nought is a claim, and this is the
+ * function that decides which sessions are entitled to make it.
  */
-export function wasMeasured(cost: Pick<SessionCost, "turns" | "apiCalls">): boolean {
-  return cost.turns > 0 || cost.apiCalls > 0;
+export function wasMeasured(cost: Pick<SessionCost, "turns">): boolean {
+  return cost.turns > 0;
 }
 
 /**
@@ -281,13 +318,18 @@ export function wasMeasured(cost: Pick<SessionCost, "turns" | "apiCalls">): bool
  * `undefined` rather than a word, because the word is the surface's own: a
  * column read at a glance has an em dash to spare, a table read cold spells it
  * out. What may not differ between them is which sessions get it.
+ *
+ * Two ways to have no figure, and `wasMeasured` is asked first. A session
+ * nothing was captured for is not priced at nought: nought is a claim that it
+ * was free, and what happened is that no transcript was found — for a session
+ * that may well have changed files and billed for it.
  */
 export function sessionFigure(cost: SessionCost, rates: RateTable): string | undefined {
-  const price = priceSession(cost, rates);
-  if (price.priced) {
-    return formatUsd(price.usd);
+  if (!wasMeasured(cost)) {
+    return undefined;
   }
-  return wasMeasured(cost) ? undefined : formatUsd(0);
+  const price = priceSession(cost, rates);
+  return price.priced ? formatUsd(price.usd) : undefined;
 }
 
 /**
@@ -361,6 +403,9 @@ export function rateStub(models: readonly string[]): string {
 /** The name of the file, in both places one lives. */
 export const RATES_FILE = "rates.json";
 
+/** The field the bundled file states the date its prices were checked on. */
+const CHECKED = "checked";
+
 /** The table that ships with the package, beside `dist/` and beside `src/`. */
 export const bundledRatesFile = (): URL => new URL(`../${RATES_FILE}`, import.meta.url);
 
@@ -411,6 +456,38 @@ export function parseRates(text: string, source: string): RateTable {
     table.set(model, readRate(value, model, source));
   }
   return table;
+}
+
+/**
+ * The date the bundled prices were last checked against the vendors' pages.
+ *
+ * A price is a fact with a date on it, and every figure this tool prints is
+ * quoted at one. The file has always carried the date and a note saying the
+ * numbers go stale the moment a vendor moves them; nothing surfaced either, so
+ * a reader was told what a week cost and never told how old the prices were.
+ *
+ * `undefined` where the file states no date, which is what a hand-edited or
+ * older file may do. A view with nothing to say about the age of its prices
+ * says nothing, rather than guessing at a date or calling them current.
+ *
+ * The JSON is not validated here — `loadRates` reads the same file and says
+ * what is wrong with it in the words of the fault.
+ */
+export function parseChecked(text: string): string | undefined {
+  const parsed: unknown = JSON.parse(text);
+  const checked = isObject(parsed) ? parsed[CHECKED] : undefined;
+  return typeof checked === "string" && checked !== "" ? checked : undefined;
+}
+
+/**
+ * The bundled table's date, for the views that quote its prices.
+ *
+ * The bundled file only. `~/.session/rates.json` is merged over it entry by
+ * entry, so a date there would cover some models and not others — and it is
+ * the file the note tells the reader to write, not one this tool dates.
+ */
+export async function loadChecked(): Promise<string | undefined> {
+  return parseChecked(await readFile(bundledRatesFile(), "utf8"));
 }
 
 /**

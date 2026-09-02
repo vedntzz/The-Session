@@ -514,18 +514,38 @@ the shape of an answer, it goes into somebody's meeting notes or invoice, and
 it says a week cost nothing when what happened is that nobody knows what it
 cost.
 
-The test is `usd === 0 && unpriced > 0`, never `usd === 0` alone. A window that
-genuinely cost nothing — nothing captured, so no rate missing — reads `$0.00`,
-correctly, and that is the case the second half of the test protects. Getting
-it the other way round is the same defect inverted: an em dash written over a
-column of noughts is a total the reader can see does not add up.
+The test is `usd === 0 && (unpriced > 0 || uncaptured > 0)`, never `usd === 0`
+alone. A window that genuinely cost nothing — sessions that ran, on models with
+rates, whose tokens came to nothing — reads `$0.00`, correctly, and that is the
+case the other clauses protect. Getting it the other way round is the same
+defect inverted: an em dash written over a column of noughts is a total the
+reader can see does not add up.
+
+**Two ways to have no figure, counted apart.** `unpriced` is a model no rate
+covers, and a rate fixes it. `uncaptured` is a session with no turns on the
+record — nothing was found to price, no model to name, and no rate would fill
+it. Neither is a dollar, so both keep a window off `$0.00`; but a note that
+pooled them would send somebody to `~/.session/rates.json` to add a price for a
+model called `unknown`. Every view names them apart.
 
 It is one function, `unpricedThroughout` in `pricing.ts`, and every view calls
-it rather than spelling the two clauses out again. A two-clause test copied
-into three renderers is three chances for them to come to disagree about what a
-week cost, and the half that gets dropped in the copying is always the second
-one. It takes the two fields it reads rather than a whole `Spend`, so `scan` —
-which has no `unmerged` to report — is held to the same rule.
+it rather than spelling the clauses out again. A test copied into three
+renderers is three chances for them to come to disagree about what a week cost,
+and the clause that gets dropped in the copying is never the first one. It
+takes the fields it reads rather than a whole `Spend`, so `scan` — which has no
+`unmerged` to report — is held to the same rule; `uncaptured` is optional
+there, because a scanned transcript is a session *because* it has turns in it.
+
+**`wasMeasured` is the same rule at the grain of one session, and it is turns
+and nothing else.** A session with no turns had no transcript found for it, and
+every counter on it is a nought nobody measured — so it gets no figure on any
+surface: an em dash in `week`, `not captured` in `--md`, no cost rows in `show`,
+a dash on the page. It may well have changed files and been billed for them:
+the diff at `stop` sees those whether or not an adapter saw anything, which is
+why "it changed nothing" is neither the reason nor the test. A session that has
+turns and prices to nought keeps `$0.00` — that figure was measured. Don't
+widen this back to `turns > 0 || apiCalls > 0`: calls without turns are the
+same absence wearing a counter.
 
 Every view that renders a total obeys this, and each has a test pinning both
 halves — the window nobody can price, and the window that genuinely cost
@@ -537,9 +557,12 @@ nothing:
   in this case, since it would point at a figure the document deliberately did
   not print, and says how many sessions and what to do instead.
 - `week` in the terminal puts `NO_PRICE` in the total row and omits the
-  `… spent` line entirely, leaving the `N sessions unpriced: <models>` line to
-  say why. A week that genuinely cost nothing totals `$0.00` there, like the
-  rows above it.
+  `… spent` line entirely, leaving the `N sessions unpriced: <models>` and
+  `N sessions uncaptured: no turns on the record` lines to say why. A week that
+  genuinely cost nothing totals `$0.00` there, like the rows above it. Every
+  row carrying a dash is counted by one of those two notes: a cell that says
+  nothing under a footer that counts nothing is a hole the reader can see and
+  the table will not admit to.
 - `week --open` leaves the money out of the page's summary rather than
   printing a nought into it — and keeps `$0.00` in the summary for a week that
   genuinely cost nothing, since a page that dropped the figure in both cases
@@ -550,11 +573,12 @@ nothing:
 - `scan` prints the same dash in its `spent` line and omits the waste figure
   with it: a share of a total that does not exist is not a figure either.
 - `--md`'s note about the sessions that changed no files says `costing an
-  amount no rate covers (<model>)` rather than dropping the clause. Those
-  sessions are not in the table, so the unpriced note above never counts them
-  — this line is the only place the document can admit that part of the bill
-  has no rate behind it, and a clause dropped because nothing was spent would
-  read the same as one dropped because nothing could be priced.
+  amount no rate covers (<model>)` rather than dropping the clause, or `and
+  nothing was captured to say what they cost` where there is no model to name.
+  Those sessions are not in the table, so the coverage note above never counts
+  them — this line is the only place the document can admit that part of the
+  bill has nothing behind it, and a clause dropped because nothing was spent
+  would read the same as one dropped because nothing could be worked out.
 
 The cost-per-shipped-change line in `--md` falls out of the same rule for free:
 its guard is `usd === 0`, so a window nobody can price has no ratio either.
