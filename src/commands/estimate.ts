@@ -65,7 +65,12 @@ export async function estimateFor(
     ...(request.since === undefined
       ? {}
       : { since: new Date(request.since).toISOString().slice(0, 10) }),
-    declared: groupFor("declared", bySource("declared"), rates),
-    captured: groupFor("captured", bySource("captured"), rates),
+    // An object literal rather than a map over `INTENT_SOURCES`: a literal is
+    // what makes a missing source a compile error here.
+    groups: {
+      declared: groupFor("declared", bySource("declared"), rates),
+      primed: groupFor("primed", bySource("primed"), rates),
+      captured: groupFor("captured", bySource("captured"), rates),
+    },
   };
 }

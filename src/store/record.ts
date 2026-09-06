@@ -122,30 +122,48 @@ export type SessionOutcome = "open" | "merged" | "abandoned" | "empty";
  * Where a session's intent came from.
  *
  * `declared` was typed by the developer at `session start`, before the agent
- * ran. `captured` was taken from the first prompt of a session the editor hook
- * opened on its own — the same words, in the same order, but nobody chose to
- * write them down as a declaration.
+ * ran. `primed` was proposed by the tool from the repository's own co-change
+ * and drift history and then accepted, so the timing is a declaration's and
+ * the authorship is not. `captured` was taken from the first prompt of a
+ * session the editor hook opened on its own — the same words, in the same
+ * order, but nobody chose to write them down as a declaration.
  *
- * The two are kept apart everywhere because they are different evidence. A
- * declaration is a commitment made in advance; a captured intent is a
- * transcript of what was asked for. Both are written before anything happened,
- * and neither can be edited afterwards — but a reader comparing intent to
- * reality is owed the fact that one of them was never a promise.
+ * The three are kept apart everywhere because they are different evidence. A
+ * declaration is a commitment made in advance; a primed intent is the tool's
+ * proposal ratified; a captured intent is a transcript of what was asked for.
+ * All three are written before anything happened and none can be edited
+ * afterwards — but a reader comparing intent to reality is owed the fact that
+ * only one of them was ever a promise the developer composed.
+ *
+ * A list rather than a bare union, like `SESSION_CLASSES`: every site that
+ * branches on this is written as a `Record<IntentSource, …>` or a map over
+ * this array, so adding a fourth source is a compile error at each of them
+ * rather than two arms out of three quietly answering for all of it.
+ *
+ * Ordered strongest promise to weakest, which is the order `estimate` and
+ * `survival` print their blocks in.
  */
-export type IntentSource = "declared" | "captured";
+export const INTENT_SOURCES = ["declared", "primed", "captured"] as const;
+
+export type IntentSource = (typeof INTENT_SOURCES)[number];
 
 /**
  * Reads an intent source off the command line.
  *
- * The two words are the two the record uses, so what `week --intent` takes is
- * what the field says — a reader who has seen one has seen the other.
+ * The words are the ones the record uses, so what `week --intent` takes is
+ * what the field says — a reader who has seen one has seen the other. The
+ * message is built from the list, so a source added later cannot leave a
+ * refusal here naming the old set.
  */
 export function parseIntentSource(value: string): IntentSource {
   const wanted = value.trim().toLowerCase();
-  if (wanted === "declared" || wanted === "captured") {
-    return wanted;
+  const found = INTENT_SOURCES.find((source) => source === wanted);
+  if (found) {
+    return found;
   }
-  throw new Error(`${value} is not an intent source. Use one of: declared, captured.`);
+  throw new Error(
+    `${value} is not an intent source. Use one of: ${INTENT_SOURCES.join(", ")}.`,
+  );
 }
 
 export interface Session {
@@ -245,9 +263,47 @@ export function intentSourceOf(session: Pick<Session, "intentSource">): IntentSo
   return session.intentSource ?? "declared";
 }
 
-/** True when the intent was taken from a prompt rather than declared up front. */
-export function isCaptured(session: Pick<Session, "intentSource">): boolean {
-  return intentSourceOf(session) === "captured";
+/**
+ * Whether somebody set a scope before the agent ran, so drift can be measured.
+ *
+ * A table rather than a test against one value: a primed session has a scope —
+ * the tool proposed it and the developer accepted it — and that answer is
+ * written down here rather than falling out of `!== "captured"`. The two sites
+ * that legitimately treat primed and declared alike are the ones that ask this
+ * question, and they say so by asking it.
+ */
+const HAS_SCOPE: Record<IntentSource, boolean> = {
+  declared: true,
+  primed: true,
+  captured: false,
+};
+
+/** The same question asked of a source on its own, where there is no session. */
+export function sourceHasScope(source: IntentSource): boolean {
+  return HAS_SCOPE[source];
+}
+
+export function hasDeclaredScope(session: Pick<Session, "intentSource">): boolean {
+  return sourceHasScope(intentSourceOf(session));
+}
+
+/**
+ * Whether the intent is the developer's own words.
+ *
+ * Separate from `hasDeclaredScope` because the two questions come apart on
+ * exactly one source: a primed session has a scope to be held to and did not
+ * write the words it is held to. Views that label authorship — the marker in
+ * the tables, the sentence in `show`, whether `pr` shortens the summary —
+ * ask this one.
+ */
+const OWN_WORDS: Record<IntentSource, boolean> = {
+  declared: true,
+  primed: false,
+  captured: false,
+};
+
+export function inOwnWords(session: Pick<Session, "intentSource">): boolean {
+  return OWN_WORDS[intentSourceOf(session)];
 }
 
 /** The `set` payload of a record. Creating records carry every field. */

@@ -17,7 +17,7 @@ import { renderWeek } from "../render/html.js";
 import { renderMarkdownWeek } from "../render/markdown.js";
 import type { Palette } from "../render/palette.js";
 import { formatWeek } from "../render/terminal.js";
-import { parseIntentSource, storeHome } from "../store.js";
+import { INTENT_SOURCES, parseIntentSource, storeHome } from "../store.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
 
@@ -47,7 +47,9 @@ export function registerWeek(program: Command, options: ProgramOptions, palette:
     // asked twice: `--class` shows what each session was working on, and
     // `--class ui` keeps the ones that were working on the same thing.
     .option("--class [name]", "show the class column; with a name, only that class")
-    .option("--intent <source>", "only sessions whose intent was declared, or captured by the hook")
+    // Built from the list, so a source added later cannot leave this line
+    // naming the ones that were remembered.
+    .option("--intent <source>", `only sessions whose intent was ${INTENT_SOURCES.join(", ")}`)
     .option("--tokens", "show the raw token counts as well as the cost")
     .option("--md", "emit Markdown, for pasting into notes, Slack, Notion or Confluence")
     .option("--copy", "put that Markdown on the clipboard instead of printing it")

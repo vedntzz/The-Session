@@ -1,7 +1,8 @@
 // `session show`: three sentences, then the id and a line of three figures.
 import { formatUsd, priceSession, wasMeasured, type RateTable } from "../../pricing.js";
 import {
-  isCaptured,
+  intentSourceOf,
+  type IntentSource,
   type Session,
   type SessionCost,
   type SessionOutcome,
@@ -9,7 +10,7 @@ import {
 import { plainPalette, type Palette } from "../palette.js";
 import { emptyTurnsOf } from "../../empty.js";
 import { costCell, NO_RATES, wasteCell, type View } from "./cost.js";
-import { CAPTURED_MARKER, intentOf } from "./intent.js";
+import { intentOf } from "./intent.js";
 import { summarizePaths } from "./paths.js";
 import { INDENT, plural, shortId } from "./text.js";
 
@@ -63,12 +64,27 @@ const NO_DRIFT_POSSIBLE =
   "Nothing was declared to compare against — run session start --scope to see drift.";
 
 /**
+ * The sentence each intent source is framed in, quoted words in the middle.
+ *
+ * One table, so a source added later cannot leave this view claiming the words
+ * were the developer's. An intent that is not theirs says so in the sentence
+ * rather than in a line of its own — it is the same fact the full view spends
+ * a row on, and here it is a clause.
+ */
+const ASKED_FOR: Record<IntentSource, { before: string; after: string }> = {
+  declared: { before: 'You asked for "', after: '".' },
+  primed: { before: 'You accepted "', after: '", proposed from this repo\'s history.' },
+  captured: {
+    before: 'Your first prompt was "',
+    after: '", and you declared nothing up front.',
+  },
+};
+
+/**
  * The second sentence: what was asked for.
  *
  * Returned in three pieces so the intent itself can be inked without the
- * sentence around it going bold too. A captured intent says so in the
- * sentence rather than in a line of its own — it is the same fact the full
- * view spends a row on, and here it is four words.
+ * sentence around it going bold too.
  */
 function askedFor(session: Session): { before: string; intent: string; after: string } {
   if (session.intent === null) {
@@ -82,14 +98,8 @@ function askedFor(session: Session): { before: string; intent: string; after: st
   // Quoted, and the quotes sit outside the ink. Somebody's own words run into
   // the sentence around them otherwise, and the reader who most needs this
   // view is the one reading it with colour turned off in a log.
-  if (isCaptured(session)) {
-    return {
-      before: 'Your first prompt was "',
-      intent: session.intent,
-      after: '", and you declared nothing up front.',
-    };
-  }
-  return { before: 'You asked for "', intent: session.intent, after: '".' };
+  const frame = ASKED_FOR[intentSourceOf(session)];
+  return { before: frame.before, intent: session.intent, after: frame.after };
 }
 
 /**

@@ -1,5 +1,10 @@
 // What a view calls an intent, and the markers that survive a pipe.
-import type { Session } from "../../store.js";
+import {
+  INTENT_SOURCES,
+  intentSourceOf,
+  type IntentSource,
+  type Session,
+} from "../../store.js";
 
 /**
  * Marks drift where colour cannot: piped output, a log file, a screenshot,
@@ -8,15 +13,83 @@ import type { Session } from "../../store.js";
 export const DRIFT_MARKER = "!";
 
 /**
- * Marks an intent that was captured from a prompt rather than declared before
- * the work. Like `DRIFT_MARKER`, it is a character rather than an ink, so the
- * distinction survives a pipe, a log file and a screenshot; the tables that
- * use it say what it means underneath.
+ * Marks an intent the developer did not compose. Like `DRIFT_MARKER`, these
+ * are characters rather than inks, so the distinction survives a pipe, a log
+ * file and a screenshot; the tables that use them say what they mean
+ * underneath.
+ *
+ * One table, read by the week table, the Markdown document and the HTML page
+ * alike. A marker drawn one way in one view and another way in the next is a
+ * distinction the reader has to learn twice.
  */
-export const CAPTURED_MARKER = "~";
+export const INTENT_MARKER: Record<IntentSource, string> = {
+  declared: "",
+  primed: "+",
+  captured: "~",
+};
 
-/** What `show` says about an intent nobody declared. */
-export const CAPTURED_INTENT = "captured from the first prompt, not declared";
+/**
+ * What `show` and `pr` say about where an intent came from, where that is
+ * worth saying. A declaration needs no note: it is the case the rest are
+ * marked against.
+ */
+export const INTENT_NOTE: Record<IntentSource, string | undefined> = {
+  declared: undefined,
+  primed: "proposed from this repo's history, then accepted",
+  captured: "captured from the first prompt, not declared",
+};
+
+/**
+ * The legend under a table, per source, spelled out for a reader who has just
+ * met the marker.
+ */
+export const INTENT_LEGEND: Record<IntentSource, string | undefined> = {
+  declared: undefined,
+  primed: "primed: intent and scope proposed from this repo's history, then accepted",
+  captured:
+    "recorded by the editor hook: intent captured from the first prompt, no scope declared",
+};
+
+/** One legend to print: which marker, how many rows carry it, and what it means. */
+export interface IntentLegend {
+  source: IntentSource;
+  marker: string;
+  count: number;
+  text: string;
+}
+
+/**
+ * The legends a set of rows has earned, in `INTENT_SOURCES` order.
+ *
+ * Only sources with a row here and something to explain: a legend for a marker
+ * nobody used is a line the reader has to check the table against to find out
+ * it says nothing. Built by walking the list, so a source added later is
+ * counted and explained by every table at once rather than by whichever
+ * renderer was remembered.
+ */
+export function intentLegends(
+  sessions: readonly Pick<Session, "intentSource">[],
+): IntentLegend[] {
+  const legends: IntentLegend[] = [];
+  for (const source of INTENT_SOURCES) {
+    const text = INTENT_LEGEND[source];
+    if (text === undefined) {
+      continue;
+    }
+    const count = sessions.filter((session) => intentSourceOf(session) === source).length;
+    if (count > 0) {
+      legends.push({ source, marker: INTENT_MARKER[source], count, text });
+    }
+  }
+  return legends;
+}
+
+/** An intent with the marker its source calls for, ready to go in a cell. */
+export function markedIntent(session: Pick<Session, "intent" | "endedAt" | "intentSource">): string {
+  const marker = INTENT_MARKER[intentSourceOf(session)];
+  const intent = intentOf(session);
+  return marker === "" ? intent : `${marker} ${intent}`;
+}
 
 /** What `show` says instead of a scope, for a session nobody declared one for. */
 export const NO_SCOPE = "no scope — nothing was declared to drift from";

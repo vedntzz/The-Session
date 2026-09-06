@@ -3,7 +3,14 @@
 // This file is the seam the rest of the tool imports through: `show`, `week`,
 // `scan`, the bare screen and `help all` are separate readers with separate
 // layouts, and the only thing they share is the text helpers in `terminal/`.
-export { intentOf, CAPTURED_MARKER } from "./terminal/intent.js";
+export {
+  intentOf,
+  intentLegends,
+  markedIntent,
+  INTENT_MARKER,
+  INTENT_NOTE,
+  type IntentLegend,
+} from "./terminal/intent.js";
 export { shortId, SHORT_ID } from "./terminal/text.js";
 export { describePaths, summarizePaths, PATHS_NAMED, type PathSummary } from "./terminal/paths.js";
 export { unpricedTokens, type View } from "./terminal/cost.js";

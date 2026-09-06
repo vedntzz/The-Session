@@ -1388,7 +1388,7 @@ describe("passive capture, end to end", () => {
     const lines = await run("week");
 
     expect(lines[4]).toContain("~ why does /orders 500");
-    expect(lines.at(-3)).toContain("1 session recorded by the hook");
+    expect(lines.at(-3)).toContain("1 session recorded by the editor hook");
   });
 
   it("says on show that the intent was captured and no scope was declared", async () => {
@@ -1454,7 +1454,7 @@ describe("passive capture, end to end", () => {
 
   it("week --intent says what it takes when given something else", async () => {
     await expect(run("week", "--intent", "hook")).rejects.toThrow(
-      /Use one of: declared, captured/,
+      /Use one of: declared, primed, captured/,
     );
   });
 

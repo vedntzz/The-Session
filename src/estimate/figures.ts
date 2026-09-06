@@ -111,10 +111,14 @@ export interface Estimate {
   source: ClassSource;
   /** The cutoff as a date, when `--since` set one. */
   since?: string;
-  /** Sessions whose intent was written at `session start`, before the agent ran. */
-  declared: EstimateGroup;
-  /** Sessions whose intent was taken from the first prompt by the hook. */
-  captured: EstimateGroup;
+  /**
+   * One group per intent source, never a total: declared, primed and captured
+   * sessions are different evidence, and a pooled median describes none of
+   * them. Keyed by the source rather than held as named fields, so a source
+   * added later cannot leave a report answering for the ones that were
+   * remembered.
+   */
+  groups: Record<IntentSource, EstimateGroup>;
 }
 
 // --- reading the question ------------------------------------------------

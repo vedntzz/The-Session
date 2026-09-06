@@ -7,9 +7,9 @@
 import { classOf } from "../../../classify.js";
 import { emptyTurnsOf } from "../../../empty.js";
 import { sessionFigure, type RateTable } from "../../../pricing.js";
-import { isCaptured, totalTokens, type Session } from "../../../store.js";
+import { totalTokens, type Session } from "../../../store.js";
 import { NO_PRICE } from "../cost.js";
-import { CAPTURED_MARKER, intentOf } from "../intent.js";
+import { markedIntent } from "../intent.js";
 import { clock, figure, INDENT, padLeft, padRight, shortId, SHORT_ID, width } from "../text.js";
 
 /** Space between columns. Two, so the eye reads them as separate. */
@@ -115,10 +115,7 @@ export function cellsFor(session: Session, rates: RateTable): WeekCells {
     // The marker is inside the column rather than beside it: a fourth column
     // holding one character for some rows would cost more width than the fact
     // is worth, and the note under the table says what it means.
-    intent: truncate(
-      isCaptured(session) ? `${CAPTURED_MARKER} ${intentOf(session)}` : intentOf(session),
-      INTENT_WIDTH,
-    ),
+    intent: truncate(markedIntent(session), INTENT_WIDTH),
     class: classOf(session),
     outcome: session.outcome,
     drift: figure(session.drift.length),

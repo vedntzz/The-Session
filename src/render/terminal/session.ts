@@ -8,7 +8,7 @@ import {
   type Price,
   type RateTable,
 } from "../../pricing.js";
-import { isCaptured, totalTokens, type Session } from "../../store.js";
+import { hasDeclaredScope, intentSourceOf, totalTokens, type Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { emptyTurnsOf } from "../../empty.js";
 import {
@@ -20,7 +20,7 @@ import {
   wasteCell,
   type View,
 } from "./cost.js";
-import { CAPTURED_INTENT, DRIFT_MARKER, intentOf, NO_SCOPE, SCOPE_HINT } from "./intent.js";
+import { DRIFT_MARKER, intentOf, INTENT_NOTE, NO_SCOPE, SCOPE_HINT } from "./intent.js";
 import { clock, figure, gap, INDENT, label, padRight, plural, shortId, width } from "./text.js";
 
 /**
@@ -100,10 +100,11 @@ function headingLine(session: Session, palette: Palette): string {
  * difference.
  */
 function capturedIntentLines(session: Session, palette: Palette): string[] {
-  if (!isCaptured(session)) {
+  const note = INTENT_NOTE[intentSourceOf(session)];
+  if (note === undefined) {
     return [];
   }
-  return [`${INDENT}${palette.meta(label("intent"))}${palette.meta(CAPTURED_INTENT)}`];
+  return [`${INDENT}${palette.meta(label("intent"))}${palette.meta(note)}`];
 }
 
 /**
@@ -117,7 +118,7 @@ function capturedIntentLines(session: Session, palette: Palette): string[] {
  * about it, since declaring a scope is the whole of how drift becomes visible.
  */
 function declaredLine(session: Session, palette: Palette): string {
-  if (isCaptured(session)) {
+  if (!hasDeclaredScope(session)) {
     const bare = `${INDENT}${label("declared")}${NO_SCOPE}`;
     return (
       `${INDENT}${palette.meta(label("declared"))}${palette.meta(NO_SCOPE)}` +

@@ -10,7 +10,7 @@ import {
   type RateTable,
   type Spend,
 } from "../../pricing.js";
-import { isCaptured, totalTokens, type Session, type SessionOutcome } from "../../store.js";
+import { totalTokens, type Session, type SessionOutcome } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import {
   NO_PRICE,
@@ -21,7 +21,7 @@ import {
   stubLines,
   type View,
 } from "./cost.js";
-import { CAPTURED_MARKER } from "./intent.js";
+import { intentLegends } from "./intent.js";
 import { figure, INDENT, plural } from "./text.js";
 import {
   cellsFor,
@@ -341,14 +341,14 @@ function turnNotes(sessions: readonly Session[], palette: Palette): string[] {
   if (turns > 0) {
     lines.push(palette.meta(`${INDENT}${emptyNote(sessions, turns)}`));
   }
-  // Only when a row carries one. A legend for a marker nobody used is a line
-  // the reader has to check the table against to find out it says nothing.
-  const captured = sessions.filter(isCaptured).length;
-  if (captured > 0) {
+  // Only the markers rows actually carry. A legend for a marker nobody used is
+  // a line the reader has to check the table against to find out it says
+  // nothing — and the same list feeds the Markdown and the HTML page, so all
+  // three tables explain a marker the same way.
+  for (const legend of intentLegends(sessions)) {
     lines.push(
       palette.meta(
-        `${INDENT}${CAPTURED_MARKER} ${plural(captured, "session", "sessions")} recorded by the ` +
-          "hook: intent captured from the first prompt, no scope declared",
+        `${INDENT}${legend.marker} ${plural(legend.count, "session", "sessions")} ${legend.text}`,
       ),
     );
   }

@@ -246,10 +246,12 @@ export interface WindowReport {
   overall: SurvivalSample;
   /** One row per class that has a session in it, in the table's own order. */
   byClass: { class: SessionClass; sample: SurvivalSample }[];
-  /** Sessions whose intent was declared at `session start`. */
-  declared: SurvivalSample;
-  /** Sessions whose intent the hook took from the first prompt. */
-  captured: SurvivalSample;
+  /**
+   * One sample per intent source, never a total. Keyed by the source rather
+   * than held as named fields, so a source added later cannot leave this
+   * report answering for the ones that were remembered.
+   */
+  bySource: Record<IntentSource, SurvivalSample>;
 }
 
 export interface SurvivalReport {
@@ -309,12 +311,17 @@ function windowReport(
       class: name,
       sample: sampleOf(merged.filter((session) => classOf(session) === name)),
     })).filter((row) => hasSessions(row.sample)),
-    declared: sampleOf(bySource(merged, "declared")),
-    captured: sampleOf(bySource(merged, "captured")),
+    // An object literal rather than a map over `INTENT_SOURCES`: a literal is
+    // what makes a missing source a compile error here.
+    bySource: {
+      declared: sampleOf(ofSource(merged, "declared")),
+      primed: sampleOf(ofSource(merged, "primed")),
+      captured: sampleOf(ofSource(merged, "captured")),
+    },
   };
 }
 
-function bySource(sessions: readonly Session[], source: IntentSource): Session[] {
+function ofSource(sessions: readonly Session[], source: IntentSource): Session[] {
   return sessions.filter((session) => intentSourceOf(session) === source);
 }
 

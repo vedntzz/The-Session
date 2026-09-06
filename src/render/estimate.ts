@@ -7,7 +7,7 @@ import {
   type EstimateFigures,
   type EstimateGroup,
 } from "../estimate/figures.js";
-import type { IntentSource } from "../store.js";
+import { INTENT_SOURCES, sourceHasScope, type IntentSource } from "../store.js";
 
 // --- the view ------------------------------------------------------------
 
@@ -38,23 +38,41 @@ export function percent(part: number, whole: number): string {
 /** What each group is, said once per block so the counts are not read as one. */
 export const GROUPS: Record<IntentSource, string> = {
   declared: "intent written at session start",
+  primed: "intent proposed from this repo's history, then accepted",
   captured: "intent taken from the first prompt",
 };
 
 /** What a block says when the log holds none of that kind. */
 export const NONE: Record<IntentSource, string> = {
   declared: "none — nothing like this was declared before it ran",
+  primed: "none — nothing like this was primed before it ran",
   captured: "none — the hook recorded nothing like this",
+};
+
+/**
+ * Which blocks print on a log that holds none of them.
+ *
+ * Declared and captured always do: either could have members on any log, and a
+ * block that vanished for want of sessions would leave the other reading as
+ * the whole answer, which is the pooling this split exists to prevent. A log
+ * with no primed session has no such category to hide — the same distinction
+ * `debt` and `cochange` draw between finding nothing and having nothing to
+ * look in — so that block appears once the log holds one and not before.
+ */
+export const ALWAYS_SHOWN: Record<IntentSource, boolean> = {
+  declared: true,
+  primed: false,
+  captured: true,
 };
 
 /**
  * One group's block: what it is made of, then what it came to.
  *
- * Printed even when it is empty. A block that disappears for want of sessions
- * would leave the other one looking like the whole answer, which is the pooled
- * reading this is here to prevent — and "no declared sessions like this" is
- * itself worth knowing, since it says the figures below come entirely from
- * work nobody wrote down in advance.
+ * Printed even when it is empty, for the sources `ALWAYS_SHOWN` names. A block
+ * that disappears for want of sessions would leave the others looking like the
+ * whole answer, which is the pooled reading this is here to prevent — and "no
+ * declared sessions like this" is itself worth knowing, since it says the
+ * figures below come entirely from work nobody wrote down in advance.
  */
 export function formatGroup(group: EstimateGroup): string[] {
   if (group.matched === 0 && group.empty === 0) {
@@ -153,7 +171,7 @@ export function mergedLine(figures: EstimateFigures): string {
  * drifted.
  */
 export function driftLines(figures: EstimateFigures, group: EstimateGroup): string[] {
-  if (figures.drift.length === 0 && group.source === "captured") {
+  if (figures.drift.length === 0 && !sourceHasScope(group.source)) {
     return [line("drift", "nothing was declared to drift from, so none is counted")];
   }
   const width = figures.drift.reduce((widest, entry) => Math.max(widest, entry.path.length), 0);
@@ -198,22 +216,24 @@ export function formatEstimate(estimate: Estimate): string[] {
   ];
 
   // On its own line rather than beside each sample: the window is one fact
-  // about the question, and printing it twice would suggest the two blocks
+  // about the question, and printing it once per block would suggest they
   // could have been cut at different dates.
   if (estimate.since !== undefined) {
     lines.push(line("since", estimate.since));
   }
 
-  const groups = [estimate.declared, estimate.captured];
-  for (const group of groups) {
+  const shown = INTENT_SOURCES.map((source) => estimate.groups[source]).filter(
+    (group) => ALWAYS_SHOWN[group.source] || group.matched > 0 || group.empty > 0,
+  );
+  for (const group of shown) {
     lines.push("", ...formatGroup(group));
   }
 
   // Once, at the end, and only when something was thin. It is advice about the
-  // question rather than about either block — widening the window or naming a
-  // different class changes both — so repeating it under each would read as
-  // two separate problems.
-  if (groups.some((group) => group.figures === undefined && group.matched > 0)) {
+  // question rather than about any one block — widening the window or naming a
+  // different class changes all of them — so repeating it under each would
+  // read as several separate problems.
+  if (shown.some((group) => group.figures === undefined && group.matched > 0)) {
     lines.push("", line("", "widen --since, or say --class if these were the wrong ones"));
   }
 

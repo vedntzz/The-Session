@@ -3,7 +3,7 @@ import { classifyPaths } from "../classify.js";
 import { changedFilesSince, endStateOf } from "../git.js";
 import {
   getOpenSession,
-  isCaptured,
+  hasDeclaredScope,
   totalTokens,
   updateSession,
   type Session,
@@ -59,7 +59,7 @@ export function computeDrift(reality: readonly string[], scope: readonly string[
  * changed into a record of what changed that you did not expect.
  */
 export function driftOf(session: Session, reality: readonly string[]): string[] {
-  return isCaptured(session) ? [] : computeDrift(reality, session.scope);
+  return hasDeclaredScope(session) ? computeDrift(reality, session.scope) : [];
 }
 
 /**

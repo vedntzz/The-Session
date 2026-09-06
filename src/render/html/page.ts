@@ -11,8 +11,8 @@ import {
   type RateTable,
   type Spend,
 } from "../../pricing.js";
-import { isCaptured, totalTokens, type Session } from "../../store.js";
-import { intentOf } from "../terminal.js";
+import { hasDeclaredScope, intentSourceOf, totalTokens, type Session } from "../../store.js";
+import { intentLegends, intentOf, markedIntent, INTENT_NOTE } from "../terminal.js";
 import { documentHead, isWasteful } from "./style.js";
 import { emptyTurnsOf, emptyTurnsTotal, unmeasuredEmpty } from "../../empty.js";
 import { escapeHtml } from "./text.js";
@@ -56,9 +56,6 @@ export function weigh(sessions: readonly Session[], rates: RateTable): number[] 
   }
   return sessions.map((session) => totalTokens(session.cost));
 }
-
-/** The marker the terminal table uses for an intent nobody declared. */
-export const CAPTURED_MARKER = "~";
 
 /**
  * Which treatment a count gets. Red is reserved for a count that is actually
@@ -126,7 +123,7 @@ export function costCells(session: Session, rates: RateTable, tokens: boolean): 
  * of the two it is looking at instead.
  */
 export function driftCell(session: Session): string {
-  if (isCaptured(session)) {
+  if (!hasDeclaredScope(session)) {
     return (
       `<span class="figure drift quiet" title="no scope was declared, ` +
       `so there is nothing for these paths to be outside of">no scope</span>`
@@ -146,13 +143,13 @@ export function driftCell(session: Session): string {
  * distinction the reader has to learn twice.
  */
 export function intentCell(session: Session): string {
-  const intent = intentOf(session);
-  if (!isCaptured(session)) {
-    return `<span class="intent">${escapeHtml(intent)}</span>`;
+  const note = INTENT_NOTE[intentSourceOf(session)];
+  if (note === undefined) {
+    return `<span class="intent">${escapeHtml(intentOf(session))}</span>`;
   }
   return (
-    `<span class="intent" title="captured from the first prompt, not declared">` +
-    `${escapeHtml(`${CAPTURED_MARKER} ${intent}`)}</span>`
+    `<span class="intent" title="${escapeHtml(note)}">` +
+    `${escapeHtml(markedIntent(session))}</span>`
   );
 }
 
@@ -259,13 +256,15 @@ export function footerBlock(sessions: readonly Session[], spend: Spend): string 
         : `<p class="quiet">${escapeHtml(plural(unmeasuredEmpty(sessions), "session", "sessions"))} ` +
           "cannot say which turns changed no files — the diff answers for the session, " +
           "not for the turn</p>";
-  // The legend for the marker on those rows, and only when there are any.
-  const captured = sessions.filter(isCaptured).length;
-  const recorded =
-    captured > 0
-      ? `<p>${escapeHtml(`~ ${plural(captured, "session", "sessions")}`)} recorded by the hook: ` +
-        `intent captured from the first prompt, no scope declared</p>`
-      : "";
+  // A legend per marker the rows actually carry, from the same list the
+  // terminal footer and the Markdown document read.
+  const recorded = intentLegends(sessions)
+    .map(
+      (legend) =>
+        `<p>${escapeHtml(`${legend.marker} ${plural(legend.count, "session", "sessions")}`)} ` +
+        `${escapeHtml(legend.text)}</p>`,
+    )
+    .join("");
   return spent || wasted || recorded ? `<footer>${spent}${wasted}${recorded}</footer>` : "";
 }
 

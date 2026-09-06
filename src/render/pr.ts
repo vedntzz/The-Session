@@ -8,9 +8,9 @@ import {
   wasMeasured,
   type RateTable,
 } from "../pricing.js";
-import { isCaptured, type Session } from "../store.js";
+import { inOwnWords, intentSourceOf, type Session } from "../store.js";
 import { unpricedTokens } from "./terminal/cost.js";
-import { CAPTURED_INTENT, intentOf, NO_SCOPE } from "./terminal/intent.js";
+import { INTENT_NOTE, intentOf, NO_SCOPE } from "./terminal/intent.js";
 
 /**
  * The description somebody is about to write by hand, written from the record
@@ -204,13 +204,20 @@ interface Summary {
 function summarize(session: Session): Summary {
   const full = intentOf(session).trim();
 
-  if (!isCaptured(session)) {
+  // A declaration is the promise the diff is held to, and it prints whole. An
+  // intent the developer did not compose is labelled and shortened, whether
+  // the words came off a prompt or out of a proposal.
+  const note = INTENT_NOTE[intentSourceOf(session)];
+  // The second clause is unreachable — a source whose words are not the
+  // developer's has a note to say so, and a test pins the two tables together
+  // — but reading the note out is what makes that a fact rather than a hope.
+  if (inOwnWords(session) || note === undefined) {
     return { line: flatten(full), full, cut: false };
   }
 
   const end = Math.min(sentenceEnd(full), lineEnd(full));
   return {
-    line: `${flatten(full.slice(0, end))} (${CAPTURED_INTENT})`,
+    line: `${flatten(full.slice(0, end))} (${note})`,
     full,
     // On the index rather than on the text: the head is flattened for the line
     // and the whole text is not, so comparing the two would call a run of

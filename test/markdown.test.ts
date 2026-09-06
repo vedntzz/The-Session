@@ -459,6 +459,14 @@ describe("a week the hook recorded", () => {
     );
     expect(renderMarkdownWeek([session()], 7, priced, NOW)).not.toContain("recorded by the editor");
   });
+
+  it("explains the primed marker the same way, in its own block", () => {
+    const primed = session({ intentSource: "primed" });
+    const document = renderMarkdownWeek([primed], 7, priced, NOW);
+
+    expect(document).toContain("+ 1 session primed: intent and scope proposed from this repo's history, then accepted.");
+    expect(document).toContain("| + add rate limiting to /orders |");
+  });
 });
 
 describe("an empty window", () => {

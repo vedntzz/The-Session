@@ -10,6 +10,8 @@ import {
   type SurvivalSample,
   type WindowReport,
 } from "../../survival.js";
+import { INTENT_SOURCES } from "../../store.js";
+import { ALWAYS_SHOWN } from "../estimate.js";
 import type { Palette } from "../palette.js";
 import { figure, INDENT, padRight, percent, plural, shortId, width } from "./text.js";
 
@@ -17,7 +19,7 @@ import { figure, INDENT, padRight, percent, plural, shortId, width } from "./tex
  * What `session survival` prints.
  *
  * One block per window, and inside each the same three cuts every time: the
- * whole of it, then by class, then declared against captured. The order is the
+ * whole of it, then by class, then one line per intent source. The order is the
  * house one — what happened to the work first, the qualifications under it —
  * and there is no money in this view at all, because none of these questions
  * is about money.
@@ -200,17 +202,23 @@ function classLines(report: WindowReport, palette: Palette): string[] {
 }
 
 /**
- * Declared and captured, one line each and never a total.
+ * One line per intent source, and never a total.
  *
- * Both printed even when one holds nothing: a block that vanished for want of
- * sessions would leave the other reading as the whole answer, which is the
- * pooling this split exists to prevent.
+ * Declared and captured print even when they hold nothing: a line that
+ * vanished for want of sessions would leave the others reading as the whole
+ * answer, which is the pooling this split exists to prevent. Primed prints
+ * once the log holds one — a log with none has no such category to hide, the
+ * same rule `estimate` follows through `ALWAYS_SHOWN`.
  */
 function sourceLines(report: WindowReport, palette: Palette): string[] {
-  return [
-    line("declared", rateText(report.declared, palette)),
-    line("captured", rateText(report.captured, palette)),
-  ];
+  return INTENT_SOURCES.filter(
+    (source) => ALWAYS_SHOWN[source] || hasSessions(report.bySource[source]),
+  ).map((source) => line(source, rateText(report.bySource[source], palette)));
+}
+
+/** True when a sample has any session in it, in any state. */
+function hasSessions(sample: SurvivalSample): boolean {
+  return sample.measured + sample.pending + sample.due + sample.missed > 0;
 }
 
 /**

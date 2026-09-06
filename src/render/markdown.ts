@@ -8,8 +8,8 @@ import {
   type RateTable,
   type Spend,
 } from "../pricing.js";
-import { isCaptured, type Session } from "../store.js";
-import { CAPTURED_MARKER, intentOf, spentFigure, type View } from "./terminal.js";
+import type { Session } from "../store.js";
+import { intentLegends, markedIntent, spentFigure, type View } from "./terminal.js";
 
 /**
  * The week as Markdown, for pasting somewhere other people read it — meeting
@@ -132,14 +132,11 @@ function windowStart(to: Date, days: number): Date {
  *    it. This is the failure the table cannot survive, and the reason nothing
  *    here interpolates an intent raw.
  *
- * The captured marker goes on before the width is measured, since it is part
+ * The source marker goes on before the width is measured, since it is part
  * of what has to fit.
  */
 export function workCell(session: Session): string {
-  const intent = intentOf(session);
-  const marked = isCaptured(session) ? `${CAPTURED_MARKER} ${intent}` : intent;
-
-  const flat = marked.replace(/\s+/gu, " ").trim();
+  const flat = markedIntent(session).replace(/\s+/gu, " ").trim();
   const chars = [...flat];
   const cut =
     chars.length <= WORK_WIDTH
@@ -191,7 +188,7 @@ export function renderMarkdownWeek(
     weekTable(shown, rates, merged, unplanned),
     emptyNote(empties, rates),
     coverageNote(spend, shown.length),
-    capturedNote(shown),
+    ...intentNotes(shown),
     spentClosing(spend, merged),
   ]);
 }
@@ -405,15 +402,16 @@ function coverageNote(spend: Spend, shown: number): string | undefined {
   return parts.join(" ");
 }
 
-/** The legend for the marker, and only when a row carries one. */
-function capturedNote(shown: readonly Session[]): string | undefined {
-  const captured = shown.filter(isCaptured).length;
-  if (captured === 0) {
-    return undefined;
-  }
-  return (
-    `${CAPTURED_MARKER} ${plural(captured, "session", "sessions")} recorded by the editor ` +
-    `hook: intent captured from the first prompt, no scope declared.`
+/**
+ * A legend per marker the table actually carries, each its own block.
+ *
+ * The same list the terminal footer and the HTML page read, so a marker means
+ * one thing wherever the reader meets it.
+ */
+function intentNotes(shown: readonly Session[]): string[] {
+  return intentLegends(shown).map(
+    (legend) =>
+      `${legend.marker} ${plural(legend.count, "session", "sessions")} ${legend.text}.`,
   );
 }
 

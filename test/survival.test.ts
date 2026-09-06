@@ -17,7 +17,7 @@ import {
   type SurvivalObservation,
   type SurvivalWindow,
 } from "../src/survival.js";
-import { zeroCost, type Session } from "../src/store.js";
+import { INTENT_SOURCES, zeroCost, type Session } from "../src/store.js";
 
 /**
  * What the recorded checks add up to, tested without a repository.
@@ -325,19 +325,21 @@ describe("summarizeSurvival", () => {
     ];
     const report = window(sessions);
 
-    expect(report?.declared.figures?.rate).toBe(1);
-    expect(report?.captured.figures?.rate).toBe(0.5);
-    // Ten sessions between them, and no field anywhere holding a pooled rate.
+    expect(report?.bySource.declared.figures?.rate).toBe(1);
+    expect(report?.bySource.captured.figures?.rate).toBe(0.5);
+    // Ten sessions between them, and no field anywhere holding a pooled rate:
+    // the samples are keyed by source and there is no total beside them.
     expect(report?.overall.measured).toBe(2 * MIN_SESSIONS);
-    expect(Object.keys(report ?? {})).not.toContain("bySource");
+    expect(Object.keys(report?.bySource ?? {})).toEqual([...INTENT_SOURCES]);
+    expect(Object.keys(report ?? {})).not.toContain("pooled");
   });
 
   it("keeps a source block that holds nothing rather than dropping it", () => {
     // A block that vanished would leave the other reading as the whole answer.
     const report = window(measured(["survived"], { intentSource: "declared" }));
 
-    expect(report?.captured).toMatchObject({ measured: 0, pending: 0, due: 0, missed: 0 });
-    expect(report?.captured.figures).toBeUndefined();
+    expect(report?.bySource.captured).toMatchObject({ measured: 0, pending: 0, due: 0, missed: 0 });
+    expect(report?.bySource.captured.figures).toBeUndefined();
   });
 });
 

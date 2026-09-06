@@ -297,8 +297,8 @@ describe("estimateFor", () => {
     const estimate = await estimateFor({ intent: "rate limit the /orders endpoint" }, RATES, options);
 
     expect(estimate).toMatchObject({ class: "api", source: "intent" });
-    expect(estimate.declared.matched).toBe(0);
-    expect(estimate.captured.matched).toBe(0);
+    expect(estimate.groups.declared.matched).toBe(0);
+    expect(estimate.groups.captured.matched).toBe(0);
   });
 
   it("reports nothing but the count below the threshold", async () => {
@@ -306,8 +306,8 @@ describe("estimateFor", () => {
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.declared.matched).toBe(4);
-    expect(estimate.declared.figures).toBeUndefined();
+    expect(estimate.groups.declared.matched).toBe(4);
+    expect(estimate.groups.declared.figures).toBeUndefined();
   });
 
   it("reports the figures once there are enough", async () => {
@@ -317,8 +317,8 @@ describe("estimateFor", () => {
 
     // Nine sessions at $1.50 through $13.50: the middle is the fifth, and
     // nearest-rank p90 is the ninth.
-    expect(estimate.declared.matched).toBe(9);
-    expect(estimate.declared.figures).toMatchObject({ median: 7.5, p90: 13.5, priced: 9 });
+    expect(estimate.groups.declared.matched).toBe(9);
+    expect(estimate.groups.declared.figures).toMatchObject({ median: 7.5, p90: 13.5, priced: 9 });
   });
 
   it("counts only sessions of the class being asked about", async () => {
@@ -327,7 +327,7 @@ describe("estimateFor", () => {
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.declared.matched).toBe(6);
+    expect(estimate.groups.declared.matched).toBe(6);
   });
 
   it("leaves out sessions that have not stopped", async () => {
@@ -342,7 +342,7 @@ describe("estimateFor", () => {
       options,
     );
 
-    expect((await estimateFor({ intent: "another endpoint" }, RATES, options)).declared.matched).toBe(5);
+    expect((await estimateFor({ intent: "another endpoint" }, RATES, options)).groups.declared.matched).toBe(5);
   });
 
   it("honours --since", async () => {
@@ -352,7 +352,7 @@ describe("estimateFor", () => {
     const since = Date.now() - 30 * DAY_MS;
     const estimate = await estimateFor({ intent: "another endpoint", since }, RATES, options);
 
-    expect(estimate.declared.matched).toBe(5);
+    expect(estimate.groups.declared.matched).toBe(5);
     expect(estimate.since).toBe(new Date(since).toISOString().slice(0, 10));
   });
 
@@ -367,7 +367,7 @@ describe("estimateFor", () => {
     );
 
     expect(estimate).toMatchObject({ class: "docs", source: "declared" });
-    expect(estimate.declared.matched).toBe(2);
+    expect(estimate.groups.declared.matched).toBe(2);
   });
 
   it("classifies past sessions on their paths, not on their words", async () => {
@@ -378,7 +378,7 @@ describe("estimateFor", () => {
 
     const estimate = await estimateFor({ intent: "restyle a component" }, RATES, options);
 
-    expect(estimate.declared.matched).toBe(1);
+    expect(estimate.groups.declared.matched).toBe(1);
   });
 
   it("takes the first look at each session, not the latest one", async () => {
@@ -391,7 +391,7 @@ describe("estimateFor", () => {
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.declared.figures).toMatchObject({ mergedFirstTime: 0, decided: 5 });
+    expect(estimate.groups.declared.figures).toMatchObject({ mergedFirstTime: 0, decided: 5 });
   });
 });
 
@@ -416,8 +416,8 @@ describe("declared and captured, kept apart", () => {
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.declared.matched).toBe(6);
-    expect(estimate.captured.matched).toBe(6);
+    expect(estimate.groups.declared.matched).toBe(6);
+    expect(estimate.groups.captured.matched).toBe(6);
   });
 
   it("gives each side its own money, and neither the median of the pile", async () => {
@@ -426,8 +426,8 @@ describe("declared and captured, kept apart", () => {
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
     // Six values each: the median is the mean of the third and fourth.
-    expect(estimate.declared.figures).toMatchObject({ median: 5.25, p90: 9 });
-    expect(estimate.captured.figures).toMatchObject({ median: 52.5, p90: 90 });
+    expect(estimate.groups.declared.figures).toMatchObject({ median: 5.25, p90: 9 });
+    expect(estimate.groups.captured.figures).toMatchObject({ median: 52.5, p90: 90 });
   });
 
   it("gives each side its own merge rate", async () => {
@@ -440,8 +440,8 @@ describe("declared and captured, kept apart", () => {
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.declared.figures).toMatchObject({ mergedFirstTime: 5, decided: 5 });
-    expect(estimate.captured.figures).toMatchObject({ mergedFirstTime: 0, decided: 5 });
+    expect(estimate.groups.declared.figures).toMatchObject({ mergedFirstTime: 5, decided: 5 });
+    expect(estimate.groups.captured.figures).toMatchObject({ mergedFirstTime: 0, decided: 5 });
   });
 
   it("counts each side's empty sessions against that side alone", async () => {
@@ -460,8 +460,8 @@ describe("declared and captured, kept apart", () => {
     // One empty on each side of the line, and each is counted where it came
     // from. Pooled, three empties would say nothing about which kind of
     // session keeps coming to nothing.
-    expect(estimate.declared).toMatchObject({ matched: 5, empty: 1 });
-    expect(estimate.captured).toMatchObject({ matched: 0, empty: 2 });
+    expect(estimate.groups.declared).toMatchObject({ matched: 5, empty: 1 });
+    expect(estimate.groups.captured).toMatchObject({ matched: 0, empty: 2 });
   });
 
   it("holds each side to the threshold on its own, so neither borrows the other's count", async () => {
@@ -474,10 +474,10 @@ describe("declared and captured, kept apart", () => {
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.declared.matched).toBe(4);
-    expect(estimate.declared.figures).toBeUndefined();
-    expect(estimate.captured.matched).toBe(4);
-    expect(estimate.captured.figures).toBeUndefined();
+    expect(estimate.groups.declared.matched).toBe(4);
+    expect(estimate.groups.declared.figures).toBeUndefined();
+    expect(estimate.groups.captured.matched).toBe(4);
+    expect(estimate.groups.captured.figures).toBeUndefined();
   });
 
   it("counts a record written before intentSource existed as declared", async () => {
@@ -490,8 +490,8 @@ describe("declared and captured, kept apart", () => {
     // written one, so it belongs on the declared side rather than in neither.
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.declared.matched).toBe(5);
-    expect(estimate.captured.matched).toBe(0);
+    expect(estimate.groups.declared.matched).toBe(5);
+    expect(estimate.groups.captured.matched).toBe(0);
   });
 
   it("keeps drift on the side that could have drifted", async () => {
@@ -504,8 +504,8 @@ describe("declared and captured, kept apart", () => {
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);
 
-    expect(estimate.declared.figures?.drift).toEqual([{ path: "src/store.ts", sessions: 5 }]);
-    expect(estimate.captured.figures?.drift).toEqual([]);
+    expect(estimate.groups.declared.figures?.drift).toEqual([{ path: "src/store.ts", sessions: 5 }]);
+    expect(estimate.groups.captured.figures?.drift).toEqual([]);
   });
 });
 
@@ -535,7 +535,7 @@ describe("sessions that changed nothing", () => {
 
     const estimate = await estimateFor(asking, RATES, options);
 
-    expect(estimate.declared).toMatchObject({ matched: 5, empty: 3 });
+    expect(estimate.groups.declared).toMatchObject({ matched: 5, empty: 3 });
   });
 
   it("leaves them out of the distribution", async () => {
@@ -546,7 +546,7 @@ describe("sessions that changed nothing", () => {
     // The five that did something: median $4.50, p90 $7.50. With the three
     // empties in the sample the median would be $2.25 — a figure describing
     // sessions that did no work.
-    expect(estimate.declared.figures).toMatchObject({ priced: 5, median: 4.5, p90: 7.5 });
+    expect(estimate.groups.declared.figures).toMatchObject({ priced: 5, median: 4.5, p90: 7.5 });
   });
 
   it("leaves them out of the first-time merge rate, top and bottom", async () => {
@@ -556,7 +556,7 @@ describe("sessions that changed nothing", () => {
 
     // Five decided, five merged. The empties are in neither half: they did not
     // fail to merge, they never had anything to merge.
-    expect(estimate.declared.figures).toMatchObject({ mergedFirstTime: 5, decided: 5, open: 0 });
+    expect(estimate.groups.declared.figures).toMatchObject({ mergedFirstTime: 5, decided: 5, open: 0 });
   });
 
   it("leaves their drift out too — a session that changed nothing drifted nowhere", async () => {
@@ -567,7 +567,7 @@ describe("sessions that changed nothing", () => {
 
     const estimate = await estimateFor(asking, RATES, options);
 
-    expect(estimate.declared.figures?.drift).toEqual([]);
+    expect(estimate.groups.declared.figures?.drift).toEqual([]);
   });
 
   it("cannot be counted towards the threshold by them", async () => {
@@ -582,8 +582,8 @@ describe("sessions that changed nothing", () => {
 
     const estimate = await estimateFor(asking, RATES, options);
 
-    expect(estimate.declared).toMatchObject({ matched: 4, empty: 4 });
-    expect(estimate.declared.figures).toBeUndefined();
+    expect(estimate.groups.declared).toMatchObject({ matched: 4, empty: 4 });
+    expect(estimate.groups.declared.figures).toBeUndefined();
   });
 });
 
@@ -625,12 +625,15 @@ describe("formatEstimate", () => {
     },
   };
 
+  // Empty by default: the log has no primed session unless a test makes one,
+  // which is also the state `ALWAYS_SHOWN` keeps the block out of the view for.
+  const primed: EstimateGroup = { source: "primed", matched: 0, empty: 0 };
+
   const base: Estimate = {
     intent: "rate limit the /orders endpoint",
     class: "api",
     source: "intent",
-    declared,
-    captured,
+    groups: { declared, primed, captured },
   };
 
   it("leads with the question and where the class came from", () => {
@@ -684,8 +687,7 @@ describe("formatEstimate", () => {
   it("says what each block left out, beside that block's sample", () => {
     const lines = formatEstimate({
       ...base,
-      declared: { ...declared, empty: 3 },
-      captured: { ...captured, empty: 1 },
+      groups: { ...base.groups, declared: { ...declared, empty: 3 }, captured: { ...captured, empty: 1 } },
     });
 
     expect(lines).toContain(
@@ -714,7 +716,7 @@ describe("formatEstimate", () => {
     // answer, which is the pooled reading the split exists to prevent.
     const lines = formatEstimate({
       ...base,
-      declared: { source: "declared", matched: 0, empty: 0 },
+      groups: { ...base.groups, declared: { source: "declared", matched: 0, empty: 0 } },
     });
 
     expect(lines).toContain("  declared  none — nothing like this was declared before it ran");
@@ -724,16 +726,34 @@ describe("formatEstimate", () => {
   it("says the same of a captured block with nothing in it", () => {
     const lines = formatEstimate({
       ...base,
-      captured: { source: "captured", matched: 0, empty: 0 },
+      groups: { ...base.groups, captured: { source: "captured", matched: 0, empty: 0 } },
     });
 
     expect(lines).toContain("  captured  none — the hook recorded nothing like this");
   });
 
+  it("keeps the primed block out of a log that has never primed anything", () => {
+    // Unlike the other two, an empty primed block is a category with no
+    // members rather than one arm of a split going missing: nothing is hidden
+    // by leaving it out, and a permanent empty row is noise.
+    const lines = formatEstimate(base);
+
+    expect(lines.join("\n")).not.toContain("primed");
+  });
+
+  it("prints it once the log holds one", () => {
+    const lines = formatEstimate({
+      ...base,
+      groups: { ...base.groups, primed: { source: "primed", matched: 0, empty: 2 } },
+    });
+
+    expect(lines.join("\n")).toContain("primed");
+  });
+
   it("gives a count and no figures for whichever block is too thin", () => {
     const lines = formatEstimate({
       ...base,
-      captured: { source: "captured", matched: 3, empty: 0 },
+      groups: { ...base.groups, captured: { source: "captured", matched: 3, empty: 0 } },
     });
 
     expect(lines).toContain("  captured  3 sessions  intent taken from the first prompt");
@@ -745,8 +765,7 @@ describe("formatEstimate", () => {
   it("gives the advice once when both blocks are thin, not once each", () => {
     const lines = formatEstimate({
       ...base,
-      declared: { source: "declared", matched: 3, empty: 0 },
-      captured: { source: "captured", matched: 2, empty: 0 },
+      groups: { ...base.groups, declared: { source: "declared", matched: 3, empty: 0 }, captured: { source: "captured", matched: 2, empty: 0 } },
     });
 
     expect(lines.filter((line) => line.includes("too few"))).toHaveLength(2);
@@ -764,7 +783,7 @@ describe("formatEstimate", () => {
     // there would be an answer to a question nobody could have asked.
     const lines = formatEstimate({
       ...base,
-      declared: { source: "declared", matched: 0, empty: 0 },
+      groups: { ...base.groups, declared: { source: "declared", matched: 0, empty: 0 } },
     });
 
     expect(lines.filter((line) => line.includes("too few"))).toHaveLength(0);
@@ -773,7 +792,7 @@ describe("formatEstimate", () => {
   it("admits an unpriced tail rather than folding it into the money", () => {
     const lines = formatEstimate({
       ...base,
-      declared: { ...declared, figures: { ...declared.figures!, priced: 7, unpriced: 2 } },
+      groups: { ...base.groups, declared: { ...declared, figures: { ...declared.figures!, priced: 7, unpriced: 2 } } },
     });
 
     expect(lines.join("\n")).toContain("2 sessions ran on a model with no rate");
@@ -784,7 +803,7 @@ describe("formatEstimate", () => {
     // no rate was found is not a figure, so no figure is printed.
     const lines = formatEstimate({
       ...base,
-      declared: { ...declared, figures: { ...declared.figures!, priced: 0, unpriced: 9 } },
+      groups: { ...base.groups, declared: { ...declared, figures: { ...declared.figures!, priced: 0, unpriced: 9 } } },
     });
 
     expect(lines.join("\n")).not.toContain("$0.00");
@@ -800,9 +819,12 @@ describe("formatEstimate", () => {
     // price" line here would report an absence over a figure somebody measured.
     const lines = formatEstimate({
       ...base,
-      declared: {
-        ...declared,
-        figures: { ...declared.figures!, priced: 9, unpriced: 0, median: 0, p90: 0 },
+      groups: {
+        ...base.groups,
+        declared: {
+          ...declared,
+          figures: { ...declared.figures!, priced: 9, unpriced: 0, median: 0, p90: 0 },
+        },
       },
     });
 
@@ -814,9 +836,12 @@ describe("formatEstimate", () => {
   it("says so rather than printing a rate nothing has settled", () => {
     const lines = formatEstimate({
       ...base,
-      declared: {
-        ...declared,
-        figures: { ...declared.figures!, mergedFirstTime: 0, decided: 0, open: 9 },
+      groups: {
+        ...base.groups,
+        declared: {
+          ...declared,
+          figures: { ...declared.figures!, mergedFirstTime: 0, decided: 0, open: 9 },
+        },
       },
     });
 

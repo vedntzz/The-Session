@@ -9,7 +9,8 @@ import {
   captureIntent,
   getOpenSession,
   intentSourceOf,
-  isCaptured,
+  hasDeclaredScope,
+  inOwnWords,
   parseIntentSource,
   normalizeRemoteUrl,
   readLog,
@@ -256,7 +257,7 @@ describe("intentSource", () => {
     const written = await appendSession(started("I said this"), options);
 
     expect(written.intentSource).toBe("declared");
-    expect(isCaptured(written)).toBe(false);
+    expect(inOwnWords(written)).toBe(true);
   });
 
   it("is captured for a session opened without any", async () => {
@@ -264,14 +265,15 @@ describe("intentSource", () => {
 
     expect(written.intent).toBeNull();
     expect(written.intentSource).toBe("captured");
-    expect(isCaptured(written)).toBe(true);
+    expect(inOwnWords(written)).toBe(false);
   });
 
   it("reads as declared on a record written before capture existed", () => {
     // Nothing but `session start` could have opened one then, so this is a
     // fact about those records rather than a guess about them.
     expect(intentSourceOf({})).toBe("declared");
-    expect(isCaptured({})).toBe(false);
+    expect(inOwnWords({})).toBe(true);
+    expect(hasDeclaredScope({})).toBe(true);
   });
 
   it("refuses a session with no intent that claims somebody declared it", async () => {
@@ -297,8 +299,8 @@ describe("parseIntentSource", () => {
     expect(parseIntentSource(" Captured ")).toBe("captured");
   });
 
-  it("names both when it is given neither", () => {
-    expect(() => parseIntentSource("hook")).toThrow(/Use one of: declared, captured/);
+  it("names every source when it is given none of them", () => {
+    expect(() => parseIntentSource("hook")).toThrow(/Use one of: declared, primed, captured/);
   });
 
   it("refuses the words of an intent, which is the likely typo", () => {

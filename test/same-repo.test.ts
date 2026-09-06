@@ -156,8 +156,8 @@ describe("a repo that gains an origin remote", () => {
     // Five api sessions, which is the floor — split three and two, neither
     // half would have reached it and the answer would have been "too few".
     const estimate = await estimateFor({ intent: "rate limit the /orders endpoint" }, RATES, options);
-    expect(estimate.declared.matched).toBe(5);
-    expect(estimate.declared.figures).toBeDefined();
+    expect(estimate.groups.declared.matched).toBe(5);
+    expect(estimate.groups.declared.figures).toBeDefined();
   });
 
   it("gives debt one repository, not two half-histories", async () => {
