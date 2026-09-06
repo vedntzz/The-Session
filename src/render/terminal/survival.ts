@@ -11,7 +11,6 @@ import {
   type WindowReport,
 } from "../../survival.js";
 import { INTENT_SOURCES } from "../../store.js";
-import { ALWAYS_SHOWN } from "../estimate.js";
 import type { Palette } from "../palette.js";
 import { figure, INDENT, padRight, percent, plural, shortId, width } from "./text.js";
 
@@ -204,21 +203,14 @@ function classLines(report: WindowReport, palette: Palette): string[] {
 /**
  * One line per intent source, and never a total.
  *
- * Declared and captured print even when they hold nothing: a line that
- * vanished for want of sessions would leave the others reading as the whole
- * answer, which is the pooling this split exists to prevent. Primed prints
- * once the log holds one — a log with none has no such category to hide, the
- * same rule `estimate` follows through `ALWAYS_SHOWN`.
+ * Every source prints even when it holds nothing: a line that vanished for
+ * want of sessions would leave the others reading as the whole answer, which
+ * is the pooling this split exists to prevent.
  */
 function sourceLines(report: WindowReport, palette: Palette): string[] {
-  return INTENT_SOURCES.filter(
-    (source) => ALWAYS_SHOWN[source] || hasSessions(report.bySource[source]),
-  ).map((source) => line(source, rateText(report.bySource[source], palette)));
-}
-
-/** True when a sample has any session in it, in any state. */
-function hasSessions(sample: SurvivalSample): boolean {
-  return sample.measured + sample.pending + sample.due + sample.missed > 0;
+  return INTENT_SOURCES.map((source) =>
+    line(source, rateText(report.bySource[source], palette)),
+  );
 }
 
 /**

@@ -665,33 +665,6 @@ describe("formatWeek", () => {
     expect(lines.some((text) => text.includes("recorded by the editor hook"))).toBe(false);
   });
 
-  it("gives a primed row its own mark and its own legend", () => {
-    const rows = [
-      session({ intent: "add rate limiting", cost: cost({ turns: 1 }) }),
-      session({ intent: "widen the limiter", intentSource: "primed", cost: cost({ turns: 1 }) }),
-    ];
-    const lines = formatWeek(rows, 7, plainPalette, {}, priced);
-
-    expect(lines[5]).toContain("+ widen the limiter");
-    expect(lines[4]).not.toContain("+");
-    expect(lines.at(-2)).toBe(
-      "  + 1 session primed: intent and scope proposed from this repo's history, then accepted",
-    );
-  });
-
-  it("explains both marks when rows carry both, in source order", () => {
-    const rows = [
-      session({ intent: "primed one", intentSource: "primed", cost: cost({ turns: 1 }) }),
-      session({ intent: "hooked one", intentSource: "captured", cost: cost({ turns: 1 }) }),
-    ];
-    const legends = formatWeek(rows, 7, plainPalette, {}, priced).filter((text) =>
-      /^ {2}[+~] \d/u.test(text),
-    );
-
-    expect(legends).toHaveLength(2);
-    expect(legends[0]).toContain("+ 1 session");
-    expect(legends[1]).toContain("~ 1 session");
-  });
 
   it("counts the marked rows in the plural", () => {
     const rows = [

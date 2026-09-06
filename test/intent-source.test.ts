@@ -21,7 +21,7 @@ import {
   intentLegends,
   markedIntent,
 } from "../src/render/terminal/intent.js";
-import { ALWAYS_SHOWN, GROUPS, NONE } from "../src/render/estimate.js";
+import { GROUPS, NONE } from "../src/render/estimate.js";
 
 function session(overrides: Partial<Session> = {}): Session {
   return {
@@ -42,8 +42,8 @@ function session(overrides: Partial<Session> = {}): Session {
 }
 
 describe("the source list", () => {
-  it("holds the three the record uses, strongest promise first", () => {
-    expect([...INTENT_SOURCES]).toEqual(["declared", "primed", "captured"]);
+  it("holds the two the record uses, strongest promise first", () => {
+    expect([...INTENT_SOURCES]).toEqual(["declared", "captured"]);
   });
 
   it("round-trips every one of them through the parser", () => {
@@ -70,7 +70,6 @@ describe("every table answers for every source", () => {
     INTENT_MARKER,
     INTENT_NOTE,
     INTENT_LEGEND,
-    ALWAYS_SHOWN,
     GROUPS,
     NONE,
   };
@@ -108,23 +107,24 @@ describe("every table answers for every source", () => {
   });
 });
 
-describe("primed", () => {
-  it("has a scope, so drift is measured against it", () => {
-    const primed = session({ intentSource: "primed" });
+describe("a source that is not the developer's own words", () => {
+  it("has no scope, so drift is not measured against one", () => {
+    const hooked = session({ intentSource: "captured", scope: [] });
 
-    expect(hasDeclaredScope(primed)).toBe(true);
-    expect(driftOf(primed, ["src/api/orders.ts", "db/schema.py"])).toEqual(["db/schema.py"]);
+    expect(hasDeclaredScope(hooked)).toBe(false);
+    expect(driftOf(hooked, ["src/api/orders.ts", "db/schema.py"])).toEqual([]);
   });
 
-  it("is not the developer's own words, unlike a declaration", () => {
+  it("is drift-measured when the developer declared the scope", () => {
+    const declared = session({ intentSource: "declared" });
+
+    expect(hasDeclaredScope(declared)).toBe(true);
+    expect(driftOf(declared, ["src/api/orders.ts", "db/schema.py"])).toEqual(["db/schema.py"]);
+  });
+
+  it("carries a marker only where the words are not the developer's", () => {
     expect(inOwnWords(session({ intentSource: "declared" }))).toBe(true);
-    expect(inOwnWords(session({ intentSource: "primed" }))).toBe(false);
-  });
-
-  it("carries its own marker, distinct from the captured one", () => {
-    expect(markedIntent(session({ intentSource: "primed" }))).toBe(
-      "+ add rate limiting to /orders",
-    );
+    expect(inOwnWords(session({ intentSource: "captured" }))).toBe(false);
     expect(markedIntent(session({ intentSource: "captured" }))).toBe(
       "~ add rate limiting to /orders",
     );
@@ -133,7 +133,7 @@ describe("primed", () => {
     );
   });
 
-  it("reads as declared on a record written before it existed", () => {
+  it("reads as declared on a record written before the field existed", () => {
     expect(intentSourceOf({})).toBe("declared");
   });
 });
@@ -141,22 +141,19 @@ describe("primed", () => {
 describe("the legends", () => {
   it("names only the markers the rows in front of it carry", () => {
     const legends = intentLegends([
-      session({ intentSource: "primed" }),
-      session({ intentSource: "primed" }),
+      session({ intentSource: "captured" }),
+      session({ intentSource: "captured" }),
       session({ intentSource: "declared" }),
     ]);
 
     expect(legends).toHaveLength(1);
-    expect(legends[0]).toMatchObject({ source: "primed", marker: "+", count: 2 });
+    expect(legends[0]).toMatchObject({ source: "captured", marker: "~", count: 2 });
   });
 
-  it("comes back in source order when rows carry more than one", () => {
-    const legends = intentLegends([
-      session({ intentSource: "captured" }),
-      session({ intentSource: "primed" }),
-    ]);
+  it("comes back in source order", () => {
+    const legends = intentLegends([session({ intentSource: "captured" })]);
 
-    expect(legends.map((legend) => legend.source)).toEqual(["primed", "captured"]);
+    expect(legends.map((legend) => legend.source)).toEqual(["captured"]);
   });
 
   it("says nothing at all for a table of declarations", () => {

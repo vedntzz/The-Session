@@ -625,15 +625,11 @@ describe("formatEstimate", () => {
     },
   };
 
-  // Empty by default: the log has no primed session unless a test makes one,
-  // which is also the state `ALWAYS_SHOWN` keeps the block out of the view for.
-  const primed: EstimateGroup = { source: "primed", matched: 0, empty: 0 };
-
   const base: Estimate = {
     intent: "rate limit the /orders endpoint",
     class: "api",
     source: "intent",
-    groups: { declared, primed, captured },
+    groups: { declared, captured },
   };
 
   it("leads with the question and where the class came from", () => {
@@ -730,24 +726,6 @@ describe("formatEstimate", () => {
     });
 
     expect(lines).toContain("  captured  none — the hook recorded nothing like this");
-  });
-
-  it("keeps the primed block out of a log that has never primed anything", () => {
-    // Unlike the other two, an empty primed block is a category with no
-    // members rather than one arm of a split going missing: nothing is hidden
-    // by leaving it out, and a permanent empty row is noise.
-    const lines = formatEstimate(base);
-
-    expect(lines.join("\n")).not.toContain("primed");
-  });
-
-  it("prints it once the log holds one", () => {
-    const lines = formatEstimate({
-      ...base,
-      groups: { ...base.groups, primed: { source: "primed", matched: 0, empty: 2 } },
-    });
-
-    expect(lines.join("\n")).toContain("primed");
   });
 
   it("gives a count and no figures for whichever block is too thin", () => {

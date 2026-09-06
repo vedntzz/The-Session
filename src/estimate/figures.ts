@@ -112,7 +112,7 @@ export interface Estimate {
   /** The cutoff as a date, when `--since` set one. */
   since?: string;
   /**
-   * One group per intent source, never a total: declared, primed and captured
+   * One group per intent source, never a total: declared and captured
    * sessions are different evidence, and a pooled median describes none of
    * them. Keyed by the source rather than held as named fields, so a source
    * added later cannot leave a report answering for the ones that were

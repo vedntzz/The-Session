@@ -458,12 +458,6 @@ describe("renderWeek: sessions the hook recorded", () => {
     expect(renderWeek(week(), 7, {}, priced)).not.toContain("recorded by the editor hook");
   });
 
-  it("marks and explains a primed row the same way the tables do", () => {
-    const html = renderWeek([captured({ intentSource: "primed", scope: ["src/api/"] })], 7, {}, priced);
-
-    expect(html).toContain("+ 1 session primed: intent and scope proposed from this repo&#39;s history, then accepted");
-    expect(html).toContain("+ why does /orders 500");
-  });
 
   it("says so where the intent goes when no prompt ever arrived", () => {
     const listed = rows(renderWeek([captured({ intent: null })], 7, {}, priced));

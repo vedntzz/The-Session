@@ -10,7 +10,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 
 ## Contents
 
-- [The record](#the-record) — the nine fields everything else is a query over, [one repo, two logs](#one-repo-two-logs), [where a primed intent goes](#where-a-primed-intent-goes), and [what the record keeps of a proposal](#what-the-record-keeps-of-a-proposal)
+- [The record](#the-record) — the nine fields everything else is a query over, [one repo, two logs](#one-repo-two-logs), [where a primed intent goes](#where-a-primed-intent-goes) and [what the record keeps of a proposal](#what-the-record-keeps-of-a-proposal) — both superseded
 - [Colour](#colour)
 - [What it cost](#what-it-cost) — why money leads, and where the prices come from
 - [Did it ship?](#did-it-ship) — outcomes decided on content, not commit shas
@@ -24,6 +24,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 - [The log is tamper-evident](#the-log-is-tamper-evident)
 - [Sharing them with the team](#sharing-them-with-the-team) — sync over git refs
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
+- [Rejected](#rejected) — `prime`, and the backtest that stopped it
 
 ---
 
@@ -59,6 +60,8 @@ Only that direction resolves. A checkout with a remote can always be asked what 
 
 ### Where a primed intent goes
 
+> **Superseded.** `prime` was measured and not built — see [Rejected](#rejected). `primed` is no longer a value of `IntentSource` and nothing below is in the code. Kept because the reasoning is what a second attempt would start from, and because both questions were settled before the backtest ran, on the grounds that an append-only log cannot be backfilled.
+
 `prime` proposes a scope at session start from the repo's own co-change and drift history; you accept it or edit it, and then it is written as intent. The record is append-only and signed, so whatever `intentSource` it gets is what it keeps — there is no relabelling pass later that does not fork a chain `session verify` walks line by line. So the label is settled before the command is built.
 
 It is a third value, **primed**. Not `declared` with a `primed: true` flag beside it.
@@ -74,6 +77,8 @@ The cost is a third block in `estimate` and a third line in `survival`. Those bl
 What the record keeps of the proposal itself is settled below, because it has to be: the log is append-only, and a field not written when the session opened is a field that can never be filled in for it.
 
 ### What the record keeps of a proposal
+
+> **Superseded.** `prime` was measured and not built — see [Rejected](#rejected). `primed` is no longer a value of `IntentSource` and nothing below is in the code. Kept because the reasoning is what a second attempt would start from, and because both questions were settled before the backtest ran, on the grounds that an append-only log cannot be backfilled.
 
 One field, written at `session start` and never after:
 
@@ -884,6 +889,38 @@ Commands:
 `help all` is the term for the root's own `help` and no other. Commander gives every command with subcommands an implicit `help` of its own; the override that renames ours is guarded on the parent rather than the name, because matched by name it renamed those too and `session hook --help` went out advertising a `session hook help all` that does not exist.
 
 Nothing is removed by this. Every command below still runs, and `session help all` lists all of them with their descriptions. The short list is a decision about what a first reader can use, not a claim about what exists — a help screen with fifteen entries is one nobody finishes, and the commands that get lost in it are the ones a newcomer most needs.
+
+## Rejected
+
+Things that were designed, measured, and not built. Kept because the measurement is the useful part: a reader deciding whether to try one of these again should start from what already failed rather than from the idea.
+
+### `prime` — a proposed scope from the repo's own history
+
+`session start --scope` only earns its keep if somebody types a scope, and mostly nobody does — fourteen of the twenty-two sessions in this repo's own log declared none. `prime` was to propose one from the record: co-change says which files move together, `debt` says which files work keeps landing in that nobody plans for, and between them the tool should be able to offer a scope the developer accepts, edits or ignores.
+
+**The rule.** Deterministic throughout, no model anywhere near it. Seeds are the paths the developer named; with none, the intent is classified through `INTENT_RULES` — the table `estimate` already uses — and the seeds are the busiest paths of that class in past sessions. Each seed is expanded through `partnersOf`, at the shipped `MIN_TOGETHER` and `MIN_RATE`. This repo's `debtOf` paths are added. The result is capped at five, ordered by rate then sessions then path, and rolled up so a parent directory stands in for two or more of its own files.
+
+**The backtest.** `evidence/prime-backtest.mjs`, against this repo's real log, on three sessions whose reality is known. Every ranking function is imported from `dist/` rather than reimplemented; history is truncated to sessions that closed before each target opened, so nothing leaks backwards. Three columns, and the third is the one that matters: how much of the tree the proposal claims, out of the files `git ls-files` reports.
+
+| session | history | exact paths | rolled up | tree claimed |
+|---|---|---|---|---|
+| `5a2f990d` add session debt | 12 | 2/34 (6%) | 8/34 (24%) | 42/142 |
+| `bc012da3` add co-change detection | 13 | 3/17 (18%) | 17/17 (100%) | 139/142 |
+| `263b1ee6` print the session id | 20 | 3/25 (12%) | 25/25 (100%) | 139/142 |
+
+**Two of those rows read 100%, and both are worthless.** The rolled-up proposal in each was `src/`, plus `test/`. That covers 139 of 142 tracked files, which is the whole repository — and a scope covering the whole repository cannot produce drift, because there is nothing left outside it to drift onto. It scores perfectly by making the measurement impossible. The honest column is the first: **6%, 18%, 12%**.
+
+**Three faults, and only two are in the rule.**
+
+*The roll-up is wrong.* "A parent stands in for two or more of its files" turns `src/program.ts` and `src/git.ts` into `src/`. This tree is shallow, so one roll-up swallows everything.
+
+*The seeding promotes exactly what co-change works to suppress.* Unseeded, it takes the busiest paths of the class: `src/render/terminal.ts` (7 of 17 sessions that changed anything), `test/program.test.ts` (7), `src/git.ts` (6). `MIN_RATE`'s commoner-denominator exists to keep files like these out of the pairs list; seeding hands them in through the front door, where no such guard applies, and their partners are the other busy files. The proposal is a list of this repo's hubs wearing the clothes of a prediction.
+
+*The third is not in the rule at all.* The median session here touches **10 files across 9 directories**, and the largest touched 58 across 18 — `evidence/diag.mjs` prints the spread. These are broad refactors. There may be no set of path prefixes that predicts them, and a rule that appears to succeed on this log will have done it by proposing everything, which is what happened.
+
+**n = 1, and the caveat is not a formality.** One repository, one developer, twenty-two sessions of which seventeen changed anything, and a codebase whose sessions are unusually diffuse because it is small and cross-cutting. This is evidence that `prime` does not work *here*, on *this* rule. It is not evidence that scope cannot be proposed. A repo with narrow, localised sessions is the case that would actually test it, and the first thing to do before trying again is run `evidence/prime-backtest.mjs` against one.
+
+`primed` has been taken back out of `IntentSource` and out of every site it reached. What survives is on paper: [where a primed intent goes](#where-a-primed-intent-goes) and [what the record keeps of a proposal](#what-the-record-keeps-of-a-proposal), both marked superseded and both kept. They were settled before the backtest ran, because an append-only log cannot be backfilled and the questions had to be answered while a session could still be opened under them. Removing the value was mechanical — the exhaustive tables that made adding it safe are the same ones that found every site on the way out, and they stay.
 
 ---
 

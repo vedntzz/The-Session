@@ -300,7 +300,7 @@ describe("parseIntentSource", () => {
   });
 
   it("names every source when it is given none of them", () => {
-    expect(() => parseIntentSource("hook")).toThrow(/Use one of: declared, primed, captured/);
+    expect(() => parseIntentSource("hook")).toThrow(/Use one of: declared, captured/);
   });
 
   it("refuses the words of an intent, which is the likely typo", () => {

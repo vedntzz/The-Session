@@ -73,7 +73,6 @@ const NO_DRIFT_POSSIBLE =
  */
 const ASKED_FOR: Record<IntentSource, { before: string; after: string }> = {
   declared: { before: 'You asked for "', after: '".' },
-  primed: { before: 'You accepted "', after: '", proposed from this repo\'s history.' },
   captured: {
     before: 'Your first prompt was "',
     after: '", and you declared nothing up front.',

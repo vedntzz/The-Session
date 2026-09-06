@@ -122,28 +122,27 @@ export type SessionOutcome = "open" | "merged" | "abandoned" | "empty";
  * Where a session's intent came from.
  *
  * `declared` was typed by the developer at `session start`, before the agent
- * ran. `primed` was proposed by the tool from the repository's own co-change
- * and drift history and then accepted, so the timing is a declaration's and
- * the authorship is not. `captured` was taken from the first prompt of a
- * session the editor hook opened on its own — the same words, in the same
- * order, but nobody chose to write them down as a declaration.
+ * ran. `captured` was taken from the first prompt of a session the editor hook
+ * opened on its own — the same words, in the same order, but nobody chose to
+ * write them down as a declaration.
  *
- * The three are kept apart everywhere because they are different evidence. A
- * declaration is a commitment made in advance; a primed intent is the tool's
- * proposal ratified; a captured intent is a transcript of what was asked for.
- * All three are written before anything happened and none can be edited
- * afterwards — but a reader comparing intent to reality is owed the fact that
- * only one of them was ever a promise the developer composed.
+ * The two are kept apart everywhere because they are different evidence. A
+ * declaration is a commitment made in advance; a captured intent is a
+ * transcript of what was asked for. Both are written before anything happened
+ * and neither can be edited afterwards — but a reader comparing intent to
+ * reality is owed the fact that one of them was never a promise.
  *
  * A list rather than a bare union, like `SESSION_CLASSES`: every site that
  * branches on this is written as a `Record<IntentSource, …>` or a map over
- * this array, so adding a fourth source is a compile error at each of them
- * rather than two arms out of three quietly answering for all of it.
+ * this array, so adding a source is a compile error at each of them rather
+ * than one arm out of two quietly answering for both. A third was added and
+ * taken out again — see Rejected in docs/decisions.md — and the shape is kept
+ * because it is what made removing it a mechanical change.
  *
  * Ordered strongest promise to weakest, which is the order `estimate` and
  * `survival` print their blocks in.
  */
-export const INTENT_SOURCES = ["declared", "primed", "captured"] as const;
+export const INTENT_SOURCES = ["declared", "captured"] as const;
 
 export type IntentSource = (typeof INTENT_SOURCES)[number];
 
@@ -266,15 +265,11 @@ export function intentSourceOf(session: Pick<Session, "intentSource">): IntentSo
 /**
  * Whether somebody set a scope before the agent ran, so drift can be measured.
  *
- * A table rather than a test against one value: a primed session has a scope —
- * the tool proposed it and the developer accepted it — and that answer is
- * written down here rather than falling out of `!== "captured"`. The two sites
- * that legitimately treat primed and declared alike are the ones that ask this
- * question, and they say so by asking it.
+ * A table rather than a test against one value, so a source added later has to
+ * state its answer here instead of inheriting one from `!== "captured"`.
  */
 const HAS_SCOPE: Record<IntentSource, boolean> = {
   declared: true,
-  primed: true,
   captured: false,
 };
 
@@ -290,15 +285,16 @@ export function hasDeclaredScope(session: Pick<Session, "intentSource">): boolea
 /**
  * Whether the intent is the developer's own words.
  *
- * Separate from `hasDeclaredScope` because the two questions come apart on
- * exactly one source: a primed session has a scope to be held to and did not
- * write the words it is held to. Views that label authorship — the marker in
- * the tables, the sentence in `show`, whether `pr` shortens the summary —
- * ask this one.
+ * The same answers as `hasDeclaredScope` on today's two sources, and still a
+ * separate question: one asks whether there is a scope to measure drift
+ * against, the other whether the words are the developer's. `path` and `meta`
+ * are two palette roles that are both dim for the same reason — the day a
+ * source answers these differently is a line here, not an audit of every
+ * caller. Views that label authorship ask this one: the marker in the tables,
+ * the sentence in `show`, whether `pr` shortens the summary.
  */
 const OWN_WORDS: Record<IntentSource, boolean> = {
   declared: true,
-  primed: false,
   captured: false,
 };
 

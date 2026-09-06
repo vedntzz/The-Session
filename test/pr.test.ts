@@ -119,20 +119,6 @@ describe("renderPr", () => {
     expect(body()).not.toContain("captured");
   });
 
-  it("labels a primed intent too — the words were proposed, not composed", () => {
-    const primed = body({
-      intentSource: "primed",
-      intent: "rate limit the /orders endpoint\n\nproposed from src/api/ and db/",
-    });
-
-    expect(primed.split("\n")[0]).toBe(
-      "rate limit the /orders endpoint (proposed from this repo's history, then accepted)",
-    );
-    // Shortened like a prompt and folded away whole, for the same reason: a
-    // declaration is the only intent the developer wrote to be held to.
-    expect(primed).toContain(`<details><summary>${FULL_PROMPT}</summary>`);
-    expect(primed).toContain("proposed from src/api/ and db/");
-  });
 
   it("still never shortens a declaration", () => {
     const long = body({ intent: "rate limit the /orders endpoint\n\nand the /carts one" });

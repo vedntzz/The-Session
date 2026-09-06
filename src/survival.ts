@@ -315,7 +315,6 @@ function windowReport(
     // what makes a missing source a compile error here.
     bySource: {
       declared: sampleOf(ofSource(merged, "declared")),
-      primed: sampleOf(ofSource(merged, "primed")),
       captured: sampleOf(ofSource(merged, "captured")),
     },
   };

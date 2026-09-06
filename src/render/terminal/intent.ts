@@ -24,7 +24,6 @@ export const DRIFT_MARKER = "!";
  */
 export const INTENT_MARKER: Record<IntentSource, string> = {
   declared: "",
-  primed: "+",
   captured: "~",
 };
 
@@ -35,7 +34,6 @@ export const INTENT_MARKER: Record<IntentSource, string> = {
  */
 export const INTENT_NOTE: Record<IntentSource, string | undefined> = {
   declared: undefined,
-  primed: "proposed from this repo's history, then accepted",
   captured: "captured from the first prompt, not declared",
 };
 
@@ -45,7 +43,6 @@ export const INTENT_NOTE: Record<IntentSource, string | undefined> = {
  */
 export const INTENT_LEGEND: Record<IntentSource, string | undefined> = {
   declared: undefined,
-  primed: "primed: intent and scope proposed from this repo's history, then accepted",
   captured:
     "recorded by the editor hook: intent captured from the first prompt, no scope declared",
 };

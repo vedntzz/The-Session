@@ -38,41 +38,24 @@ export function percent(part: number, whole: number): string {
 /** What each group is, said once per block so the counts are not read as one. */
 export const GROUPS: Record<IntentSource, string> = {
   declared: "intent written at session start",
-  primed: "intent proposed from this repo's history, then accepted",
   captured: "intent taken from the first prompt",
 };
 
 /** What a block says when the log holds none of that kind. */
 export const NONE: Record<IntentSource, string> = {
   declared: "none — nothing like this was declared before it ran",
-  primed: "none — nothing like this was primed before it ran",
   captured: "none — the hook recorded nothing like this",
 };
 
-/**
- * Which blocks print on a log that holds none of them.
- *
- * Declared and captured always do: either could have members on any log, and a
- * block that vanished for want of sessions would leave the other reading as
- * the whole answer, which is the pooling this split exists to prevent. A log
- * with no primed session has no such category to hide — the same distinction
- * `debt` and `cochange` draw between finding nothing and having nothing to
- * look in — so that block appears once the log holds one and not before.
- */
-export const ALWAYS_SHOWN: Record<IntentSource, boolean> = {
-  declared: true,
-  primed: false,
-  captured: true,
-};
 
 /**
  * One group's block: what it is made of, then what it came to.
  *
- * Printed even when it is empty, for the sources `ALWAYS_SHOWN` names. A block
- * that disappears for want of sessions would leave the others looking like the
- * whole answer, which is the pooled reading this is here to prevent — and "no
- * declared sessions like this" is itself worth knowing, since it says the
- * figures below come entirely from work nobody wrote down in advance.
+ * Printed even when it is empty. A block that disappears for want of sessions
+ * would leave the other looking like the whole answer, which is the pooled
+ * reading this is here to prevent — and "no declared sessions like this" is
+ * itself worth knowing, since it says the figures below come entirely from
+ * work nobody wrote down in advance.
  */
 export function formatGroup(group: EstimateGroup): string[] {
   if (group.matched === 0 && group.empty === 0) {
@@ -222,9 +205,7 @@ export function formatEstimate(estimate: Estimate): string[] {
     lines.push(line("since", estimate.since));
   }
 
-  const shown = INTENT_SOURCES.map((source) => estimate.groups[source]).filter(
-    (group) => ALWAYS_SHOWN[group.source] || group.matched > 0 || group.empty > 0,
-  );
+  const shown = INTENT_SOURCES.map((source) => estimate.groups[source]);
   for (const group of shown) {
     lines.push("", ...formatGroup(group));
   }
