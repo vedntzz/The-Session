@@ -10,7 +10,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 
 ## Contents
 
-- [The record](#the-record) — the nine fields everything else is a query over, [one repo, two logs](#one-repo-two-logs), and [where a primed intent goes](#where-a-primed-intent-goes)
+- [The record](#the-record) — the nine fields everything else is a query over, [one repo, two logs](#one-repo-two-logs), [where a primed intent goes](#where-a-primed-intent-goes), and [what the record keeps of a proposal](#what-the-record-keeps-of-a-proposal)
 - [Colour](#colour)
 - [What it cost](#what-it-cost) — why money leads, and where the prices come from
 - [Did it ship?](#did-it-ship) — outcomes decided on content, not commit shas
@@ -32,7 +32,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 Nine fields. Everything else is a query over them.
 
 - **intent** — what you said you were doing, in your own words. Written once, never editable.
-- **intentSource** — where those words came from: **declared** if you typed them at `session start`, **captured** if the hook took them off your first prompt. Fixed when the session opens, like the intent itself.
+- **intentSource** — where those words came from: **declared** if you typed them at `session start`, **primed** if `prime` proposed them and you accepted, **captured** if the hook took them off your first prompt. Fixed when the session opens, like the intent itself.
 - **scope** — the files you expected to change. Path prefixes, matched at directory boundaries: `api/middleware/` covers everything beneath it, `api/order` never covers `api/orders.py`.
 - **baseline** — what was already modified when the session opened, so you are not billed for work that was sitting there before it.
 - **reality** — the files that actually changed, less the baseline.
@@ -71,7 +71,46 @@ It is a third value, **primed**. Not `declared` with a `primed: true` flag besid
 
 The cost is a third block in `estimate` and a third line in `survival`. Those blocks print when empty on purpose, so no arm can be mistaken for the whole answer — but that rule protects a category that could have members. A log holding no primed session has no such category, so the primed block appears once the log holds one and not before: the same distinction `debt` and `cochange` draw between finding nothing and having nothing to look in.
 
-Two things this does not settle, both for when `prime` is built. Whether accepting a proposal unedited and editing it first are the same event on the record — they are different acts, and only one of them is a prediction. And whether the proposed scope is kept beside the accepted one, so the gap between what the tool suggested and what you signed off can itself be measured. Neither changes the label; both are questions about what else the record should carry next to it.
+What the record keeps of the proposal itself is settled below, because it has to be: the log is append-only, and a field not written when the session opened is a field that can never be filled in for it.
+
+### What the record keeps of a proposal
+
+One field, written at `session start` and never after:
+
+```ts
+export interface Proposal {
+  intent: string;
+  scope: string[];
+}
+
+proposal?: Proposal;   // absent = prime did not run
+```
+
+It is not patchable, alongside `intent`, `intentSource`, `repo` and `attribution` — a proposal you can revise after seeing the result is the rationalisation invariant 1 exists to refuse, one step removed. Optional, so `canonicalJson` drops it and every record written before it existed hashes exactly as it did.
+
+**The proposal is kept because without it nothing about `prime` is answerable, ever.** Not for the reason it first looks like, though, and the difference matters for whoever reads the figures. The gap between what was proposed and what was accepted is not a measure of whether `prime` proposes well — it measures how far the developer deferred, and deference moves with fatigue, time pressure and the anchoring the section above already refuses to call a declaration. A weak proposal accepted whole at the end of a long day records no gap at all. What does say whether `prime` proposes well is the proposal against **`reality`**: whether the paths it named turned out to be the paths that changed, which is a comparison against something the repository decided rather than something the developer agreed to. Both readings need the same field, and only one of them is worth quoting.
+
+**No scope rule ever reads it.** `scope` means the paths the developer declared, and `covers`, the drift computed at `stop` and `debt`'s rule that a later declaration clears a file all key off that meaning. A second scope-shaped array beside it is a second thing that can be wired into those by mistake, and `debt` is where it would do damage: a proposed path treated as a declaration would clear debt nobody ever took on. It is on the record to be compared against, never to be matched with.
+
+**Written whole, even when it is identical to what was accepted.** Storing it only where it differs would be smaller and would make absence mean two things — "prime ran and you took it as offered" and "prime never ran" — and on an append-only log the second meaning is already true of every record written before today. One field with one meaning is worth the duplicated array.
+
+**It is independent of `intentSource`.** `proposal` says `prime` ran and what it offered; `intentSource` says what became of the words. A developer who throws the proposal away and writes their own intent has a `declared` session that still carries a `proposal` — the record of a proposal that was rejected, which is the most informative one there is and exactly what a rule that stored proposals only on primed sessions would throw away.
+
+**Whether it was edited is not a field.** Accepting a proposal unedited and editing it first are different acts, and the record does distinguish them — by holding both lists, so `proposal.scope` against `scope` answers it. A flag beside those two arrays would be a stored derivation of the fields next to it, the same defect as the `outcome` on disk that every view recomputes and the `cost.emptyTurns` no view may read raw; the first time the flag and the arrays disagreed, the flag would win by being the easier of the two to read. It is also the wrong shape for what is being asked: "edited" spans dropping one path and replacing the list outright, and the difference between those is the signal. `wasEdited` is a function in `scope.ts` beside `covers`, and no field.
+
+A session that primed, kept the words and dropped one of the two proposed paths, as it goes on disk:
+
+```json
+"set": {
+  "intent": "add rate limiting to /orders",
+  "intentSource": "primed",
+  "scope": ["src/api/"],
+  "proposal": { "intent": "add rate limiting to /orders", "scope": ["src/api/", "db/"] },
+  ...
+}
+```
+
+**Why the proposal was made is not stored.** The inputs are the log itself, and the log is append-only: the records that existed when the session opened are still there, in order, so what `partnersOf` and `debtOf` would have seen can be replayed from the prefix. The one part that cannot be reconstructed is co-change's `gone` marking, which asks the branch tip and so answers about today — the same reason `survival` writes its observations down instead of recomputing them. That is a known limit, not a field: it changes which pairs are *displayed*, never which pairs the log holds.
 
 ### Colour
 
@@ -97,14 +136,18 @@ Tokens are not a unit anybody budgets in. Money is, so money is what leads.
 ```
 $ session week
 
-  started      intent                         cost  turns  empty  outcome
-  08-16 03:01  add rate limiting to /orders  $4.04     14      3  merged
-  08-16 11:20  make the retry backoff adap…  $1.02      6      4  abandoned
-  08-17 09:05  try the websocket thing       $0.52      3      0  open
+  4 sessions · 1 landed on the default branch · 1 did not · 1 still open · 1 changed no files
 
-  3 sessions                                 $5.58     23      7
-  $5.58 spent, $1.54 of it on changes that never merged
-  7 of 23 turns changed no files
+  id        started      intent                        outcome    drift files  turns  empty   cost
+  c68583ab  09-06 17:56  add rate limiting to /orders  merged               0      3      —  $4.05
+  5bd0d997  09-06 17:56  make the retry backoff adap…  abandoned            0      2      —  $1.05
+  c1132d46  09-06 17:56  try the websocket thing       open                 0      1      —  $0.52
+  ae05f5ce  09-06 17:56  check whether the limiter f…  empty                0      4      4  $0.35
+
+  4 sessions                                                                0     10      —
+  3 sessions cannot say which turns changed no files — the diff answers for the session, not for the turn
+  $5.96 spent, $1.57 of it on changes that never merged
+  prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
 
 Two figures, because they are two different failures. **Turns that changed no files** is money spent going nowhere inside a session. **Changes that never merged** is money spent on whole sessions that did not land — the abandoned ones, and the ones still in flight, which have not paid for themselves yet either.
@@ -161,12 +204,21 @@ A model in neither file is not priced at whatever the nearest model costs. It sa
 ```
 $ session week
 
-  started      intent                        cost  turns  empty  outcome
-  08-16 03:01  add rate limiting to /orders     —     14      3  open
+  1 session · 0 landed on the default branch · 0 did not · 1 still open
 
-  1 session                                     —     14      3
-  1 session unpriced: claude-opus-5 — add rates to ~/.session/rates.json
-  3 of 14 turns changed no files
+  id        started      intent                        outcome  drift files  turns  empty  cost
+  2dc3f74f  09-06 17:56  add rate limiting to /orders  open               0      3      —     —
+
+  1 session                                                               0      3      —
+  1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+  — spent: nothing here could be priced
+  1 session unpriced: mystery-9 — save this as ~/.session/rates.json
+  {
+    "note": "Replace every 0 below with that model's published price in dollars per million tokens. A rate left at 0 prices the model at nothing, which is not the same as leaving it unpriced.",
+    "models": {
+      "mystery-9": { "input": 0, "cacheRead": 0, "cacheCreation": 0, "output": 0 }
+    }
+  }
 ```
 
 The tokens are still there under `--tokens`, and the total says how much of itself it could not account for. A guessed rate that ends up on an invoice is worse than an admitted gap.
@@ -178,15 +230,29 @@ The last question about a session is the one nobody writes down: did any of it s
 ```
 $ session week
 
-  started      intent              cost  turns  empty  outcome
-  08-16 03:01  add rate limiting  $4.04     14      3  open
+  1 session · 0 landed on the default branch · 0 did not · 1 still open
+
+  id        started      intent                        outcome  drift files  turns  empty   cost
+  6547d2e2  09-06 17:57  add rate limiting to /orders  open               0      3      —  $4.05
+
+  1 session                                                               0      3      —
+  1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+  $4.05 spent, $4.05 of it on changes that never merged
+  prices checked 2026-08-23 — override in ~/.session/rates.json
 
 # ... the branch is squash-merged and deleted ...
 
 $ session week
 
-  started      intent              cost  turns  empty  outcome
-  08-16 03:01  add rate limiting  $4.04     14      3  merged
+  1 session · 1 landed on the default branch · 0 did not
+
+  id        started      intent                        outcome  drift files  turns  empty   cost
+  6547d2e2  09-06 17:57  add rate limiting to /orders  merged             0      3      —  $4.05
+
+  1 session                                                               0      3      —
+  1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+  $4.05 spent, all of it shipped
+  prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
 
 Nothing was written between those two runs. The default branch comes from `origin/HEAD` where the remote states one, then `main`, then `master`.
@@ -277,9 +343,18 @@ $ session week
 
   recorded 1 outcome, 2 survival checks
 
-  started      intent              cost  turns  empty  outcome
-  08-16 03:01  add rate limiting  $4.04     14      3  merged
+  1 session · 1 landed on the default branch · 0 did not
+
+  id        started      intent                        outcome  drift files  turns  empty   cost
+  cf5476d0  09-05 17:59  restyle the header component  merged             0      2      —  $1.05
+
+  1 session                                                               0      2      —
+  1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+  $1.05 spent, all of it shipped
+  prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
+
+That log was built by running the real binary against a shifted system clock: a survival window takes fourteen days to close and there is no clock seam in the CLI, so the dates in it will not line up with this repository's history.
 
 Four rules keep that from being an imposition:
 
@@ -300,9 +375,16 @@ Every session is filed under what it was working on — `schema`, `api`, `ui`, `
 ```
 $ session week --class
 
-  started      intent                class   cost  turns  empty  outcome
-  08-16 03:01  rate limit /orders    api    $6.19     14      3  merged
-  08-16 09:40  restyle the header    ui     $1.55      4      4  open
+  2 sessions · 1 landed on the default branch · 0 did not · 1 still open
+
+  id        started      intent                        class  outcome  drift files  turns  empty   cost
+  1c4a8b4b  09-06 17:56  rate limit /orders            api    merged             0      3      —  $3.11
+  0a5c3a01  09-06 17:56  restyle the header component  ui     open               0      2      —  $0.66
+
+  2 sessions                                                                     0      5      —
+  2 sessions cannot say which turns changed no files — the diff answers for the session, not for the turn
+  $3.76 spent, $0.66 of it on changes that never merged
+  prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
 
 Which makes the question you actually have before starting answerable from your own history:
@@ -469,22 +551,23 @@ Without that line an unmarked row would mean two different things in the same re
 ```
 $ session week --md
 
-### AI-assisted work · 12–18 Aug
+### AI-assisted work · 31 Aug – 6 Sep
 
-**$47.10 spent · 6 changes shipped · 9 files touched outside plan**
+**2 changes shipped · 1 did not · 1 still open · 4 files touched outside plan**
 
-| Date | Work | Outcome | Cost | Unplanned |
+| Date | Work | Outcome | Unplanned | Cost |
 |---|---|---|---:|---:|
-| 12 Aug | add rate limiting to /orders | ✅ | $4.12 | 0 |
-| 13 Aug | ~ why does /orders 500 when the cart is empty |  | $0.45 | 0 |
-| 15 Aug | migrate the orders table to the new schema | ✅ | $11.90 | 4 |
-| **Total** | **9 sessions** | **6 ✅** | **$47.10** | **9** |
+| 6 Sep | add rate limiting to /orders | ✅ | 0 | $4.12 |
+| 6 Sep | ~ why does /orders 500 when the cart is empty |  | 0 | $0.45 |
+| 6 Sep | migrate the orders table to the new schema | ✅ | 4 | $11.90 |
+| 6 Sep | make the retry backoff adaptive |  | 0 | $2.00 |
+| **Total** | **4 sessions** | **2 ✅** | **4** |  |
 
 2 sessions changed no files and are not in the table, costing $0.61.
 
 ~ 1 session recorded by the editor hook: intent captured from the first prompt, no scope declared.
 
-**$7.85 per shipped change.**
+**$18.47 spent · $9.24 per shipped change**
 ```
 
 `--copy` puts it on your clipboard instead of printing it, and implies `--md` — a terminal table is not what anybody pastes into a page. Every `week` filter still applies, so `session week --md --client Acme --days 30` is the month's invoice line.
@@ -620,13 +703,16 @@ Then the week can be narrowed to one of them:
 ```
 $ session week --client Acme
 
+  1 session · 1 landed on the default branch · 0 did not
   only client Acme
-  started      intent                         cost  turns  empty  outcome
-  08-16 02:41  add rate limiting to /orders  $4.04     14      3  merged
 
-  1 session                                  $4.04     14      3
-  $4.04 spent, $0.00 of it on changes that never merged
-  3 of 14 turns changed no files
+  id        started      intent                        outcome  drift files  turns  empty   cost
+  07a41f28  09-06 14:59  add rate limiting to /orders  merged             0      3      —  $4.05
+
+  1 session                                                               0      3      —
+  1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+  $4.05 spent, all of it shipped
+  prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
 
 Matching ignores case and surrounding space — the value was typed into a shared file by one person and typed again on the command line by another. It is exact otherwise: a prefix match would fold Acme and Acme Corporation into one invoice.
