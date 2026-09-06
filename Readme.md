@@ -9,7 +9,7 @@ $ session show
   You asked for "add rate limiting to /orders".
   1 file changed outside what you declared: db/schema.py.
 
-  $0.45 · 3 turns
+  ace87ecd · $0.45 · 3 turns
 ```
 
 ```bash
@@ -28,7 +28,8 @@ session pr             # the pull request body, from the record — pipe it into
 ```
 
 `scan` is the one command that answers before you have recorded anything: it
-reads the transcripts already on your disk, and writes nothing anywhere.
+reads the transcripts already on your disk and writes no record. Only `--open`
+writes at all, and only an HTML page in your temp directory.
 
 ## What it is for
 
@@ -54,7 +55,7 @@ One session's gap is an anecdote. **Intent debt** is the accumulated gap between
 
 | | |
 |---|---|
-| `session scan` | What the sessions already on this machine did, last 30 days. No setup, read-only. |
+| `session scan` | What the sessions already on this machine did, last 30 days. No setup, and no record written. `--open` writes the page instead of printing it. |
 | `session start "<intent>"` | Open a session by hand. Records HEAD and the scope you declare with `--scope`. |
 | `session show` | The last session: where it landed, what was asked, what drifted. `--full` for every path and counter. |
 | `session week` | The last 7 days, one row each: where the work went and what drifted. `--md` writes it for Slack, Notion or a meeting. |
