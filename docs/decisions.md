@@ -10,7 +10,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 
 ## Contents
 
-- [The record](#the-record) — the nine fields everything else is a query over, and [one repo, two logs](#one-repo-two-logs)
+- [The record](#the-record) — the nine fields everything else is a query over, [one repo, two logs](#one-repo-two-logs), and [where a primed intent goes](#where-a-primed-intent-goes)
 - [Colour](#colour)
 - [What it cost](#what-it-cost) — why money leads, and where the prices come from
 - [Did it ship?](#did-it-ship) — outcomes decided on content, not commit shas
@@ -56,6 +56,22 @@ So reading asks the checkout what its origin is now, and reads the log it used t
 `session debt` does the same thing without a checkout to start from: it resolves each path-keyed log's own directory to whatever origin it has today, and merges only where some other log is already keyed on that remote. The resolution is the evidence that two logs are one repo; with nothing to merge into, there is nothing to say. A directory that has been deleted, is no longer a repo, or still has no remote gives no answer, and its log stays where it is.
 
 Only that direction resolves. A checkout with a remote can always be asked what it used to be called, because its root is a fact about where it is; a remote-keyed log names no directory to go and ask. And the lookup is never written down: `repo` on a record says what the repository was called when the record was written, which is a fact about the past, and facts about the past are not edited here.
+
+### Where a primed intent goes
+
+`prime` proposes a scope at session start from the repo's own co-change and drift history; you accept it or edit it, and then it is written as intent. The record is append-only and signed, so whatever `intentSource` it gets is what it keeps — there is no relabelling pass later that does not fork a chain `session verify` walks line by line. So the label is settled before the command is built.
+
+It is a third value, **primed**. Not `declared` with a `primed: true` flag beside it.
+
+**Because `declared` already means something narrower than "a human agreed to it".** The field records where the words came from: typed at `session start`, or taken off the first prompt. A primed intent keeps the timing and loses the authorship — the words were the tool's, and your part was to not disagree. Widening `declared` to cover that redefines a value every record already on disk was written under, and each one becomes ambiguous after the fact: typed, or accepted? A third value leaves all of them meaning exactly what they meant. `intentSourceOf` already leans on that stability — an absent field reads as `declared` because nothing but `session start` could have written an intent then, and that inference holds only while `declared` keeps its current meaning.
+
+**Because the tool would be grading its own proposal.** A primed scope is assembled from the paths that have historically drifted, and drift is `reality` minus `scope`. Priming will therefore lower drift mechanically, for the arithmetic reason that the scope was built from the paths most likely to turn up in `reality`. Filed as `declared`, that lands in the same arm as your unaided prediction, and the declared arm's drift rate, median and merge rate will move as priming spreads with nothing in the output to say that is what changed. That is precisely the defect `estimate`'s two blocks exist to prevent, reproduced one level down inside one of them. Declared and captured are kept apart because they are different evidence. Primed is a third kind, and putting it in `declared` is pooling.
+
+**Because a flag beside the field is invisible to the compiler everywhere.** A third member of `IntentSource` breaks `GROUPS` and `NONE` in `render/estimate.ts` immediately — both are exhaustive `Record<IntentSource, string>`, which is the type asking the question out loud. It does not break everything: `survival.ts` and `commands/estimate.ts` build their two arms as named fields rather than as a map over the union, and `parseIntentSource` matches two literals, so those three keep compiling while answering for two arms out of three. Those are the sites to change by hand, and the type is what leads you to them. A `primed?: boolean` breaks nothing anywhere and is found by remembering. The three-way split the flag was meant to enable stays optional, and on an append-only record "later" only ever reaches sessions not yet written — the ones already filed under `declared` are the evidence, and they stay filed there.
+
+The cost is a third block in `estimate` and a third line in `survival`. Those blocks print when empty on purpose, so no arm can be mistaken for the whole answer — but that rule protects a category that could have members. A log holding no primed session has no such category, so the primed block appears once the log holds one and not before: the same distinction `debt` and `cochange` draw between finding nothing and having nothing to look in.
+
+Two things this does not settle, both for when `prime` is built. Whether accepting a proposal unedited and editing it first are the same event on the record — they are different acts, and only one of them is a prediction. And whether the proposed scope is kept beside the accepted one, so the gap between what the tool suggested and what you signed off can itself be measured. Neither changes the label; both are questions about what else the record should carry next to it.
 
 ### Colour
 
