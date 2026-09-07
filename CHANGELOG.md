@@ -62,6 +62,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ask it. Only the word differs — a dash in a column read at a glance,
   `unpriced` or `not captured` in a document read cold.
 
+### Removed
+
+- **`session cochange` is gone**, with `src/cochange.ts`, `partnersOf`,
+  `MIN_TOGETHER` and `MIN_RATE`. Breaking: the command no longer exists and
+  `session help all` no longer lists it. It was a count over `reality` alone,
+  so no declaration entered the arithmetic and nothing it printed could be a
+  planning failure — what it ranked was which files are central. `debt` reads
+  `drift`, which is `reality` less what was declared, and that subtraction was
+  the only real difference between the two reports. Its one consumer was
+  `prime`, rejected in the previous release, after which `partnersOf` was
+  called by nothing but its own tests. No record field changes and no log is
+  rewritten: `reality` is still on every session, so nothing here is
+  unrecoverable if the question is ever worth asking again. The reasoning is
+  kept under [Rejected](docs/decisions.md#cochange--the-files-that-move-together).
+
 ## [0.8.0] — 2026-09-01
 
 ### Changed

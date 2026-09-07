@@ -19,7 +19,7 @@ Node 20+, TypeScript, ESM. `commander` for the CLI, `picocolors` for output. Sto
 ## Layout
 
 ```
-src/  cli.ts registration   commands/ start stop show week scan debt cochange survival pr sweep
+src/  cli.ts registration   commands/ start stop show week scan debt survival pr sweep
       verify key config settle estimate intent home hook   render/ palette.ts (semantic)
       terminal.ts html.ts markdown.ts pr.ts (a pull request body, from the record)
       capture/ hook.ts, adapters/claude-code.ts, transcript.ts
@@ -29,7 +29,6 @@ src/  cli.ts registration   commands/ start stop show week scan debt cochange su
       pricing.ts money   observe.ts repo facts   scan.ts aggregation   git.ts diff, HEAD
       scope.ts what a declared scope covers (stop and debt share the one rule)
       debt.ts paths that keep drifting and were never declared since, per repo
-      cochange.ts files that keep changing together, per repo; partnersOf(path)
       survival.ts whether merged work is still there at 14 and 30 days
       commands/sweep.ts settle + due checks, once a day per repo, silent unless written
       chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
@@ -94,4 +93,4 @@ type SessionCost = TokenCounts & {
 
 ## The rest
 
-Rules for one area each, loaded when that area is what you are changing: `.claude/skills/measurement-rules` (outcome, class, intent source, scan, debt, co-change, survival, estimate, money), `.claude/skills/sync-and-chain` (the line on disk, verify, refs), `.claude/skills/terminal-output` (CLI surface, colour, Markdown, the pull request body). Why any of it is this way: [docs/decisions.md](docs/decisions.md).
+Rules for one area each, loaded when that area is what you are changing: `.claude/skills/measurement-rules` (outcome, class, intent source, scan, debt, survival, estimate, money), `.claude/skills/sync-and-chain` (the line on disk, verify, refs), `.claude/skills/terminal-output` (CLI surface, colour, Markdown, the pull request body). Why any of it is this way: [docs/decisions.md](docs/decisions.md).

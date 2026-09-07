@@ -81,9 +81,9 @@ export function padLeft(text: string, to: number): string {
  * A share as a whole percent.
  *
  * Rounded: the shares these views print are counts over counts — paths that
- * survived, sessions a pair moved together in — and a tenth of a file is not a
- * thing. Shared so `survival`'s rates and `cochange`'s strengths cannot come
- * to be written two different ways.
+ * survived, out of the paths that were checked — and a tenth of a file is not
+ * a thing. It stays here rather than moving into `survival.ts`, its only
+ * caller now, so the next view that prints a share rounds it the same way.
  */
 export function percent(share: number): string {
   return `${Math.round(share * 100)}%`;
