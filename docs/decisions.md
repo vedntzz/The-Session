@@ -23,6 +23,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 - [The log is tamper-evident](#the-log-is-tamper-evident)
 - [Sharing them with the team](#sharing-them-with-the-team) — sync over git refs
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
+- [What 1.0 means](#what-10-means) — twenty verbs, frozen, and the two exceptions
 - [Rejected](#rejected) — `cochange`, which measured centrality, and `prime`, and the backtest that stopped it
 
 ---
@@ -817,6 +818,21 @@ Commands:
 `help all` is the term for the root's own `help` and no other. Commander gives every command with subcommands an implicit `help` of its own; the override that renames ours is guarded on the parent rather than the name, because matched by name it renamed those too and `session hook --help` went out advertising a `session hook help all` that does not exist.
 
 Nothing is removed by this. Every command below still runs, and `session help all` lists all of them with their descriptions. The short list is a decision about what a first reader can use, not a claim about what exists — a help screen with fifteen entries is one nobody finishes, and the commands that get lost in it are the ones a newcomer most needs.
+
+## What 1.0 means
+
+**The surface is frozen at twenty verbs.** No new commands after 1.0 — refinement only: bugs, documentation, error messages, and making what is already there clearer.
+
+Two exceptions, named here so that nothing else can be argued into the same shape later:
+
+- **A GitHub Action that posts the record on a pull request.** `pr` already writes it; this puts it where the review happens.
+- **A team view over the peer records `pull` already fetches.** They are on the machine and nothing reads them together.
+
+Neither is a new measurement. Both are a surface onto what the tool already records.
+
+The reason is that the surface outgrew the story once already, and not narrowly. `prime` was measured and never shipped; `cochange` shipped and was cut. The same fault both times: each measured something other than the distance between a declaration and a diff, and it took a backtest and a fold to see it.
+
+A freeze written down is worth more than one I remember. The next good idea will arrive with a rationale, and the rationale is the part I am bad at refusing.
 
 ## Rejected
 
