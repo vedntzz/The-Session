@@ -860,13 +860,15 @@ What survives is in `debt`, which was always the same shape: the same `readAllSe
 
 **The rule.** Deterministic throughout, no model anywhere near it. Seeds are the paths the developer named; with none, the intent is classified through `INTENT_RULES` — the table `estimate` already uses — and the seeds are the busiest paths of that class in past sessions. Each seed was expanded through `partnersOf`, at co-change's then-shipped `MIN_TOGETHER` and `MIN_RATE`. This repo's `debtOf` paths are added. The result is capped at five, ordered by rate then sessions then path, and rolled up so a parent directory stands in for two or more of its own files.
 
-**The backtest.** `evidence/prime-backtest.mjs`, against this repo's real log, on three sessions whose reality is known. Every ranking function is imported from `dist/` rather than reimplemented; history is truncated to sessions that closed before each target opened, so nothing leaks backwards. Three columns, and the third is the one that matters: how much of the tree the proposal claims, out of the files `git ls-files` reports.
+**The backtest.** `evidence/prime-backtest.mjs`, against this repo's real log, on three sessions whose reality is known. Every ranking function is the shipped one rather than a reimplementation; history is truncated to sessions that closed before each target opened, so nothing leaks backwards. The co-change half no longer ships — see [above](#cochange--the-files-that-move-together) — so the script vendors `partnersOf` frozen at the commit that removed it, and still runs. Three columns, and the third is the one that matters: how much of the tree the proposal claims, out of the files `git ls-files` reports.
 
 | session | history | exact paths | rolled up | tree claimed |
 |---|---|---|---|---|
 | `5a2f990d` add session debt | 12 | 2/34 (6%) | 8/34 (24%) | 42/142 |
 | `bc012da3` add co-change detection | 13 | 3/17 (18%) | 17/17 (100%) | 139/142 |
 | `263b1ee6` print the session id | 20 | 3/25 (12%) | 25/25 (100%) | 139/142 |
+
+The first four columns still reproduce exactly. The last one is a share of the tree as it stood on the day, and the tree has since lost the six files `cochange` was: re-run today it reads 40/136, 133/136 and 133/136. The figures the argument rests on are the middle two.
 
 **Two of those rows read 100%, and both are worthless.** The rolled-up proposal in each was `src/`, plus `test/`. That covers 139 of 142 tracked files, which is the whole repository — and a scope covering the whole repository cannot produce drift, because there is nothing left outside it to drift onto. It scores perfectly by making the measurement impossible. The honest column is the first: **6%, 18%, 12%**.
 
