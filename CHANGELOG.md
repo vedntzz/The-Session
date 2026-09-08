@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-08
+
+**The surface is frozen at twenty verbs.** After 1.0 there are no new commands —
+refinement only: bugs, documentation, error messages, and making what is already
+there clearer. Two exceptions are named in advance, a GitHub Action that posts
+the record on a pull request and a team view over the peer records `pull`
+already fetches; neither is a new measurement. The reasoning, and why a freeze
+written down is worth more than one that is remembered, is in
+[What 1.0 means](docs/decisions.md#what-10-means).
+
+### Removed
+
+- **`session cochange` is gone**, with `src/cochange.ts`, `partnersOf`,
+  `MIN_TOGETHER` and `MIN_RATE`. Breaking: the command no longer exists and
+  `session help all` no longer lists it. It was a count over `reality` alone,
+  so no declaration entered the arithmetic and nothing it printed could be a
+  planning failure — what it ranked was which files are central. `debt` reads
+  `drift`, which is `reality` less what was declared, and that subtraction was
+  the only real difference between the two reports. Its one consumer was
+  `prime`, decided against below, after which `partnersOf` was called by
+  nothing but its own tests. No record field changes and no log is rewritten:
+  `reality` is still on every session, so nothing here is unrecoverable if the
+  question is ever worth asking again. The reasoning is kept under
+  [Rejected](docs/decisions.md#cochange--the-files-that-move-together).
+
+### Decided
+
+- **`prime` — a proposed scope from the repo's own history — was measured and
+  not built.** Nothing shipped and nothing was taken away, so there is nothing
+  here for a user to upgrade to or from; it is recorded because the measurement
+  is the reusable part. Fourteen of the twenty-two sessions in this repo's log
+  declared no scope, and `prime` was to propose one deterministically from the
+  record. Backtested against three real sessions it put 6%, 18% and 12% of the
+  paths those sessions actually changed into its proposal, and the two rolled-up
+  runs that scored 100% did so by proposing `src/` plus `test/` — 139 of 142
+  tracked files, a scope nothing can drift outside of, which scores perfectly by
+  making the measurement impossible. The evidence is `evidence/prime-backtest.mjs`
+  and the reasoning is under
+  [Rejected](docs/decisions.md#prime--a-proposed-scope-from-the-repos-own-history).
+  The `primed` intent source that had been added for it was taken back out; the
+  record's `IntentSource` keeps the table-driven shape that made removing it a
+  mechanical change rather than an audit of every caller.
+
+## [0.9.0] — 2026-09-06
+
 ### Added
 
 - **Every view that shows a session now prints its id.** `session pr [id]` and
@@ -61,21 +106,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   something else. It is now `sessionFigure`, beside the rates, and both tables
   ask it. Only the word differs — a dash in a column read at a glance,
   `unpriced` or `not captured` in a document read cold.
-
-### Removed
-
-- **`session cochange` is gone**, with `src/cochange.ts`, `partnersOf`,
-  `MIN_TOGETHER` and `MIN_RATE`. Breaking: the command no longer exists and
-  `session help all` no longer lists it. It was a count over `reality` alone,
-  so no declaration entered the arithmetic and nothing it printed could be a
-  planning failure — what it ranked was which files are central. `debt` reads
-  `drift`, which is `reality` less what was declared, and that subtraction was
-  the only real difference between the two reports. Its one consumer was
-  `prime`, rejected in the previous release, after which `partnersOf` was
-  called by nothing but its own tests. No record field changes and no log is
-  rewritten: `reality` is still on every session, so nothing here is
-  unrecoverable if the question is ever worth asking again. The reasoning is
-  kept under [Rejected](docs/decisions.md#cochange--the-files-that-move-together).
 
 ## [0.8.0] — 2026-09-01
 
@@ -381,7 +411,9 @@ that a reader following the tags is not left wondering what became of it.
 - The hook now fires reliably on `SessionEnd`, under a 10-second timeout.
 - `week --open` no longer paints the waste hue over a figure of zero.
 
-[Unreleased]: https://github.com/vedntzz/The-Session/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/vedntzz/The-Session/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/vedntzz/The-Session/compare/v0.9.0...v1.0.0
+[0.9.0]: https://github.com/vedntzz/The-Session/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/vedntzz/The-Session/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/vedntzz/The-Session/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vedntzz/The-Session/compare/v0.5.0...v0.6.0
