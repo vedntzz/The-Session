@@ -1,6 +1,7 @@
 // `session show`: three sentences, then the id and a line of three figures.
 import { formatUsd, priceSession, wasMeasured, type RateTable } from "../../pricing.js";
 import {
+  inOwnWords,
   intentSourceOf,
   type IntentSource,
   type Session,
@@ -10,9 +11,9 @@ import {
 import { plainPalette, type Palette } from "../palette.js";
 import { emptyTurnsOf } from "../../empty.js";
 import { costCell, NO_RATES, wasteCell, type View } from "./cost.js";
-import { intentOf } from "./intent.js";
+import { headOf, intentOf } from "./intent.js";
 import { summarizePaths } from "./paths.js";
-import { INDENT, plural, shortId } from "./text.js";
+import { flatten, INDENT, plural, shortId, wrapSegments } from "./text.js";
 
 // --- the brief views -----------------------------------------------------
 
@@ -71,13 +72,33 @@ const NO_DRIFT_POSSIBLE =
  * rather than in a line of its own — it is the same fact the full view spends
  * a row on, and here it is a clause.
  */
-const ASKED_FOR: Record<IntentSource, { before: string; after: string }> = {
-  declared: { before: 'You asked for "', after: '".' },
+const ASKED_FOR: Record<IntentSource, AskedFrame> = {
+  declared: { whole: 'You asked for "', after: '".' },
   captured: {
-    before: 'Your first prompt was "',
+    whole: 'Your first prompt was "',
+    // Only where something was left out. "began" in front of a prompt that is
+    // printed whole would be claiming there is more of it, which is the same
+    // kind of lie in the other direction.
+    begun: 'Your first prompt began "',
     after: '", and you declared nothing up front.',
   },
 };
+
+/** The words around a quoted intent: one opening for all of it, one for a head of it. */
+interface AskedFrame {
+  whole: string;
+  begun?: string;
+  after: string;
+}
+
+/**
+ * Where a reader who wants the rest of a shortened prompt is sent.
+ *
+ * Only printed where something was actually left out. A pointer to a fuller
+ * view under a prompt that is already whole is a line that teaches the reader
+ * to ignore the line.
+ */
+const REST_OF_IT = " Run session show --full for the whole of it.";
 
 /**
  * The second sentence: what was asked for.
@@ -98,7 +119,20 @@ function askedFor(session: Session): { before: string; intent: string; after: st
   // the sentence around them otherwise, and the reader who most needs this
   // view is the one reading it with colour turned off in a log.
   const frame = ASKED_FOR[intentSourceOf(session)];
-  return { before: frame.before, intent: session.intent, after: frame.after };
+  // A declaration prints whole, however long: it is the promise the diff is
+  // held to, and a view that showed half of it would be hiding the yardstick
+  // it is measuring against. A prompt the hook captured is not a promise and
+  // runs to paragraphs, so it is shortened by the rule `pr` shortens it with
+  // — first sentence or first line — and the reader is told where the rest is.
+  if (inOwnWords(session)) {
+    return { before: frame.whole, intent: flatten(session.intent), after: frame.after };
+  }
+  const { head, cut } = headOf(session.intent);
+  return {
+    before: cut ? (frame.begun ?? frame.whole) : frame.whole,
+    intent: flatten(head),
+    after: `${frame.after}${cut ? REST_OF_IT : ""}`,
+  };
 }
 
 /**
@@ -202,15 +236,33 @@ export function formatBrief(
   const asked = askedFor(session);
   const outside = wentOutside(session);
 
+  const limit = view.width;
   const lines = [
     "",
     // Left in the terminal's own colour, like the money. It is the one line
     // that is always there, and colouring what is always there says nothing;
     // the `merged` and `abandoned` inks stay where they mark one row out of a
     // table of them.
-    `${INDENT}${WHERE_IT_WENT[session.outcome]}`,
-    `${INDENT}${asked.before}${palette.intent(asked.intent)}${asked.after}`,
-    `${INDENT}${outside.before}${palette.drift(outside.paths)}${outside.after}`,
+    ...wrapSegments([{ text: WHERE_IT_WENT[session.outcome] }], limit),
+    // Three sentences, however many lines each of them takes. The ink goes on
+    // after the wrap, so an escape code never counts toward a width and the
+    // quotes stay outside the words they are quoting.
+    ...wrapSegments(
+      [
+        { text: asked.before },
+        { text: asked.intent, ink: palette.intent },
+        { text: asked.after },
+      ],
+      limit,
+    ),
+    ...wrapSegments(
+      [
+        { text: outside.before },
+        { text: outside.paths, ink: palette.drift },
+        { text: outside.after },
+      ],
+      limit,
+    ),
   ];
 
   lines.push("", `${INDENT}${palette.meta(bottomLine(session, view.rates ?? NO_RATES))}`);

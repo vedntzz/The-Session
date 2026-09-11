@@ -16,6 +16,7 @@ import {
   readLog,
   readSessions,
   repoKey,
+  repoName,
   resolveStoreFile,
   updateSession,
   zeroCost,
@@ -431,6 +432,33 @@ describe("log durability", () => {
     await writeFile(file, `{ oops\n${await readFile(file, "utf8")}`, "utf8");
 
     await expect(readSessions(options)).rejects.toThrow(/corrupt JSON/);
+  });
+});
+
+describe("repoName", () => {
+  it("drops the prefix the store tells two kinds of identity apart by", () => {
+    expect(repoName("remote:github.com/acme/tool")).toBe("github.com/acme/tool");
+    expect(repoName("path:/srv/build/tool", "/Users/me")).toBe("/srv/build/tool");
+  });
+
+  it("shortens the home directory to the way the reader would have typed it", () => {
+    expect(repoName("path:/Users/me/src/tool", "/Users/me")).toBe("~/src/tool");
+    expect(repoName("path:/Users/me", "/Users/me")).toBe("~");
+  });
+
+  it("shortens only a path that is really under the home directory", () => {
+    // `/Users/meadow` starts with the same characters and is somewhere else.
+    expect(repoName("path:/Users/meadow/tool", "/Users/me")).toBe("/Users/meadow/tool");
+  });
+
+  it("keeps a whole path rather than the last segment of it", () => {
+    // Two checkouts of one project share a last segment, and a report that
+    // called them both `tool` would be pooling two answers under one name.
+    expect(repoName("path:/a/tool", "/h")).not.toBe(repoName("path:/b/tool", "/h"));
+  });
+
+  it("leaves a key it does not recognise exactly as it found it", () => {
+    expect(repoName("something-else")).toBe("something-else");
   });
 });
 

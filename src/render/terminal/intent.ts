@@ -114,3 +114,67 @@ export function intentOf(session: Pick<Session, "intent" | "endedAt">): string {
   }
   return session.endedAt === null ? NO_INTENT_OPEN : NO_INTENT_ENDED;
 }
+
+// --- shortening somebody's own words -------------------------------------
+
+/**
+ * The head of a prompt, and whether anything was left behind.
+ *
+ * `head` is the first sentence or the first line, whichever ends sooner; `cut`
+ * says a view that prints only the head is not printing all of it, and so owes
+ * the reader a way to the rest.
+ */
+export interface IntentHead {
+  head: string;
+  cut: boolean;
+}
+
+/**
+ * Where the first sentence ends, or the whole length when none does.
+ *
+ * A full stop, question mark or exclamation mark that is followed by
+ * whitespace or by nothing at all. The trailing test is what keeps
+ * `src/api/orders.ts` and `v1.2` whole, since the stop inside them is followed
+ * by a letter or a digit; `...` and `?!` end where the run does, for the same
+ * reason.
+ *
+ * It will cut early on an abbreviation — "e.g. the limiter" ends at `e.g.` —
+ * and that is a real miss, taken knowingly. The rule has to be one a reader
+ * can predict from the sentence describing it, the alternative is a list of
+ * abbreviations in a tool that has no business knowing English, and the cost
+ * of being wrong is that the reader opens the view that holds every word.
+ */
+function sentenceEnd(text: string): number {
+  const found = /[.?!](?=\s|$)/u.exec(text);
+  return found ? found.index + 1 : text.length;
+}
+
+/** Where the first line ends, or the whole length when there is one line. */
+function lineEnd(text: string): number {
+  const at = text.indexOf("\n");
+  return at === -1 ? text.length : at;
+}
+
+/**
+ * Shortens a prompt to the one line a view has room for.
+ *
+ * The one rule, shared. `render/pr.ts` spends it on a summary line with the
+ * whole prompt folded into a block underneath; `show` and the bare screen
+ * spend it on a sentence with `session show --full` underneath. Two copies of
+ * it would be two chances for the pull request body and the terminal to
+ * disagree about where somebody's first sentence ended.
+ *
+ * **Only ever applied to words the developer did not compose.** A declaration
+ * is the promise the diff is held to and prints whole wherever it prints at
+ * all — see `inOwnWords`. And no model is asked to summarise anything: the
+ * whole rule is these two string searches, which is what invariant 3 requires
+ * of a view that shortens somebody's prompt.
+ *
+ * Measured on the index rather than on the text, because the head is flattened
+ * for the line and the whole text is not — comparing the two would call a run
+ * of spaces a truncation.
+ */
+export function headOf(text: string): IntentHead {
+  const end = Math.min(sentenceEnd(text), lineEnd(text));
+  return { head: text.slice(0, end), cut: end < text.length };
+}

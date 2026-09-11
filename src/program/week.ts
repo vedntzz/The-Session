@@ -16,7 +16,7 @@ import { loadChecked, loadRates } from "../pricing.js";
 import { renderWeek } from "../render/html.js";
 import { renderMarkdownWeek } from "../render/markdown.js";
 import type { Palette } from "../render/palette.js";
-import { formatWeek } from "../render/terminal.js";
+import { formatWeek, terminalWidth } from "../render/terminal.js";
 import { INTENT_SOURCES, parseIntentSource, storeHome } from "../store.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
@@ -95,6 +95,11 @@ async function emitWeek(
     checked: await loadChecked(),
     tokens: flags.tokens,
     classes: flags.class !== undefined,
+    // Measured once, here, like the palette: whether stdout is a terminal and
+    // how wide it is do not change between two lines of the same run. Only
+    // the table below reads it — the Markdown and the HTML are laid out by
+    // whatever renders them.
+    width: terminalWidth(),
   };
 
   if (flags.md || flags.copy) {

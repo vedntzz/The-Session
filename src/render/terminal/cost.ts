@@ -22,6 +22,12 @@ export interface View {
    * where the file states none, and where the view does not quote a price.
    */
   checked?: string;
+  /**
+   * How many columns the view may use, from `terminalWidth`. Absent means no
+   * limit, which is what a pipe, a file and every layout test get — see
+   * `terminalWidth` for why those are not measured.
+   */
+  width?: number;
 }
 
 export const NO_RATES: RateTable = new Map();

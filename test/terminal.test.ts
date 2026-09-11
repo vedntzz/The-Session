@@ -8,7 +8,9 @@ import {
   formatHome,
   formatSession,
   formatWeek,
+  MIN_WIDTH,
   SHORT_ID,
+  terminalWidth,
   type View,
 } from "../src/render/terminal.js";
 import { zeroCost, zeroTokens, type Session, type SessionCost } from "../src/store.js";
@@ -537,6 +539,24 @@ describe("a session the hook recorded", () => {
 });
 
 describe("formatWeek", () => {
+  /**
+   * The one note matching `what`. Found rather than counted from the end: the
+   * notes sit in two blocks with a blank line between them, so an index from
+   * either end is a fact about how many notes this fixture happened to earn.
+   */
+  function noteMatching(lines: readonly string[], what: RegExp): string {
+    const found = lines.filter((line) => what.test(line));
+    expect(found).toHaveLength(1);
+    return found[0] as string;
+  }
+
+  /** The totals row: the one row whose label is a session count, under a blank line. */
+  function totalsOf(lines: readonly string[]): string {
+    const at = lines.findIndex((line) => /^ {2}\d+ sessions? {2,}/.test(line));
+    expect(at).toBeGreaterThan(0);
+    return lines[at] as string;
+  }
+
   it("renders one row per session, with a totals footer", () => {
     expect(formatWeek(week(), 7, plainPalette, {}, priced)).toEqual([
       "",
@@ -549,6 +569,9 @@ describe("formatWeek", () => {
       "",
       "  3 sessions                                                                0     19     10",
       "  10 of 19 turns changed no files",
+      // What the table does not say, then the money: two questions, so two
+      // blocks rather than one stack of dim sentences.
+      "",
       "  $9.00 spent, $2.81 of it on changes that never merged",
     ]);
   });
@@ -653,7 +676,7 @@ describe("formatWeek", () => {
     expect(lines[4]).toContain("add rate limiting");
     expect(lines[4]).not.toContain("~");
     expect(lines[5]).toContain("~ why does /orders 500");
-    expect(lines.at(-2)).toBe(
+    expect(noteMatching(lines, /editor hook/)).toBe(
       "  ~ 1 session recorded by the editor hook: intent captured from the first prompt, " +
         "no scope declared",
     );
@@ -672,7 +695,9 @@ describe("formatWeek", () => {
       session({ intent: "two", intentSource: "captured", cost: cost({ turns: 1 }) }),
     ];
 
-    expect(formatWeek(rows, 7, plainPalette, {}, priced).at(-2)).toContain("~ 2 sessions");
+    expect(noteMatching(formatWeek(rows, 7, plainPalette, {}, priced), /editor hook/)).toContain(
+      "~ 2 sessions",
+    );
   });
 
   it("keeps the marked intent inside its column", () => {
@@ -805,20 +830,21 @@ describe("formatWeek", () => {
     const lines = formatWeek(week(), 7, tagged, {}, priced);
 
     expect(lines[3]).toMatch(/^<meta>.*<\/meta>$/);
-    expect(lines.at(-2)).toBe("<meta>  10 of 19 turns changed no files</meta>");
+    expect(noteMatching(lines, /changed no files/)).toBe(
+      "<meta>  10 of 19 turns changed no files</meta>",
+    );
     expect(lines[4]).not.toContain("<meta>");
   });
 
   it("totals the drift files, turns and empty turns across the week", () => {
-    const footer = formatWeek(week(), 7, plainPalette, {}, priced).at(-3) as string;
-    expect(footer).toBe(
+    expect(totalsOf(formatWeek(week(), 7, plainPalette, {}, priced))).toBe(
       "  3 sessions                                                                0     19     10",
     );
   });
 
   it("leaves the cost out of the totals row, so the footnote is the only total", () => {
     const lines = formatWeek(week(), 7, plainPalette, {}, priced);
-    const footer = lines.at(-3) as string;
+    const footer = totalsOf(lines);
 
     expect(footer).not.toContain("$");
     expect(lines.filter((line) => line.includes("$9.00"))).toHaveLength(1);
@@ -826,8 +852,7 @@ describe("formatWeek", () => {
 
   it("counts every session in the footer, abandoned ones included", () => {
     // Abandoned work still cost money; leaving it out would flatter the week.
-    const footer = formatWeek(week(), 7, plainPalette, {}, priced).at(-3) as string;
-    expect(footer).toContain("3 sessions");
+    expect(totalsOf(formatWeek(week(), 7, plainPalette, {}, priced))).toContain("3 sessions");
   });
 
   it("says what the week cost last of all, under everything the rows do not say", () => {
@@ -888,8 +913,12 @@ describe("formatWeek", () => {
   });
 
   it("names the count of turns that changed no files, above the money", () => {
-    expect(formatWeek(week(), 7, plainPalette, {}, priced).at(-2)).toBe(
-      "  10 of 19 turns changed no files",
+    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
+
+    expect(noteMatching(lines, /changed no files/)).toBe("  10 of 19 turns changed no files");
+    // Above the money, which is the last line of all.
+    expect(lines.indexOf(noteMatching(lines, /changed no files/))).toBeLessThan(
+      lines.indexOf(noteMatching(lines, /spent/)),
     );
   });
 
@@ -898,7 +927,9 @@ describe("formatWeek", () => {
       reality: ["a.ts"],
       cost: cost({ turns: 1, emptyTurns: 0, emptySource: "tools", apiCalls: 1 }),
     });
-    expect(formatWeek([one], 7, plainPalette, {}, priced).at(-2)).toBe("  0 of 1 turn changed no files");
+    expect(noteMatching(formatWeek([one], 7, plainPalette, {}, priced), /changed no files/)).toBe(
+      "  0 of 1 turn changed no files",
+    );
   });
 
   it("omits the waste line when no turns were captured at all", () => {
@@ -1428,5 +1459,135 @@ describe("formatCommands", () => {
 
   it("says where the short list is, so the two are not confused", () => {
     expect(formatCommands(entries, plainPalette)[1]).toContain("session --help");
+  });
+});
+
+describe("laying out against a terminal", () => {
+  /** Visible width, counted in code points: an em dash is one column, not three. */
+  function widest(lines: readonly string[]): number {
+    return lines.reduce((soFar, line) => Math.max(soFar, [...line].length), 0);
+  }
+
+  /**
+   * The row for one session, found by its id rather than by its index: a
+   * narrow enough width wraps the headline above the table and shifts every
+   * row down, which is the thing being tested rather than a reason to fail.
+   */
+  function rowFor(lines: readonly string[], id: string): string {
+    const row = lines.find((line) => line.includes(id));
+    expect(row).toBeDefined();
+    return row as string;
+  }
+
+  it("measures a terminal and leaves a pipe alone", () => {
+    expect(terminalWidth({ isTTY: true, columns: 100 })).toBe(100);
+    // No limit, so the render is the one the tests above pin byte for byte.
+    expect(terminalWidth({ isTTY: false, columns: 100 })).toBeUndefined();
+    expect(terminalWidth({ isTTY: true, columns: undefined })).toBeUndefined();
+  });
+
+  it("will not shrink a view past the width a table stops being readable at", () => {
+    expect(terminalWidth({ isTTY: true, columns: 20 })).toBe(MIN_WIDTH);
+  });
+
+  it("fits the table inside the terminal by giving up intent, not figures", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, width: 90 });
+
+    expect(widest(lines)).toBeLessThanOrEqual(90);
+    // The figures are all still there: it is the one column that can give that
+    // gave, and every row gave the same amount so the columns still line up.
+    expect(lines[3]).toContain("drift files");
+    expect(lines[3]).toContain("cost");
+    expect(lines[4]).toContain("$1.26");
+  });
+
+  it("gives the intent every column the other columns are not using", () => {
+    const wide = formatWeek(week(), 7, plainPalette, {}, { ...priced, width: 200 });
+    const narrow = formatWeek(week(), 7, plainPalette, {}, { ...priced, width: 90 });
+
+    // Capped at the natural width even where there is room for more: past it
+    // the table stops being a table.
+    expect(wide).toEqual(formatWeek(week(), 7, plainPalette, {}, priced));
+    expect(widest(narrow)).toBeLessThan(widest(wide));
+  });
+
+  it("stops shrinking the intent before the rows become indistinguishable", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, width: MIN_WIDTH });
+
+    // The floor is binding here, so the table overflows rather than cutting
+    // every row down to a few characters — a table whose rows cannot be told
+    // apart is not an improvement on one that wrapped.
+    expect(widest(lines)).toBeGreaterThan(MIN_WIDTH);
+    expect(rowFor(lines, "a1b2c3d4")).toContain("add rate limi");
+    expect(rowFor(lines, "b2c3d4e5")).toContain("refactor the");
+  });
+
+  it("wraps the prose at the width, whatever the table could not fit into", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, width: 60 });
+    // The headline above the table, and the notes under it. Everything
+    // between the two is the table, which has a floor and may overflow; a
+    // sentence has no floor, so every line of one fits.
+    const prose = [
+      ...lines.slice(1, lines.indexOf("", 1)),
+      ...lines.filter((line) => /changed no files|spent/.test(line)),
+    ];
+
+    expect(prose.length).toBeGreaterThan(2);
+    expect(widest(prose)).toBeLessThanOrEqual(60);
+    // Every line of a wrapped note carries the indent, so the note reads as
+    // one block rather than as a first line with an orphan under it.
+    for (const line of prose) {
+      expect(line.startsWith("  ")).toBe(true);
+      expect(line.startsWith("   ")).toBe(false);
+    }
+  });
+});
+
+describe("an intent too long for the view it is in", () => {
+  const prompt =
+    "Prepare 1.0.0. Move the CHANGELOG entries under a heading with today's " +
+    "date, and add a Removed section naming what went and why it went.";
+
+  it("prints a declaration whole, however long it runs", () => {
+    const declared = session({ intent: prompt, intentSource: "declared" });
+    const lines = formatBrief(declared, plainPalette, { width: 80 }).join(" ");
+
+    // The promise the diff is held to, in full: a view that showed half of it
+    // would be hiding the yardstick it is measuring against.
+    expect(lines).toContain("and why it went");
+    expect(lines).toContain('You asked for "');
+    expect(lines).not.toContain("--full for the whole of it");
+  });
+
+  it("shortens a captured prompt to its first sentence, and says where the rest is", () => {
+    const captured = session({ intent: prompt, intentSource: "captured" });
+    const lines = formatBrief(captured, plainPalette, { width: 80 });
+
+    const asked = lines.find((line) => line.includes("first prompt")) as string;
+    expect(asked).toContain('Your first prompt began "Prepare 1.0.0."');
+    expect(lines.join(" ")).toContain("session show --full");
+    expect(lines.join(" ")).not.toContain("Removed section");
+  });
+
+  it("does not claim there is more of a captured prompt that is already whole", () => {
+    const captured = session({ intent: "why does /orders 500?", intentSource: "captured" });
+    const lines = formatBrief(captured, plainPalette, { width: 80 }).join(" ");
+
+    expect(lines).toContain('Your first prompt was "why does /orders 500?"');
+    expect(lines).not.toContain("began");
+    expect(lines).not.toContain("--full for the whole of it");
+  });
+
+  it("wraps rather than overflows, and keeps the ink off the width", () => {
+    const declared = session({ intent: prompt, intentSource: "declared" });
+    const plain = formatBrief(declared, plainPalette, { width: 60 });
+    const inked = formatBrief(declared, tagged, { width: 60 });
+
+    for (const line of plain) {
+      expect([...line].length).toBeLessThanOrEqual(60);
+    }
+    // The tags go on after the wrap, so they cannot push a line over the edge:
+    // stripping them gives back exactly the render above.
+    expect(inked.map((line) => line.replaceAll(/<\/?[a-z]+>/g, ""))).toEqual(plain);
   });
 });

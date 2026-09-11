@@ -6,7 +6,7 @@ import { debtReport, readAllSessions } from "../src/commands/debt.js";
 import { MIN_HISTORY } from "../src/debt.js";
 import { parseRates, type RateTable } from "../src/pricing.js";
 import { plainPalette } from "../src/render/palette.js";
-import { formatDebt, NOTHING_RECORDED } from "../src/render/terminal.js";
+import { formatDebt, HERE, NOTHING_RECORDED } from "../src/render/terminal.js";
 import {
   appendSession,
   updateSession,
@@ -200,5 +200,63 @@ describe("formatDebt", () => {
 
     expect(lines.join("\n")).not.toContain("[");
     expect(lines.join("\n")).not.toMatch(/total/i);
+  });
+});
+
+describe("which repo the reader is standing in", () => {
+  /** Records one drifted session in each named repo, and returns the report. */
+  async function across(names: readonly string[]) {
+    for (const name of names) {
+      await record(repo(name), { drift: ["src/store.ts"] });
+    }
+    return debtReport(RATES, repo(names[0] as string));
+  }
+
+  /** The repo headings, in the order they were printed. */
+  function headings(lines: readonly string[]): string[] {
+    return lines.filter((line) => /^ {2}\S/.test(line) && !line.includes(" · ")).map((l) => l.trim());
+  }
+
+  it("names a repository rather than printing the key it is stored under", async () => {
+    const report = await across(["alpha"]);
+    const lines = formatDebt(report, plainPalette);
+
+    // `path:` and `remote:` are how the store tells two kinds of identity
+    // apart; neither is how anybody refers to a repository.
+    expect(lines.join("\n")).not.toContain("path:");
+    expect(lines.join("\n")).not.toContain("remote:");
+  });
+
+  it("puts the repo the reader typed the command in first", async () => {
+    const report = await across(["alpha", "beta", "gamma"]);
+    const here = report.repos.find((one) => one.repo.endsWith("gamma"))?.repo;
+
+    const printed = headings(formatDebt(report, plainPalette, { here }));
+    expect(printed[0]).toContain("gamma");
+    expect(printed[0]).toContain(HERE);
+    // It is the only one marked: the mark says which one you are in, and a
+    // second one would say nothing.
+    expect(printed.filter((line) => line.includes(HERE))).toHaveLength(1);
+  });
+
+  it("leaves the rest in the order the report gave them", async () => {
+    const report = await across(["alpha", "beta", "gamma"]);
+    const here = report.repos.find((one) => one.repo.endsWith("beta"))?.repo;
+
+    const printed = headings(formatDebt(report, plainPalette, { here }));
+    // Only the current repo moves. Sorting the rest by how much each owes
+    // would be a league table across repositories, which `debtOf` refuses to
+    // build — arriving at it by way of a sort in the view is the same claim
+    // made quietly.
+    expect(printed[1]).toContain("alpha");
+    expect(printed[2]).toContain("gamma");
+  });
+
+  it("marks nothing when the reader is not in a repo the report knows", async () => {
+    const report = await across(["alpha", "beta"]);
+
+    const printed = headings(formatDebt(report, plainPalette, { here: "remote:somewhere/else" }));
+    expect(printed.some((line) => line.includes(HERE))).toBe(false);
+    expect(printed[0]).toContain("alpha");
   });
 });

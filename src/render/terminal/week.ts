@@ -22,7 +22,7 @@ import {
   type View,
 } from "./cost.js";
 import { intentLegends } from "./intent.js";
-import { figure, INDENT, plural } from "./text.js";
+import { figure, INDENT, note, plural } from "./text.js";
 import {
   cellsFor,
   emptyCell,
@@ -122,9 +122,20 @@ export function formatWeek(
   const rows = sessions.map((session) => cellsFor(session, rates));
   const spend = spendOf(sessions, rates);
   const totals = weekTotals(sessions);
-  const widths = measure(rows, totals);
+  const widths = measure(rows, totals, show, view.width);
   const checked = view.checked;
-  return weekTable({ sessions, rows, totals, widths, show, spend, narrowed, checked, palette });
+  return weekTable({
+    sessions,
+    rows,
+    totals,
+    widths,
+    show,
+    spend,
+    narrowed,
+    checked,
+    palette,
+    limit: view.width,
+  });
 }
 
 /** What a week is once the figures are in: the headline, the rows, the notes. */
@@ -139,6 +150,8 @@ interface WeekTable {
   /** The date the prices under the table were checked, where the file gives one. */
   checked: string | undefined;
   palette: Palette;
+  /** Columns the notes may wrap at. Absent is no limit — see `terminalWidth`. */
+  limit: number | undefined;
 }
 
 /**
@@ -159,19 +172,41 @@ function weekTable({
   narrowed,
   checked,
   palette,
+  limit,
 }: WeekTable): string[] {
   return [
     "",
-    `${INDENT}${outcomeHeadline(sessions)}`,
-    ...(narrowed ? [palette.meta(`${INDENT}only ${narrowed}`)] : []),
+    ...note(outcomeHeadline(sessions), (text) => text, limit),
+    ...(narrowed ? note(`only ${narrowed}`, palette.meta, limit) : []),
     "",
     palette.meta(sessionRow(HEADINGS, widths, show)),
     ...sessionRows(sessions, rows, widths, show, palette),
     "",
     totalsRow(totals, widths, show),
-    ...turnNotes(sessions, palette),
-    ...spendNotes(spend, checked, palette),
+    ...footnotes(turnNotes(sessions, palette, limit), spendNotes(spend, checked, palette, limit)),
   ];
+}
+
+/**
+ * The notes under the table, in two blocks with a line between them.
+ *
+ * They had run to five lines under a four-row table — what the turn counts
+ * cannot say, what the marker in the intent column means, what the week cost,
+ * how old the prices are, and what the figure does not cover — and five dim
+ * sentences in a stack read as one paragraph nobody finishes. Every one of
+ * them is owed to the reader, so none is dropped or folded into another; what
+ * they get instead is the blank line that says they are answering two
+ * different questions.
+ *
+ * Above it: what the table does not say. Below it: the money, and the two
+ * things that qualify it. Which also leaves the total where the ordering rules
+ * want it — one dim line at the bottom, with nothing between it and the end.
+ */
+function footnotes(turns: readonly string[], spend: readonly string[]): string[] {
+  if (turns.length === 0 || spend.length === 0) {
+    return [...turns, ...spend];
+  }
+  return [...turns, "", ...spend];
 }
 
 /**
@@ -264,12 +299,17 @@ function sessionRows(
  * does not cover, because it is a total over the rest — the sessions nothing
  * was captured for, and the ones whose model no rate covers.
  */
-function spendNotes(spend: Spend, checked: string | undefined, palette: Palette): string[] {
-  const lines = [palette.meta(`${INDENT}${moneyLine(spend)}`)];
+function spendNotes(
+  spend: Spend,
+  checked: string | undefined,
+  palette: Palette,
+  limit?: number,
+): string[] {
+  const lines = note(moneyLine(spend), palette.meta, limit);
   // Directly under the figure it dates, and only where there is a figure: a
   // week nothing could be priced in has no money for a date to qualify.
   if (checked !== undefined && !unpricedThroughout(spend)) {
-    lines.push(palette.meta(`${INDENT}${pricesChecked(checked)}`));
+    lines.push(...note(pricesChecked(checked), palette.meta, limit));
   }
   // Both said out loud, because the figure above is a total over the rest, and
   // the two are different absences: a rate would fix the first and nothing
@@ -277,18 +317,25 @@ function spendNotes(spend: Spend, checked: string | undefined, palette: Palette)
   // for is a hole the reader can see and the table will not admit to.
   if (spend.uncaptured > 0) {
     lines.push(
-      palette.meta(
-        `${INDENT}${plural(spend.uncaptured, "session", "sessions")} uncaptured: ` +
+      ...note(
+        `${plural(spend.uncaptured, "session", "sessions")} uncaptured: ` +
           "no turns on the record, so nothing to price",
+        palette.meta,
+        limit,
       ),
     );
   }
   if (spend.unpriced > 0) {
     lines.push(
-      palette.meta(
-        `${INDENT}${plural(spend.unpriced, "session", "sessions")} unpriced: ` +
+      ...note(
+        `${plural(spend.unpriced, "session", "sessions")} unpriced: ` +
           `${spend.unpricedModels.join(", ")} — save this as ${RATES_HINT}`,
+        palette.meta,
+        limit,
       ),
+      // Not wrapped: a stub is JSON the reader is meant to copy into a file,
+      // and a line break through the middle of it is a line break they would
+      // have to take back out.
       ...stubLines(spend.unpricedModels, palette),
     );
   }
@@ -335,11 +382,11 @@ function moneyLine(spend: Spend): string {
 }
 
 /** How much of the week produced nothing, and what the marker in it means. */
-function turnNotes(sessions: readonly Session[], palette: Palette): string[] {
+function turnNotes(sessions: readonly Session[], palette: Palette, limit?: number): string[] {
   const lines: string[] = [];
   const turns = sum(sessions, (session) => session.cost.turns);
   if (turns > 0) {
-    lines.push(palette.meta(`${INDENT}${emptyNote(sessions, turns)}`));
+    lines.push(...note(emptyNote(sessions, turns), palette.meta, limit));
   }
   // Only the markers rows actually carry. A legend for a marker nobody used is
   // a line the reader has to check the table against to find out it says
@@ -347,8 +394,10 @@ function turnNotes(sessions: readonly Session[], palette: Palette): string[] {
   // three tables explain a marker the same way.
   for (const legend of intentLegends(sessions)) {
     lines.push(
-      palette.meta(
-        `${INDENT}${legend.marker} ${plural(legend.count, "session", "sessions")} ${legend.text}`,
+      ...note(
+        `${legend.marker} ${plural(legend.count, "session", "sessions")} ${legend.text}`,
+        palette.meta,
+        limit,
       ),
     );
   }

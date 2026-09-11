@@ -9,7 +9,7 @@ import {
 import { loadRates } from "../pricing.js";
 import { renderWeek } from "../render/html.js";
 import type { Palette } from "../render/palette.js";
-import { formatScan } from "../render/terminal.js";
+import { formatScan, terminalWidth } from "../render/terminal.js";
 import type { ScannedSession } from "../scan.js";
 import { storeHome, type Session } from "../store.js";
 import type { ProgramOptions } from "./options.js";
@@ -63,7 +63,7 @@ async function emitScan(
     await emitWeekPage(renderWeek(asSessions(sessions), days, {}, { rates }), options);
     return;
   }
-  printLines(formatScan(report, palette));
+  printLines(formatScan(report, palette, terminalWidth()));
 }
 
 export const SCAN_INDENT = "  ";

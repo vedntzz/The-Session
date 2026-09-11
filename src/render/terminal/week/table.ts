@@ -10,7 +10,17 @@ import { sessionFigure, type RateTable } from "../../../pricing.js";
 import { totalTokens, type Session } from "../../../store.js";
 import { NO_PRICE } from "../cost.js";
 import { markedIntent } from "../intent.js";
-import { clock, figure, INDENT, padLeft, padRight, shortId, SHORT_ID, width } from "../text.js";
+import {
+  clock,
+  figure,
+  fitColumn,
+  INDENT,
+  padLeft,
+  padRight,
+  shortId,
+  SHORT_ID,
+  width,
+} from "../text.js";
 
 /** Space between columns. Two, so the eye reads them as separate. */
 const COLUMN_GAP = "  ";
@@ -18,8 +28,26 @@ const COLUMN_GAP = "  ";
 /** Width of the start-time column: `MM-DD HH:MM` is always exactly this. */
 const WHEN_WIDTH = 11;
 
-/** How much of an intent survives. Past this the table stops being a table. */
+/**
+ * How much of an intent survives where there is room for it. Past this the
+ * table stops being a table.
+ *
+ * The natural width, not the width every render uses: it is the one column
+ * that can give, so on a terminal too narrow for the rest of the table it
+ * gives — see `measure`.
+ */
 const INTENT_WIDTH = 28;
+
+/**
+ * How narrow the intent column may be squeezed before the table gives up and
+ * overflows instead.
+ *
+ * Sixteen characters is about one clause, which is enough to tell two rows of
+ * the same week apart — the job this column does when it cannot do the whole
+ * one. Narrower than this and every row reads `Add a…`, and a reader who
+ * cannot tell the rows apart is worse off than one whose table wrapped.
+ */
+const MIN_INTENT = 16;
 
 /** Stands in for the part of an intent that did not fit. */
 const ELLIPSIS = "…";
@@ -183,7 +211,10 @@ function leftColumns(cells: WeekCells, widths: Widths, show: Columns, ink: RowIn
   const left = [
     padRight(cells.id, widths.id),
     padRight(cells.when, widths.when),
-    ink.intent(padRight(cells.intent, widths.intent)),
+    // Truncated again here, not only in `cellsFor`: the cell was cut to the
+    // width an intent gets when nothing is competing for the room, and on a
+    // narrow terminal `measure` will have given the column less than that.
+    ink.intent(padRight(truncate(cells.intent, widths.intent), widths.intent)),
   ];
   if (show.classes) {
     left.push(padRight(cells.class, widths.class));
@@ -210,10 +241,53 @@ export function totalsRow(cells: WeekCells, widths: Widths, show: Columns): stri
   return tableRow(padRight(cells.when, span), cells, widths, show);
 }
 
-export function measure(rows: readonly WeekCells[], totals: WeekCells): Widths {
+/**
+ * The width of everything in a row except the intent: the columns themselves,
+ * the gaps between them, and the indent the whole table sits in.
+ *
+ * Counted rather than guessed, off the same `Widths` the row is laid out
+ * from, so a column added to `tableRow` cannot leave this arithmetic behind
+ * and silently push the table back over the edge.
+ */
+function fixedWidth(widths: Widths, show: Columns): number {
+  const columns = [widths.id, widths.when, widths.outcome, widths.drift, widths.turns];
+  if (show.classes) {
+    columns.push(widths.class);
+  }
+  if (show.tokens) {
+    columns.push(widths.tokens);
+  }
+  columns.push(widths.empty, widths.cost);
+  // One gap between every pair of columns, and one more between the fixed
+  // columns and the intent sitting among them.
+  const gaps = COLUMN_GAP.length * columns.length;
+  return INDENT.length + columns.reduce((total, column) => total + column, 0) + gaps;
+}
+
+/**
+ * Column widths, measured from the contents rather than guessed — and then,
+ * for the one column that can give, from the room the others leave.
+ *
+ * `limit` is how wide the terminal is, or `undefined` where there is nothing
+ * to fit inside: a pipe, a file, a CI log. Unconstrained is the render this
+ * tool's tests pin and the one a bug report carries, so it is exactly what it
+ * was before any terminal was measured.
+ *
+ * Only the intent flexes. Every other column is either a fixed shape — an id,
+ * a stamp — or a figure whose digits cannot be dropped without changing what
+ * it says, and a heading like `drift files` is carrying a unit the number
+ * underneath needs. So the intent takes what is left, down to `MIN_INTENT`,
+ * and below that the table overflows rather than becoming unreadable.
+ */
+export function measure(
+  rows: readonly WeekCells[],
+  totals: WeekCells,
+  show: Columns = { tokens: true, classes: true },
+  limit?: number,
+): Widths {
   const column = (of: keyof WeekCells): number =>
     widest([HEADINGS[of], totals[of], ...rows.map((row) => row[of])]);
-  return {
+  const widths: Widths = {
     // Both fixed rather than measured: an id is `SHORT_ID` characters and a
     // stamp is `MM-DD HH:MM`, whatever is in the rows.
     id: SHORT_ID,
@@ -226,6 +300,10 @@ export function measure(rows: readonly WeekCells[], totals: WeekCells): Widths {
     tokens: column("tokens"),
     empty: column("empty"),
     cost: column("cost"),
+  };
+  return {
+    ...widths,
+    intent: fitColumn(widths.intent, MIN_INTENT, fixedWidth(widths, show), limit),
   };
 }
 

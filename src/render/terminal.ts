@@ -11,7 +11,13 @@ export {
   INTENT_NOTE,
   type IntentLegend,
 } from "./terminal/intent.js";
-export { shortId, SHORT_ID } from "./terminal/text.js";
+export {
+  shortId,
+  SHORT_ID,
+  terminalWidth,
+  MIN_WIDTH,
+  type WidthSignals,
+} from "./terminal/text.js";
 export { describePaths, summarizePaths, PATHS_NAMED, type PathSummary } from "./terminal/paths.js";
 export { unpricedTokens, type View } from "./terminal/cost.js";
 export { formatSession } from "./terminal/session.js";
@@ -20,7 +26,7 @@ export { formatHome, type Home } from "./terminal/home.js";
 export { formatCommands, type CommandEntry } from "./terminal/commands.js";
 export { formatWeek, describeFilter, spentFigure, stamp } from "./terminal/week.js";
 export { formatScan } from "./terminal/scan.js";
-export { formatDebt, NOTHING_RECORDED } from "./terminal/debt.js";
+export { formatDebt, HERE, NOTHING_RECORDED, type DebtView } from "./terminal/debt.js";
 export {
   formatSurvival,
   formatCheck,

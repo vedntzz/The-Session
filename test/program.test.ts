@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOOKS } from "../src/capture/hook.js";
 import { sweepStampFile } from "../src/commands/sweep.js";
 import { buildProgram, parseFlag, type ProgramOptions } from "../src/program.js";
+import { didYouMean } from "../src/program/help.js";
 import { readSessions, type Session } from "../src/store.js";
 
 const execFileAsync = promisify(execFile);
@@ -456,6 +457,47 @@ describe("session", () => {
     expect(said).toHaveLength(3);
     expect(said[1]).toContain("session show");
     expect(said[2]).toContain('session start "…"');
+  });
+
+  it("names a command nobody has, rather than calling it a stray argument", async () => {
+    // Commander's own answer here is "too many arguments. Expected 0 arguments
+    // but got 1" — true of the parse, and no help to somebody who did not
+    // think they were passing an argument to anything.
+    await expect(run("wek")).rejects.toThrow(
+      "No command wek. Did you mean session week? Run session help all for every command.",
+    );
+  });
+
+  it("offers the nearest command for the mistakes fingers actually make", () => {
+    const names = ["start", "stop", "show", "week", "scan", "survival", "verify"];
+
+    expect(didYouMean("wek", names)).toBe("week");        // a letter dropped
+    expect(didYouMean("weekk", names)).toBe("week");      // a letter doubled
+    expect(didYouMean("weke", names)).toBe("week");       // two swapped
+    expect(didYouMean("sur", names)).toBe("survival");    // stopped early
+    expect(didYouMean("verifyy", names)).toBe("verify");
+  });
+
+  it("offers nothing rather than a guess it cannot stand behind", () => {
+    const names = ["start", "stop", "show", "week"];
+
+    // A suggestion that is wrong as often as it is right is one the reader
+    // learns to read past, and they try it before they read the rest of the
+    // line. Two edits away is where that starts.
+    expect(didYouMean("xyz", names)).toBeUndefined();
+    expect(didYouMean("stunt", names)).toBeUndefined();
+    // Ambiguous prefix: `st` is the start of two, so neither is offered.
+    expect(didYouMean("st", names)).toBeUndefined();
+  });
+
+  it("says nothing about the argument that catches it on the help screen", () => {
+    const help = buildProgram(store).helpInformation();
+
+    // The root's `[command]` is a parsing seam, not something to explain: the
+    // list of commands is the next thing on the screen.
+    expect(help).not.toContain("Arguments:");
+    expect(help).toContain("Usage: session [options] [command]\n");
+    expect(help).not.toContain("[command] [command]");
   });
 
   it("--help lists the bare screen, start, week and help all, and nothing else", () => {
@@ -1387,7 +1429,11 @@ describe("passive capture, end to end", () => {
     const lines = await run("week");
 
     expect(lines[4]).toContain("~ why does /orders 500");
-    expect(lines.at(-3)).toContain("1 session recorded by the editor hook");
+    // Found rather than counted from the end: the notes under the table sit in
+    // two blocks with a blank line between them.
+    expect(lines.filter((line) => line.includes("recorded by the editor hook"))).toEqual([
+      expect.stringContaining("1 session recorded by the editor hook") as unknown as string,
+    ]);
   });
 
   it("says on show that the intent was captured and no scope was declared", async () => {

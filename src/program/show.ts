@@ -4,7 +4,7 @@ import { showSession } from "../commands/show.js";
 import { sweepFirst } from "../commands/sweep.js";
 import { loadChecked, loadRates } from "../pricing.js";
 import type { Palette } from "../render/palette.js";
-import { formatBrief, formatSession } from "../render/terminal.js";
+import { formatBrief, formatSession, terminalWidth } from "../render/terminal.js";
 import { storeHome } from "../store.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
@@ -28,6 +28,8 @@ export function registerShow(program: Command, options: ProgramOptions, palette:
         // about where prices come from.
         ...(flags.tokens === true ? { checked: await loadChecked() } : {}),
         tokens: flags.tokens,
+        // How much room the sentences have. Measured once, like the palette.
+        width: terminalWidth(),
       };
       // `--tokens` asks for counters the brief view does not have a place for,
       // so it implies `--full` rather than being quietly ignored.

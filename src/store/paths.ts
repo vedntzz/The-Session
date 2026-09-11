@@ -56,6 +56,40 @@ export const REMOTE_PREFIX = "remote:";
 export const PATH_PREFIX = "path:";
 
 /**
+ * What a repository identity is called in front of a person.
+ *
+ * The prefixes are how the store tells two kinds of key apart; they are not
+ * how anybody refers to a repository, and a view that prints
+ * `path:/Users/me/src/tool` is showing the reader a storage detail and asking
+ * them to read past it. A remote key is already the name everyone uses, so it
+ * loses the prefix and nothing else.
+ *
+ * A path key keeps its whole path rather than shrinking to a basename: two
+ * checkouts of the same project have the same last segment, and a report that
+ * called them both `tool` would be pooling two answers under one name. The
+ * home directory becomes `~`, which is shorter and is how the reader would
+ * have typed it.
+ *
+ * This is the one place that knows the prefixes are prefixes, beside
+ * `repoIdentity` that puts them on.
+ */
+export function repoName(identity: string, home: string = homedir()): string {
+  if (identity.startsWith(REMOTE_PREFIX)) {
+    return identity.slice(REMOTE_PREFIX.length);
+  }
+  if (!identity.startsWith(PATH_PREFIX)) {
+    return identity;
+  }
+  const where = identity.slice(PATH_PREFIX.length);
+  // Only a path *under* the home directory, never one that merely starts with
+  // the same characters: `/Users/meadow` is not inside `/Users/me`.
+  if (where === home) {
+    return "~";
+  }
+  return where.startsWith(`${home}/`) ? `~${where.slice(home.length)}` : where;
+}
+
+/**
  * Identifies the repo this store belongs to, preferring the most stable
  * signal available: the origin remote, then the repository root, then the
  * directory itself. Using the repo root rather than the cwd means every

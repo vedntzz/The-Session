@@ -4,7 +4,7 @@ import { formatUsd, unpricedThroughout } from "../../pricing.js";
 import { UNKNOWN_REPO, type ScanReport } from "../../scan.js";
 import type { Palette } from "../palette.js";
 import { NO_PRICE, RATES_HINT, stubLines } from "./cost.js";
-import { figure, INDENT, padLeft, padRight, plural, width } from "./text.js";
+import { figure, INDENT, note, padLeft, padRight, plural, width } from "./text.js";
 
 // --- scan -----------------------------------------------------------------
 
@@ -28,19 +28,26 @@ const REPO_HEADINGS = ["repository", "sessions", "turns", "cost"] as const;
  * framing is `meta`. A report needing an eighth role would be a report saying
  * something the tool does not otherwise say.
  */
-export function formatScan(report: ScanReport, palette: Palette): string[] {
+/**
+ * `limit` is how wide the terminal is, from `terminalWidth`, or `undefined`
+ * where there is nothing to fit inside — a pipe, a file, a CI log. Only the
+ * prose reads it: the tables here size to their contents, and a repository
+ * path is not something that can be cut down without becoming a different
+ * path.
+ */
+export function formatScan(report: ScanReport, palette: Palette, limit?: number): string[] {
   if (report.sessions === 0) {
     return ["", `${INDENT}No agent sessions in the last ${plural(report.days, "day", "days")}`];
   }
 
   return [
     "",
-    ...landedLines(report, palette),
+    ...landedLines(report, palette, limit),
     palette.meta(`${INDENT}${scanWindow(report)}`),
-    ...section(emptyTurnLines(report, palette)),
+    ...section(emptyTurnLines(report, palette, limit)),
     ...section(repoTable(report, palette)),
-    ...section(dearestLines(report, palette)),
-    ...section(totalLines(report, palette)),
+    ...section(dearestLines(report, palette, limit)),
+    ...section(totalLines(report, palette, limit)),
   ];
 }
 
@@ -69,16 +76,16 @@ function scanWindow(report: ScanReport): string {
  * read as a window in which nothing was wasted, and the reader would have no
  * way to tell that from a window nobody measured.
  */
-function emptyTurnLines(report: ScanReport, palette: Palette): string[] {
+function emptyTurnLines(report: ScanReport, palette: Palette, limit?: number): string[] {
   if (report.turns === 0) {
     return [];
   }
-  return [
-    palette.meta(
-      `${INDENT}${plural(report.turns, "turn", "turns")} · which of them changed no files ` +
-        "is not something a transcript can say — run session start to have a diff to measure against",
-    ),
-  ];
+  return note(
+    `${plural(report.turns, "turn", "turns")} · which of them changed no files ` +
+      "is not something a transcript can say — run session start to have a diff to measure against",
+    palette.meta,
+    limit,
+  );
 }
 
 /**
@@ -96,12 +103,12 @@ function emptyTurnLines(report: ScanReport, palette: Palette): string[] {
  * see `unpricedThroughout`. The waste share goes with it: a share of a total
  * that does not exist is not a figure either.
  */
-function totalLines(report: ScanReport, palette: Palette): string[] {
+function totalLines(report: ScanReport, palette: Palette, limit?: number): string[] {
   const { spend } = report;
   if (unpricedThroughout(spend)) {
     return [
       palette.meta(`${INDENT}${NO_PRICE} spent: nothing here could be priced`),
-      ...unpricedScanLines(spend.unpriced, spend.unpricedModels, palette),
+      ...unpricedScanLines(spend.unpriced, spend.unpricedModels, palette, limit),
     ];
   }
 
@@ -110,7 +117,7 @@ function totalLines(report: ScanReport, palette: Palette): string[] {
     // turns those were is settled against a diff, and a scan has none.
     palette.meta(`${INDENT}${formatUsd(spend.usd)} spent`),
     ...(spend.unpriced > 0
-      ? unpricedScanLines(spend.unpriced, spend.unpricedModels, palette)
+      ? unpricedScanLines(spend.unpriced, spend.unpricedModels, palette, limit)
       : []),
   ];
 }
@@ -126,12 +133,17 @@ function unpricedScanLines(
   unpriced: number,
   models: readonly string[],
   palette: Palette,
+  limit?: number,
 ): string[] {
   return [
-    palette.meta(
-      `${INDENT}${plural(unpriced, "session", "sessions")} unpriced: ` +
+    ...note(
+      `${plural(unpriced, "session", "sessions")} unpriced: ` +
         `${models.join(", ")} — save this as ${RATES_HINT}`,
+      palette.meta,
+      limit,
     ),
+    // Not wrapped: a stub is JSON the reader is meant to copy into a file, and
+    // a line break through the middle of it is one they would have to take out.
     ...stubLines(models, palette),
   ];
 }
@@ -172,27 +184,31 @@ function repoTable(report: ScanReport, palette: Palette): string[] {
  * the same as knowing it went nowhere. A window where none could be asked
  * still leads with how many sessions there were, since that much is known.
  */
-function landedLines(report: ScanReport, palette: Palette): string[] {
+function landedLines(report: ScanReport, palette: Palette, limit?: number): string[] {
   const sessions = plural(report.sessions, "session", "sessions");
   const asked = report.sessions - report.landingUnknown;
-  const unknown = unknownLines(report.landingUnknown, palette);
+  const unknown = unknownLines(report.landingUnknown, palette, limit);
   if (asked === 0) {
     return [`${INDENT}${sessions}`, ...unknown];
   }
   return [
-    `${INDENT}${sessions} · ${figure(report.landed)} ran while something landed on the ` +
-      `default branch · ${figure(asked - report.landed)} did not`,
+    ...note(
+      `${sessions} · ${figure(report.landed)} ran while something landed on the ` +
+        `default branch · ${figure(asked - report.landed)} did not`,
+      (text) => text,
+      limit,
+    ),
     ...unknown,
   ];
 }
 
 /** The checkouts that could not answer, counted apart from the ones that said no. */
-function unknownLines(unknown: number, palette: Palette): string[] {
+function unknownLines(unknown: number, palette: Palette, limit?: number): string[] {
   if (unknown === 0) {
     return [];
   }
   const where = unknown === 1 ? "a checkout" : "checkouts";
-  return [palette.meta(`${INDENT}${figure(unknown)} in ${where} git could not be asked about`)];
+  return note(`${figure(unknown)} in ${where} git could not be asked about`, palette.meta, limit);
 }
 
 /** The widest cell in each column, so the table sizes to its contents. */
@@ -229,20 +245,16 @@ function repoRow(
  * quote. It is truncated to one line: a prompt runs to paragraphs, and a
  * report that wrapped three of them would bury the figures beside them.
  */
-function dearestLines(report: ScanReport, palette: Palette): string[] {
+function dearestLines(report: ScanReport, palette: Palette, limit?: number): string[] {
   if (report.top.length === 0) {
-    return [
-      palette.meta(
-        `${INDENT}No session could be priced, so none can be called the dearest.`,
-      ),
-    ];
+    return note("No session could be priced, so none can be called the dearest.", palette.meta, limit);
   }
 
   const heading = plural(report.top.length, "dearest session", "dearest sessions");
   return [
     palette.meta(`${INDENT}${heading}`),
     ...report.top.map((top) => dearestRow(top, palette)),
-    ...unrankableLines(report.unrankable, palette),
+    ...unrankableLines(report.unrankable, palette, limit),
   ];
 }
 
@@ -254,16 +266,15 @@ function dearestRow(top: ScanReport["top"][number], palette: Palette): string {
 }
 
 /** Said out loud: three dearest out of a set that could not all be priced is not three dearest. */
-function unrankableLines(unrankable: number, palette: Palette): string[] {
+function unrankableLines(unrankable: number, palette: Palette, limit?: number): string[] {
   if (unrankable === 0) {
     return [];
   }
-  return [
-    palette.meta(
-      `${INDENT}${plural(unrankable, "session", "sessions")} could not be ` +
-        "ranked, having no rate to be dear by",
-    ),
-  ];
+  return note(
+    `${plural(unrankable, "session", "sessions")} could not be ranked, having no rate to be dear by`,
+    palette.meta,
+    limit,
+  );
 }
 
 /** How wide a prompt may be before the figures beside it stop lining up. */
