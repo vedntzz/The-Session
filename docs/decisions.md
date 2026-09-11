@@ -143,14 +143,15 @@ $ session week
 
   4 sessions · 1 landed on the default branch · 1 did not · 1 still open · 1 changed no files
 
-  id        started      intent                        outcome    drift files  turns  empty   cost
-  c68583ab  09-06 17:56  add rate limiting to /orders  merged               0      3      —  $4.05
-  5bd0d997  09-06 17:56  make the retry backoff adap…  abandoned            0      2      —  $1.05
-  c1132d46  09-06 17:56  try the websocket thing       open                 0      1      —  $0.52
-  ae05f5ce  09-06 17:56  check whether the limiter f…  empty                0      4      4  $0.35
+  id        started      intent                        outcome    drift  turns  empty   cost
+  c68583ab  09-06 17:56  add rate limiting to /orders  merged         0      3      —  $4.05
+  5bd0d997  09-06 17:56  make the retry backoff adap…  abandoned      0      2      —  $1.05
+  c1132d46  09-06 17:56  try the websocket thing       open           0      1      —  $0.52
+  ae05f5ce  09-06 17:56  check whether the limiter f…  empty          0      4      4  $0.35
 
-  4 sessions                                                                0     10      —
+  4 sessions                                                          0     10      —
   3 sessions cannot say which turns changed no files — the diff answers for the session, not for the turn
+
   $5.96 spent, $1.57 of it on changes that never merged
   prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
@@ -211,11 +212,12 @@ $ session week
 
   1 session · 0 landed on the default branch · 0 did not · 1 still open
 
-  id        started      intent                        outcome  drift files  turns  empty  cost
-  2dc3f74f  09-06 17:56  add rate limiting to /orders  open               0      3      —     —
+  id        started      intent                        outcome  drift  turns  empty  cost
+  2dc3f74f  09-06 17:56  add rate limiting to /orders  open         0      3      —     —
 
-  1 session                                                               0      3      —
+  1 session                                                         0      3      —
   1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+
   — spent: nothing here could be priced
   1 session unpriced: mystery-9 — save this as ~/.session/rates.json
   {
@@ -237,11 +239,12 @@ $ session week
 
   1 session · 0 landed on the default branch · 0 did not · 1 still open
 
-  id        started      intent                        outcome  drift files  turns  empty   cost
-  6547d2e2  09-06 17:57  add rate limiting to /orders  open               0      3      —  $4.05
+  id        started      intent                        outcome  drift  turns  empty   cost
+  6547d2e2  09-06 17:57  add rate limiting to /orders  open         0      3      —  $4.05
 
-  1 session                                                               0      3      —
+  1 session                                                         0      3      —
   1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+
   $4.05 spent, $4.05 of it on changes that never merged
   prices checked 2026-08-23 — override in ~/.session/rates.json
 
@@ -251,11 +254,12 @@ $ session week
 
   1 session · 1 landed on the default branch · 0 did not
 
-  id        started      intent                        outcome  drift files  turns  empty   cost
-  6547d2e2  09-06 17:57  add rate limiting to /orders  merged             0      3      —  $4.05
+  id        started      intent                        outcome  drift  turns  empty   cost
+  6547d2e2  09-06 17:57  add rate limiting to /orders  merged       0      3      —  $4.05
 
-  1 session                                                               0      3      —
+  1 session                                                         0      3      —
   1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+
   $4.05 spent, all of it shipped
   prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
@@ -350,11 +354,12 @@ $ session week
 
   1 session · 1 landed on the default branch · 0 did not
 
-  id        started      intent                        outcome  drift files  turns  empty   cost
-  cf5476d0  09-05 17:59  restyle the header component  merged             0      2      —  $1.05
+  id        started      intent                        outcome  drift  turns  empty   cost
+  cf5476d0  09-05 17:59  restyle the header component  merged       0      2      —  $1.05
 
-  1 session                                                               0      2      —
+  1 session                                                         0      2      —
   1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+
   $1.05 spent, all of it shipped
   prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
@@ -382,12 +387,13 @@ $ session week --class
 
   2 sessions · 1 landed on the default branch · 0 did not · 1 still open
 
-  id        started      intent                        class  outcome  drift files  turns  empty   cost
-  1c4a8b4b  09-06 17:56  rate limit /orders            api    merged             0      3      —  $3.11
-  0a5c3a01  09-06 17:56  restyle the header component  ui     open               0      2      —  $0.66
+  id        started      intent                        class  outcome  drift  turns  empty   cost
+  1c4a8b4b  09-06 17:56  rate limit /orders            api    merged       0      3      —  $3.11
+  0a5c3a01  09-06 17:56  restyle the header component  ui     open         0      2      —  $0.66
 
-  2 sessions                                                                     0      5      —
+  2 sessions                                                               0      5      —
   2 sessions cannot say which turns changed no files — the diff answers for the session, not for the turn
+
   $3.76 spent, $0.66 of it on changes that never merged
   prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
@@ -640,11 +646,12 @@ $ session week --client Acme
   1 session · 1 landed on the default branch · 0 did not
   only client Acme
 
-  id        started      intent                        outcome  drift files  turns  empty   cost
-  07a41f28  09-06 14:59  add rate limiting to /orders  merged             0      3      —  $4.05
+  id        started      intent                        outcome  drift  turns  empty   cost
+  07a41f28  09-06 14:59  add rate limiting to /orders  merged       0      3      —  $4.05
 
-  1 session                                                               0      3      —
+  1 session                                                         0      3      —
   1 session cannot say which turns changed no files — the diff answers for the session, not for the turn
+
   $4.05 spent, all of it shipped
   prices checked 2026-08-23 — override in ~/.session/rates.json
 ```

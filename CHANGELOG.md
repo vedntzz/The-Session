@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+First refinement pass under the freeze: no new command, no new measurement, no
+record field. Six things a reader met and had to read past.
+
+### Changed
+
+- **`week`'s `drift files` column is now `drift`.** Breaking for anything that
+  parsed the heading. The unit was there so the number beside it could not be
+  read as a score, and it cost six columns for a column of single digits —
+  which was exactly what stood between the table and an eighty-column
+  terminal. A table that wraps has no columns left to misread, so the unit
+  went. The risk is accepted, not solved: nothing in that view now names what
+  the number counts, and a reader who wants to know opens `week --md`, which
+  still says `Unplanned`, or `show --full`, which lists the paths.
+
+### Fixed
+
+- **A mistyped command said the wrong thing.** `session wek` answered `error:
+  too many arguments. Expected 0 arguments but got 1` — true of the parse, and
+  no help to somebody who did not think they were passing an argument to
+  anything. It now names the command, offers the nearest one within a single
+  edit, and points at `session help all`. The distance counts a transposition
+  as one edit rather than two, so `session weke` is answered rather than
+  shrugged at, and an ambiguous or distant guess is left unsaid.
+- **The wide views did not fit a terminal.** Nothing read
+  `process.stdout.columns`; every width was a constant, so `week` was 99
+  columns, `week --class --tokens` 118, and `scan` carried a 135-column
+  sentence. Prose now wraps to the terminal and the week table gives its intent
+  column whatever the figures leave. A pipe, a file and a CI log are still
+  laid out unconstrained — the colourless render stays pinnable, which is the
+  same contract colour has. **`week` now fits an eighty-column terminal.**
+- **A captured prompt flooded the brief views.** `MAX_INTENT` is 500 and only
+  `week` shortened anything, so `session show` printed one 568-column sentence
+  and the bare screen printed the whole prompt. Both now shorten a captured
+  prompt to its first sentence, by the same rule and the same code `session pr`
+  already used, and say where the rest is. **A declaration is still never
+  shortened** — it is the promise the diff is held to — it wraps instead.
+- **`show --full` ran its paths off the edge.** Six drift paths were one
+  150-column line. They now wrap into the value column with the label blank
+  beneath, and the gutter note moves under them. Nothing is capped: every path
+  still prints, since `--full` is the view opened to see every path.
+- **`session debt` printed the store's own keys.** Headings read
+  `path:/private/tmp/…/scratchpad/demo` and `remote:github.com/owner/repo`.
+  They now read as repository names, with the home directory shortened to `~`,
+  and the repo the reader is standing in comes first, marked. Only that one
+  moves — sorting the rest by what each owes would be the league table across
+  repositories that `debtOf` refuses to build.
+- **`week` ended in five stacked footnotes** under a four-row table. They are
+  now two blocks with a line between them: what the table does not say, then
+  the money and what qualifies it. Nothing was dropped or folded into anything
+  else.
+
 ## [1.0.0] — 2026-09-08
 
 **The surface is frozen at twenty verbs.** After 1.0 there are no new commands —

@@ -24,6 +24,7 @@ import { DRIFT_MARKER, intentOf, INTENT_NOTE, NO_SCOPE, SCOPE_HINT } from "./int
 import {
   clock,
   figure,
+  flatten,
   gap,
   INDENT,
   label,
@@ -33,6 +34,7 @@ import {
   plural,
   shortId,
   width,
+  wrapSegments,
 } from "./text.js";
 
 /**
@@ -66,7 +68,7 @@ export function formatSession(
   ];
   return [
     "",
-    headingLine(session, palette),
+    ...headingLine(session, palette, view.width),
     "",
     outcomeLine(session, palette),
     ...capturedIntentLines(session, palette),
@@ -94,15 +96,33 @@ function idLine(session: Session, palette: Palette): string {
   return `${INDENT}${palette.meta(label("id"))}${shortId(session.id)}`;
 }
 
-/** The intent, with the times it ran between out in the gutter. */
-function headingLine(session: Session, palette: Palette): string {
-  // Inked and measured separately: `gap` counts the characters a reader sees,
-  // and an escape code is not one of them.
-  const intent = intentOf(session);
-  const heading = `${INDENT}${intent}`;
+/**
+ * The intent, with the times it ran between out in the gutter.
+ *
+ * **This is the one view that holds a whole prompt**, and it is where `show`
+ * and the bare screen send the reader who wanted the rest of one they
+ * shortened. So nothing here is ever cut — a captured prompt runs to
+ * `MAX_INTENT` and prints to `MAX_INTENT` — but it is flattened and wrapped,
+ * because a 500-character heading is one line the terminal folds at whatever
+ * column it reaches, with no indent, and the labelled rows underneath then
+ * read as a continuation of it.
+ *
+ * The times stay in the gutter of the first line while the heading is one
+ * line. Once it wraps there is no gutter left to put them in, so they go
+ * under it — the same rule the path rows follow.
+ */
+function headingLine(session: Session, palette: Palette, limit?: number): string[] {
+  const intent = flatten(intentOf(session));
   const ended = session.endedAt === null ? "still running" : clock(session.endedAt);
   const times = `${clock(session.startedAt)} → ${ended}`;
-  return `${INDENT}${palette.intent(intent)}${gap(heading)}${palette.meta(times)}`;
+
+  // Measured off the plain text and inked afterwards: `gap` and the wrap both
+  // count the characters a reader sees, and an escape code is not one.
+  const lines = wrapSegments([{ text: intent, ink: palette.intent }], limit);
+  if (lines.length === 1) {
+    return [`${lines[0] as string}${gap(`${INDENT}${intent}`)}${palette.meta(times)}`];
+  }
+  return [...lines, `${INDENT}${palette.meta(times)}`];
 }
 
 /**
@@ -193,7 +213,13 @@ function labelledPaths(
   }
   if (rows.length === 1) {
     const bare = `${INDENT}${label(name)}${filled[0] ?? ""}`;
-    return [`${rows[0] as string}${gap(bare)}${palette.meta(note)}`];
+    // Only where the whole line — value, gutter and note — fits. A note that
+    // does not fit is what put this row 32 columns past the edge of an
+    // eighty-column terminal while every other row in the view fitted.
+    const inline = `${bare}${gap(bare)}${note}`;
+    if (limit === undefined || width(inline) <= Math.max(MIN_WIDTH, limit)) {
+      return [`${rows[0] as string}${gap(bare)}${palette.meta(note)}`];
+    }
   }
   return [...rows, `${INDENT}${pad}${palette.meta(note)}`];
 }

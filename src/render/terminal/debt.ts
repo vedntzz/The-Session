@@ -18,9 +18,12 @@ import { day, figure, INDENT, note, padLeft, padRight, plural, width } from "./t
  *
  * The file first, then how often work landed in it, then when, then what those
  * sessions cost — drift before money, like every other view. The count carries
- * its unit for the reason `week`'s `drift files` does: a bare `sessions` over a
- * column of small integers would be read as the repo's history rather than as
- * the number of times this file went outside a plan.
+ * its unit because a bare `sessions` over a column of small integers would be
+ * read as the repo's history rather than as the number of times this file went
+ * outside a plan. `week` dropped the same unit from its own `drift` column,
+ * where six columns of heading was the difference between that table fitting a
+ * terminal and wrapping; this table has one path column and room to spare, so
+ * it keeps what it can afford.
  */
 const HEADINGS = ["file", "sessions drifted", "last touched", "cost"] as const;
 

@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { debtReport, readAllSessions } from "../src/commands/debt.js";
-import { MIN_HISTORY } from "../src/debt.js";
+import { MIN_HISTORY, type DebtReport } from "../src/debt.js";
 import { parseRates, type RateTable } from "../src/pricing.js";
 import { plainPalette } from "../src/render/palette.js";
 import { formatDebt, HERE, NOTHING_RECORDED } from "../src/render/terminal.js";
 import {
   appendSession,
+  repoName,
   updateSession,
   zeroCost,
   type Session,
@@ -212,9 +213,16 @@ describe("which repo the reader is standing in", () => {
     return debtReport(RATES, repo(names[0] as string));
   }
 
-  /** The repo headings, in the order they were printed. */
-  function headings(lines: readonly string[]): string[] {
-    return lines.filter((line) => /^ {2}\S/.test(line) && !line.includes(" · ")).map((l) => l.trim());
+  /**
+   * The repo headings, in the order they were printed.
+   *
+   * Matched against the names the report actually holds rather than against
+   * the shape of a line: every line in this view starts at the same indent,
+   * and a heading is only a heading because of what it says.
+   */
+  function headings(lines: readonly string[], report: DebtReport): string[] {
+    const names = new Set(report.repos.map((one) => repoName(one.repo)));
+    return lines.map((line) => line.trim()).filter((line) => names.has(line.split("  ")[0] ?? ""));
   }
 
   it("names a repository rather than printing the key it is stored under", async () => {
@@ -231,7 +239,7 @@ describe("which repo the reader is standing in", () => {
     const report = await across(["alpha", "beta", "gamma"]);
     const here = report.repos.find((one) => one.repo.endsWith("gamma"))?.repo;
 
-    const printed = headings(formatDebt(report, plainPalette, { here }));
+    const printed = headings(formatDebt(report, plainPalette, { here }), report);
     expect(printed[0]).toContain("gamma");
     expect(printed[0]).toContain(HERE);
     // It is the only one marked: the mark says which one you are in, and a
@@ -243,7 +251,7 @@ describe("which repo the reader is standing in", () => {
     const report = await across(["alpha", "beta", "gamma"]);
     const here = report.repos.find((one) => one.repo.endsWith("beta"))?.repo;
 
-    const printed = headings(formatDebt(report, plainPalette, { here }));
+    const printed = headings(formatDebt(report, plainPalette, { here }), report);
     // Only the current repo moves. Sorting the rest by how much each owes
     // would be a league table across repositories, which `debtOf` refuses to
     // build — arriving at it by way of a sort in the view is the same claim
@@ -255,7 +263,10 @@ describe("which repo the reader is standing in", () => {
   it("marks nothing when the reader is not in a repo the report knows", async () => {
     const report = await across(["alpha", "beta"]);
 
-    const printed = headings(formatDebt(report, plainPalette, { here: "remote:somewhere/else" }));
+    const printed = headings(
+      formatDebt(report, plainPalette, { here: "remote:somewhere/else" }),
+      report,
+    );
     expect(printed.some((line) => line.includes(HERE))).toBe(false);
     expect(printed[0]).toContain("alpha");
   });

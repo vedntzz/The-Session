@@ -95,8 +95,17 @@ export interface Widths {
  * and how far it went outside what was declared are what the table is read
  * for; what it cost is a figure the footnote under the table carries.
  *
- * `drift files` says its unit because the number beside it is a count of
- * files, and a bare `drift` over a column of small integers reads as a score.
+ * `drift` used to read `drift files`, so the number beside it could not be
+ * mistaken for a score. The unit cost six columns for a column of single
+ * digits, and six was exactly the difference between this table fitting an
+ * eighty-column terminal and overflowing it — and a table that wraps has no
+ * columns left to misread. So the unit went and the risk it was guarding
+ * against is real and accepted: **nothing in this view names what the number
+ * counts.** `week --md` still spells it `Unplanned` for a reader who was not
+ * there, and `show --full` lists the paths themselves under `outside`; a
+ * reader of this table who wants to know what drifted has to open one of them.
+ * If the column ever reads as a score to somebody, that is this decision
+ * showing up, not a bug.
  */
 export const HEADINGS: WeekCells = {
   id: "id",
@@ -104,7 +113,7 @@ export const HEADINGS: WeekCells = {
   intent: "intent",
   class: "class",
   outcome: "outcome",
-  drift: "drift files",
+  drift: "drift",
   turns: "turns",
   tokens: "tokens",
   empty: "empty",
@@ -275,8 +284,7 @@ function fixedWidth(widths: Widths, show: Columns): number {
  *
  * Only the intent flexes. Every other column is either a fixed shape — an id,
  * a stamp — or a figure whose digits cannot be dropped without changing what
- * it says, and a heading like `drift files` is carrying a unit the number
- * underneath needs. So the intent takes what is left, down to `MIN_INTENT`,
+ * it says. So the intent takes what is left, down to `MIN_INTENT`,
  * and below that the table overflows rather than becoming unreadable.
  */
 export function measure(

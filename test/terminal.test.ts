@@ -562,12 +562,12 @@ describe("formatWeek", () => {
       "",
       "  3 sessions · 1 landed on the default branch · 1 did not · 1 still open",
       "",
-      "  id        started      intent                        outcome    drift files  turns  empty   cost",
-      "  a1b2c3d4  01-15 09:14  add rate limiting to /orders  open                 0      3      1  $1.26",
-      "  b2c3d4e5  01-15 11:02  refactor the transcript sto…  merged               0     12      5  $6.19",
-      "  c3d4e5f6  01-16 08:31  try the websocket thing       abandoned            0      4      4  $1.55",
+      "  id        started      intent                        outcome    drift  turns  empty   cost",
+      "  a1b2c3d4  01-15 09:14  add rate limiting to /orders  open           0      3      1  $1.26",
+      "  b2c3d4e5  01-15 11:02  refactor the transcript sto…  merged         0     12      5  $6.19",
+      "  c3d4e5f6  01-16 08:31  try the websocket thing       abandoned      0      4      4  $1.55",
       "",
-      "  3 sessions                                                                0     19     10",
+      "  3 sessions                                                          0     19     10",
       "  10 of 19 turns changed no files",
       // What the table does not say, then the money: two questions, so two
       // blocks rather than one stack of dim sentences.
@@ -727,10 +727,10 @@ describe("formatWeek", () => {
     const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, tokens: true });
 
     expect(lines[3]).toBe(
-      "  id        started      intent                        outcome    drift files  turns   tokens  empty   cost",
+      "  id        started      intent                        outcome    drift  turns   tokens  empty   cost",
     );
     expect(lines[4]).toBe(
-      "  a1b2c3d4  01-15 09:14  add rate limiting to /orders  open                 0      3   84,200      1  $1.26",
+      "  a1b2c3d4  01-15 09:14  add rate limiting to /orders  open           0      3   84,200      1  $1.26",
     );
   });
 
@@ -745,7 +745,7 @@ describe("formatWeek", () => {
     for (const [heading, cells] of [
       ["turns", ["3", "12", "4", "19"]],
       ["empty", ["1", "5", "4", "10"]],
-      ["drift files", ["0", "0", "0", "0"]],
+      ["drift", ["0", "0", "0", "0"]],
     ] as const) {
       const edge = headings.indexOf(heading) + heading.length;
       for (const [index, cell] of cells.entries()) {
@@ -838,7 +838,7 @@ describe("formatWeek", () => {
 
   it("totals the drift files, turns and empty turns across the week", () => {
     expect(totalsOf(formatWeek(week(), 7, plainPalette, {}, priced))).toBe(
-      "  3 sessions                                                                0     19     10",
+      "  3 sessions                                                          0     19     10",
     );
   });
 
@@ -1496,7 +1496,7 @@ describe("laying out against a terminal", () => {
     expect(widest(lines)).toBeLessThanOrEqual(90);
     // The figures are all still there: it is the one column that can give that
     // gave, and every row gave the same amount so the columns still line up.
-    expect(lines[3]).toContain("drift files");
+    expect(lines[3]).toContain("drift");
     expect(lines[3]).toContain("cost");
     expect(lines[4]).toContain("$1.26");
   });
@@ -1589,5 +1589,54 @@ describe("an intent too long for the view it is in", () => {
     // The tags go on after the wrap, so they cannot push a line over the edge:
     // stripping them gives back exactly the render above.
     expect(inked.map((line) => line.replaceAll(/<\/?[a-z]+>/g, ""))).toEqual(plain);
+  });
+});
+
+describe("the full view holds the whole prompt", () => {
+  const prompt =
+    "Prepare 1.0.0. Move the CHANGELOG entries under a heading with today's " +
+    "date, and add a Removed section naming what went and why it went.";
+
+  it("never shortens a captured prompt here, however long", () => {
+    // This is where `show` and the bare screen send a reader who wanted the
+    // rest of a prompt they shortened, so it has to hold every word.
+    const lines = formatSession(
+      session({ intent: prompt, intentSource: "captured" }),
+      plainPalette,
+      { width: 80 },
+    );
+
+    expect(lines.join(" ")).toContain("and why it went");
+    for (const line of lines) {
+      expect([...line].length).toBeLessThanOrEqual(80);
+    }
+  });
+
+  it("moves the times under the heading once the heading wraps", () => {
+    const wrapped = formatSession(session({ intent: prompt }), plainPalette, { width: 80 });
+    const short = formatSession(session({ intent: "add rate limiting" }), plainPalette, {
+      width: 80,
+    });
+
+    // One line keeps them in its gutter; several have no gutter left to use.
+    expect(short[1]).toMatch(/add rate limiting\s+\d\d:\d\d → \d\d:\d\d$/);
+    expect(wrapped.find((line) => /^ {2}\d\d:\d\d → /.test(line))).toBeDefined();
+  });
+
+  it("drops a gutter note under its row rather than off the edge", () => {
+    const bare = session({ intent: "add rate limiting", scope: [], intentSource: "captured" });
+    const lines = formatSession(bare, plainPalette, { width: 80 });
+
+    const declared = lines.find((line) => line.includes("no scope")) as string;
+    expect([...declared].length).toBeLessThanOrEqual(80);
+    // The hint is still there, one line down and in the value column.
+    expect(lines.some((line) => line.trimStart().startsWith("← session start --scope"))).toBe(true);
+  });
+
+  it("keeps the note in the gutter where the whole row fits", () => {
+    const bare = session({ intent: "add rate limiting", scope: [], intentSource: "captured" });
+    const lines = formatSession(bare, plainPalette, { width: 200 });
+
+    expect(lines.some((line) => /no scope.*← session start --scope/.test(line))).toBe(true);
   });
 });

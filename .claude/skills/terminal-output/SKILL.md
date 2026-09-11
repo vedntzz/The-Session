@@ -44,6 +44,64 @@ whether a window's money reads `$0.00`, a figure, or an em dash. `week` and
 chances for the terminal and the page somebody pastes into Notion to disagree
 about what one week cost.
 
+## How wide a view may be
+
+`terminalWidth` in `render/terminal/text.ts` is the one place this is decided,
+and it has the same shape and the same contract as `colorEnabled`: **what a
+terminal gets adapts to that terminal, and what a pipe gets is fixed.** Fixed
+here means *unconstrained* — it returns `undefined` off a pipe, a file or a CI
+log, and every view then lays out exactly as it did before any of this existed.
+That is what keeps the colourless render pinnable: a width read off whoever
+happened to run the command would make the bytes in a bug report a fact about
+their terminal.
+
+It is measured once per run, at the command, beside the palette — neither
+changes between two lines of the same run — and travels to the views as
+`View.width`, absent in every test that only cares about layout.
+
+Two rules for what a view does with it:
+
+- **Prose wraps; tables do not.** A sentence has no column to be measured
+  against, so `note` and `wrapSegments` fold it at the width and carry the same
+  indent onto every continuation line. A table has columns, and the only one
+  that may give is the one carrying text — `week`'s intent, down to
+  `MIN_INTENT`. Every other column is a fixed shape or a figure whose digits
+  cannot be dropped.
+- **There is a floor, and past it a view overflows on purpose.** `MIN_WIDTH`
+  for prose, `MIN_INTENT` for the intent column. A table whose rows cannot be
+  told apart from each other is not an improvement on a table that wrapped, so
+  below the floor the layout stops shrinking and runs past the edge. `week`
+  fits exactly at 80 columns and up. Getting it there cost the unit off the
+  `drift` heading — see below — and there is **no budget left**: the only
+  remaining six columns are the time in `started`, which is how a developer
+  recognises a session. Anything added to this table takes width from the
+  intent, and the intent has a floor.
+
+Ink goes on **after** the wrap, never before. `wrapSegments` takes the runs of
+a sentence with their inks, wraps the plain text, and inks each line's share of
+each run — so an escape code never counts toward a width and no line ends
+inside one. `test/terminal.test.ts` pins this the way `palette.test.ts` does:
+stripping the tags out of the inked render gives back the plain render exactly.
+
+## Naming a repository
+
+`repoName` in `store/paths.ts` is the one place that knows `remote:` and
+`path:` are prefixes, beside the `repoIdentity` that puts them on. They are how
+the store tells two kinds of key apart and they are not how anybody refers to a
+repository, so **no view prints them** — `debt` used to, and a reader met
+`path:/private/tmp/…/scratchpad/demo` as a heading.
+
+A remote key loses the prefix and nothing else; it is already the name everyone
+uses. A path key keeps its whole path, with the home directory shortened to
+`~`: two checkouts of one project share a last segment, and a report calling
+them both `tool` would be pooling two answers under one name.
+
+`debt` reads every log on the machine, and prints the repo the reader is
+standing in **first**, marked `HERE`. Only that one moves. Sorting the rest by
+how much each owes would be a league table across repositories, which `debtOf`
+refuses to build — arriving at it by way of a sort in the view is the same
+claim made quietly.
+
 ## The CLI surface
 
 Written for somebody who has just watched an agent run for forty minutes. That
@@ -76,6 +134,25 @@ about where the repo stands, then at most two commands. Which two depends on
 the state, because in each state there is one obvious next move and at most one
 other worth knowing. Commander would print the help here — the right answer to
 "what is this" and the wrong one to "where am I".
+
+Because the root has an action of its own, a name matching no subcommand would
+arrive as a stray argument to it, and commander's answer was `error: too many
+arguments. Expected 0 arguments but got 1` — true of the parse and no help to
+somebody who did not think they were passing an argument. So the root declares
+`[command]` and `unknownCommand` answers instead: what is wrong, what was
+probably meant, and where the whole list is, in that order. The argument is
+hidden from the root's own help through `visibleArguments`, and `usage` is set
+by hand, or commander prints `[command] [command]` — once for the argument and
+once for the subcommands it already knew about.
+
+`didYouMean` offers a guess only when there is one. A prefix first — somebody
+typing `sur` for `survival` has not made a typo, they have stopped early, and
+no edit distance describes that — then the nearest name within one edit. The
+distance is **Damerau**-Levenshtein: transposing two letters is the commonest
+thing fingers do at a prompt, and plain Levenshtein scores it 2, which is the
+difference between `session weke` being answered and being shrugged at. Two
+edits is where a suggestion starts being wrong as often as it is right, and the
+reader tries it before they read the rest of the line.
 
 `session show` is three sentences and a bottom line: where the work ended
 up, what was asked for, what went outside what was declared, and then the
@@ -122,6 +199,40 @@ much is said at once. Two consequences worth keeping:
 - Where the paths are not named, one directory holding all of them reads `all
   in db/` rather than `mostly in db/`. "Mostly" would understate a fact the
   paths have already settled, and this line is all the reader gets.
+- **A declaration is never shortened; a captured prompt is.** The same rule and
+  the same code as the pull request body — `headOf` in
+  `render/terminal/intent.ts`, first sentence or first line, whichever ends
+  sooner — because two copies of it are two chances for the two views to
+  disagree about where somebody's first sentence ended. A declaration is the
+  promise the diff is held to, and a brief view showing half of it would be
+  hiding the yardstick; it wraps instead, over as many lines as it needs.
+  `MAX_INTENT` is 500, so before this a captured prompt reached `show` as one
+  sentence 568 columns wide, and the three sentences this view promises
+  arrived as a wall.
+- Where something **was** left out, the brief view says so and says where the
+  rest is: the frame reads `Your first prompt began "…"` rather than `was`, and
+  `REST_OF_IT` points at `session show --full`, which holds every word. A
+  captured prompt that is already whole keeps `was` and gets no pointer —
+  "began" in front of all of it claims there is more, which is the same lie in
+  the other direction, and a pointer under a view that left nothing out
+  teaches the reader to ignore the pointer. The bare screen shortens the same
+  way, with an ellipsis and no pointer: the session has not finished, so there
+  is no `--full` to send anybody to.
+- **`--full` is where a whole prompt lives.** It is where the brief views send
+  a reader who wanted the rest of one, so nothing in it is ever shortened —
+  the heading holds every character up to `MAX_INTENT`. It is flattened and
+  wrapped instead, and the times move from its gutter to under it once it
+  takes more than one line.
+- A gutter note — the `←` hints — stays beside its row only while the whole
+  row fits the width; past that it goes under the row, in the value column.
+  `declared`'s `SCOPE_HINT` is the long one, and it put that row 32 columns
+  past the edge while every other row in the view fitted.
+- `--full`'s path rows wrap into the value column, blank where the label was,
+  and the gutter note moves underneath once they do — there is no gutter left
+  to put it in when the paths are using it. Wrapping is not capping: every path
+  still prints, because `--full` is the view somebody opens *because* they want
+  every path. A path longer than the room takes a line to itself and overflows,
+  since a path cut in half is one the reader cannot copy.
 - The four cases of the drift sentence — the third — are ordered by which fact
   the reader most needs: something went outside, here it is; nothing changed at
   all; nothing was declared, so the question cannot be asked; everything stayed
@@ -144,10 +255,21 @@ one line that is always there, and colouring what is always there says nothing
 ## The week table
 
 Columns, left to right: `id`, `started`, `intent`, `class` (`--class` only),
-`outcome`, `drift files`, `turns`, `tokens` (`--tokens` only), `empty`, `cost`.
+`outcome`, `drift`, `turns`, `tokens` (`--tokens` only), `empty`, `cost`.
 Outcome sits in the left block with the text; the figures are right-aligned so
-a column can be scanned. `drift files` carries its unit because a bare `drift`
-over a column of small integers reads as a score.
+a column can be scanned.
+
+`drift` **used to read `drift files`**, on the rule that a bare `drift` over a
+column of small integers reads as a score. The unit cost six columns for a
+column of single digits, and six was exactly what stood between this table and
+an eighty-column terminal — and a table that wraps has no columns left to
+misread. So the unit went, and the risk it guarded against is **real and
+accepted**: nothing in this view names what the number counts. `week --md`
+spells it `Unplanned` for a reader who was not there, and `show --full` lists
+the paths under `outside`. A reader of this table who wants to know what
+drifted opens one of those. If somebody reads the column as a score, that is
+this decision surfacing, not a bug — and putting the unit back means finding
+six columns somewhere else first.
 
 Two consequences of outcome no longer being the last column. A row is trimmed
 rather than padded, so an abandoned row's strikethrough stops at the last
@@ -155,10 +277,34 @@ figure instead of running out over trailing spaces — which is what the old
 last-column rule existed to prevent, and it is now handled once in `tableRow`.
 And the totals row can leave its cost cell empty without a ragged edge.
 
+The intent column is the only one that flexes — see "How wide a view may be".
+`INTENT_WIDTH` is its natural width, not the width every render uses: `measure`
+gives it whatever the other columns leave, down to `MIN_INTENT`, and
+`fixedWidth` counts the rest off the same `Widths` the row is laid out from, so
+a column added to `tableRow` cannot leave that arithmetic behind and silently
+push the table back over the edge. The cell is truncated twice on purpose —
+once in `cellsFor` to the natural width, once at render to whatever the column
+actually got.
+
+The notes under the table sit in **two blocks with a blank line between them**:
+what the table does not say, then the money and the two things that qualify it.
+They had run to five dim sentences in a stack under a four-row table, which
+reads as one paragraph nobody finishes. Every one of them is owed to the
+reader, so none is dropped or folded into another — what they get instead is
+the line that says they answer two different questions. It also leaves the
+total where rule 3 wants it, with nothing between it and the end. `footnotes`
+in `week.ts` is the whole of it, and it adds no blank line where either block
+is empty.
+
 The geometry lives in `render/terminal/week/table.ts`, the arithmetic and the
 notes under the table in `week.ts`. The split is what keeps either under 400
 lines; a reader chasing a misaligned column wants the first file and nothing
 in the second.
+
+Nothing in these views may be found by counting lines from either end. The
+notes a week earns depend on what is in it, so a test reaching for `at(-2)` is
+pinning how many notes one fixture happened to earn; find the note by what it
+says.
 
 ## The id
 
@@ -253,7 +399,9 @@ money last, unemphasised, on one line.
   whichever ends sooner, with the whole text folded into a `<details>` block
   under it. **A declaration is never shortened and never gets the block** — it
   is the promise the diff is held to, in full. Nothing is dropped and no model
-  summarises anything: `summarize` is the only place this is decided. The block
+  summarises anything: `headOf` in `render/terminal/intent.ts` is the only
+  place where the head of a prompt is decided, shared with `show` and the bare
+  screen, and `summarize` is the only place this document spends it. The block
   is fenced, with the fence longer than any run of backticks in the prompt, so
   a `</details>` or a code block somebody pasted cannot break out of it — the
   same class of failure as an unescaped `|` in the week table. Templates get
