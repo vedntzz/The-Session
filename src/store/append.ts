@@ -231,6 +231,9 @@ export async function updateSession(
  * caller cannot quietly become the one that edits an intent.
  */
 function refusePatch(patch: SessionPatch): void {
+  if ("proposal" in patch) {
+    throw new Error("proposal is written at start and cannot be edited");
+  }
   if ("intent" in patch) {
     throw new Error(
       "intent is written once and cannot be edited. A passive session's first " +

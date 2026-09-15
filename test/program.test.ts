@@ -711,7 +711,7 @@ describe("session", () => {
     await expect(readdir(store.home as string)).rejects.toThrow();
   });
 
-  it("registers exactly the twenty subcommands", () => {
+  it("registers the frozen command set plus the reopened Prime workflow", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
@@ -726,6 +726,7 @@ describe("session", () => {
       "mark",
       "peers",
       "pr",
+      "prime",
       "pull",
       "push",
       "scan",
@@ -1499,7 +1500,7 @@ describe("passive capture, end to end", () => {
 
   it("week --intent says what it takes when given something else", async () => {
     await expect(run("week", "--intent", "hook")).rejects.toThrow(
-      /Use one of: declared, captured/,
+      /Use one of: declared, primed, captured/,
     );
   });
 

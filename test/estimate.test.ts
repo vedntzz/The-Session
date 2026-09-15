@@ -629,7 +629,7 @@ describe("formatEstimate", () => {
     intent: "rate limit the /orders endpoint",
     class: "api",
     source: "intent",
-    groups: { declared, captured },
+    groups: { declared, captured, primed: { source: "primed", matched: 0, empty: 0 } },
   };
 
   it("leads with the question and where the class came from", () => {

@@ -179,6 +179,9 @@ export async function readLogFile(file: string): Promise<RawLog> {
  */
 export function intentSourceFor(input: NewSession): IntentSource {
   const source = input.intentSource ?? (input.intent === null ? "captured" : "declared");
+  if ((source === "primed") !== (input.proposal !== undefined)) {
+    throw new Error("A primed session must carry its original proposal; other sources cannot carry one.");
+  }
   if (input.intent === null && source !== "captured") {
     throw new Error("a session with no intent yet is a captured one, not a declared one");
   }
@@ -192,6 +195,7 @@ export function sessionFrom(input: NewSession, repo: string, intentSource: Inten
     repo,
     intent: input.intent,
     intentSource,
+    ...(input.proposal ? { proposal: input.proposal } : {}),
     scope: input.scope ?? [],
     baseline: input.baseline ?? [],
     reality: input.reality ?? [],
@@ -298,7 +302,12 @@ export function foldRecord(
   order: Map<string, number>,
 ): void {
   const existing = sessions.get(record.id);
-  const merged: Partial<Session> = { ...existing, ...record.set, ...keptIntent(existing, record) };
+  const merged: Partial<Session> = {
+    ...existing, ...record.set, ...keptIntent(existing, record),
+    // Neither assistance nor its original suggestion may be added or revised
+    // after the creating record, including on logs that predate Prime.
+    ...(existing ? { proposal: existing.proposal, intentSource: existing.intentSource } : {}),
+  };
   if (!isComplete(merged)) {
     // A patch whose creating record is missing: nothing to anchor it to.
     return;

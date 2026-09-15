@@ -125,6 +125,8 @@ export type SessionOutcome = "open" | "merged" | "abandoned" | "empty";
  * ran. `captured` was taken from the first prompt of a session the editor hook
  * opened on its own — the same words, in the same order, but nobody chose to
  * write them down as a declaration.
+ * `primed` keeps the developer's intent verbatim but records that the scope
+ * was reviewed with Prime. Its original proposal remains on the record.
  *
  * The two are kept apart everywhere because they are different evidence. A
  * declaration is a commitment made in advance; a captured intent is a
@@ -135,14 +137,13 @@ export type SessionOutcome = "open" | "merged" | "abandoned" | "empty";
  * A list rather than a bare union, like `SESSION_CLASSES`: every site that
  * branches on this is written as a `Record<IntentSource, …>` or a map over
  * this array, so adding a source is a compile error at each of them rather
- * than one arm out of two quietly answering for both. A third was added and
- * taken out again — see Rejected in docs/decisions.md — and the shape is kept
- * because it is what made removing it a mechanical change.
+ * than one arm quietly answering for another. Prime's assisted samples stay
+ * separate from both unaided declarations and passive captures.
  *
  * Ordered strongest promise to weakest, which is the order `estimate` and
  * `survival` print their blocks in.
  */
-export const INTENT_SOURCES = ["declared", "captured"] as const;
+export const INTENT_SOURCES = ["declared", "primed", "captured"] as const;
 
 export type IntentSource = (typeof INTENT_SOURCES)[number];
 
@@ -166,6 +167,8 @@ export function parseIntentSource(value: string): IntentSource {
 }
 
 export interface Session {
+  /** Prime's original suggestion, immutable and separate from accepted scope. */
+  proposal?: import("../prime.js").PrimeProposal;
   id: string;
   /** Normalized repo identity, e.g. `remote:github.com/acme/tool`. */
   repo: string;
@@ -251,7 +254,7 @@ export interface Session {
 }
 
 /**
- * Which kind of intent a session carries.
+ * Which kind of declaration a session carries.
  *
  * Absent means `declared`: passive capture did not exist when those records
  * were written, so `session start` is the only thing that could have opened
@@ -270,6 +273,7 @@ export function intentSourceOf(session: Pick<Session, "intentSource">): IntentSo
  */
 const HAS_SCOPE: Record<IntentSource, boolean> = {
   declared: true,
+  primed: true,
   captured: false,
 };
 
@@ -295,6 +299,7 @@ export function hasDeclaredScope(session: Pick<Session, "intentSource">): boolea
  */
 const OWN_WORDS: Record<IntentSource, boolean> = {
   declared: true,
+  primed: true,
   captured: false,
 };
 
@@ -315,7 +320,7 @@ export type RecordFields = Partial<Omit<Session, "id">>;
  */
 export type SessionPatch = Omit<
   RecordFields,
-  "intent" | "intentSource" | "repo" | "attribution"
+  "intent" | "intentSource" | "repo" | "attribution" | "proposal"
 >;
 
 /**

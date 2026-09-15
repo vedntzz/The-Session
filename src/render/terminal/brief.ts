@@ -74,6 +74,7 @@ const NO_DRIFT_POSSIBLE =
  */
 const ASKED_FOR: Record<IntentSource, AskedFrame> = {
   declared: { whole: 'You asked for "', after: '".' },
+  primed: { whole: 'You asked for "', after: '", with scope reviewed through Prime.' },
   captured: {
     whole: 'Your first prompt was "',
     // Only where something was left out. "began" in front of a prompt that is
