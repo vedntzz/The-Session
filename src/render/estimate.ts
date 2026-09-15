@@ -38,12 +38,14 @@ export function percent(part: number, whole: number): string {
 /** What each group is, said once per block so the counts are not read as one. */
 export const GROUPS: Record<IntentSource, string> = {
   declared: "intent written at session start",
+  primed: "scope reviewed with Prime",
   captured: "intent taken from the first prompt",
 };
 
 /** What a block says when the log holds none of that kind. */
 export const NONE: Record<IntentSource, string> = {
   declared: "none — nothing like this was declared before it ran",
+  primed: "none — nothing like this was started with Prime",
   captured: "none — the hook recorded nothing like this",
 };
 

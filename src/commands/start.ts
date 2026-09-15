@@ -1,4 +1,5 @@
 import { attributionValues, hasAttribution, readConfig } from "../config.js";
+import type { PrimeProposal } from "../prime.js";
 import { changedFilesSince, currentCommit, isRepo } from "../git.js";
 import {
   appendSession,
@@ -12,6 +13,7 @@ import {
 export interface StartOptions extends StoreOptions {
   /** Paths the developer expects to change. */
   scope?: string[];
+  proposal?: PrimeProposal;
 }
 
 /**
@@ -92,6 +94,9 @@ async function openingFacts(cwd: string): Promise<Pick<NewSession, "startedAt" |
  */
 export async function startSession(intent: string, options: StartOptions = {}): Promise<Session> {
   const declared = intent.trim();
+  if (options.proposal && options.proposal.intent !== declared) {
+    throw new Error("Prime's proposal must carry the intent being started. Run session prime again.");
+  }
   const cwd = options.cwd ?? process.cwd();
   // Before anything is read or written: what is wrong with the arguments is
   // wrong whatever the repository turns out to look like, and this is the one
@@ -102,7 +107,8 @@ export async function startSession(intent: string, options: StartOptions = {}): 
   return appendSession(
     {
       intent: declared,
-      intentSource: "declared",
+      intentSource: options.proposal ? "primed" : "declared",
+      ...(options.proposal ? { proposal: options.proposal } : {}),
       scope,
       ...(await openingFacts(cwd)),
     },
@@ -196,6 +202,9 @@ export function formatStarted(session: Session): string[] {
     `  started  ${session.intent ?? ""}  (head ${session.startCommit.slice(0, 7)})`,
     `  scope    ${scope}`,
   ];
+  if (session.proposal) {
+    lines.push("  primed   suggested and accepted scopes recorded separately");
+  }
 
   const declared = attributionValues(session.attribution);
   if (declared.length > 0) {

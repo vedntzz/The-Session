@@ -212,7 +212,7 @@ function summarize(session: Session): Summary {
   // developer's has a note to say so, and a test pins the two tables together
   // — but reading the note out is what makes that a fact rather than a hope.
   if (inOwnWords(session) || note === undefined) {
-    return { line: flatten(full), full, cut: false };
+    return { line: `${flatten(full)}${note ? ` (${note})` : ""}`, full, cut: false };
   }
 
   const { head, cut } = headOf(full);
