@@ -42,8 +42,8 @@ function session(overrides: Partial<Session> = {}): Session {
 }
 
 describe("the source list", () => {
-  it("holds the two the record uses, strongest promise first", () => {
-    expect([...INTENT_SOURCES]).toEqual(["declared", "captured"]);
+  it("keeps unaided, assisted and captured sources distinct", () => {
+    expect([...INTENT_SOURCES]).toEqual(["declared", "primed", "captured"]);
   });
 
   it("round-trips every one of them through the parser", () => {
@@ -92,10 +92,10 @@ describe("every table answers for every source", () => {
    * label off `INTENT_NOTE`. Two tables, one question, so they are pinned
    * together rather than left to drift apart.
    */
-  it("gives a note to exactly the sources whose words are not the developer's", () => {
+  it("labels assistance even when the intent is the developer's own words", () => {
     for (const source of INTENT_SOURCES) {
       const own = inOwnWords(session({ intentSource: source }));
-      expect(INTENT_NOTE[source] === undefined).toBe(own);
+      expect(INTENT_NOTE[source] === undefined).toBe(own && source !== "primed");
     }
   });
 
