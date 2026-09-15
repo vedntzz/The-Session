@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-First refinement pass under the freeze: no new command, no new measurement, no
-record field. Six things a reader met and had to read past.
+Prime has been reopened explicitly after the initial refinement freeze.
+
+### Added
+
+- `session prime`: read-only scope suggestions with evidence and an explicit
+  `--start` acceptance path. `--scope` replaces the suggestion before starting.
+- Assisted sessions carry a separate `primed` source and immutable original
+  proposal. Existing records keep their hashes and source interpretation.
+- A walk-forward evaluation of the production rule, with historical trees,
+  abstentions, precision, recall, and tree coverage. See [Prime](docs/prime.md).
 
 ### Changed
 

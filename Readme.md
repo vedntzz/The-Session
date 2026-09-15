@@ -53,6 +53,12 @@ One session's gap is an anecdote. **Intent debt** is the accumulated gap between
 
 ## Commands
 
+`session prime "<intent>"` previews up to five specific scope paths, with the
+past planning misses supporting each one. `--seed <paths...>` names files to
+start from; `--start` accepts this run's proposal and opens an assisted session.
+Use `--scope <paths...>` with `--start` to replace the suggestion before it is
+recorded. Thin evidence produces no suggestion. [Prime workflow and limits](docs/prime.md).
+
 | | |
 |---|---|
 | `session scan` | What the sessions already on this machine did, last 30 days. No setup, and no record written. `--open` writes the page instead of printing it. |

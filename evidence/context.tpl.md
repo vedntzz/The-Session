@@ -42,9 +42,9 @@ $c_src
 
 $c_test
 
-95 source files at 14,637 lines against 37 test files at 16,440 — more test than
-source, which is the intended ratio: *prefer adding a test over adding a log
-line*, from Style in `Claude.md`.
+The commands above count the source and tests currently in the checkout.
+The intended practice is *prefer adding a test over adding a log line*, from
+Style in `Claude.md`.
 
 ## The five invariants
 
@@ -56,21 +56,19 @@ $v_inv
 
 ## The surface
 
-Frozen at twenty verbs. Read from the real `commander` registration tree by
+The original twenty verbs plus the explicitly reopened Prime workflow. Read from the real `commander` registration tree by
 walking `buildProgram().commands` — not from `--help`, which is a filtered view
 of it, and not from the Readme, which is prose.
 
 $c_verbs
 
-Twenty top-level verbs; twenty-four rows because `config`, `key` and `hook`
-each carry subcommands. `session --help` deliberately lists only `start`,
+The command above counts top-level verbs and subcommands. `session --help` deliberately lists only `start`,
 `week`, `help all` and the bare screen — a decision about what a first reader
 can use, not a claim about what exists. `session help all` lists every one, and
 is built by walking this same tree, so a command renamed cannot fall off it.
 
 The count is pinned by a test, not only by this document: `test/program.test.ts`
-asserts *registers exactly the twenty subcommands* against a sorted list of
-names, so a twenty-first fails the suite.
+asserts the original command set plus Prime against a sorted list of names.
 
 ### What 1.0 means
 
@@ -114,7 +112,7 @@ $v_skill
 
 ## Shipped, and rejected
 
-Shipped is the twenty verbs above. Rejected is kept in the repository rather
+The implemented surface is listed above. Rejected designs are kept in the repository rather
 than dropped, because the measurement is the useful part: a reader deciding
 whether to try one of these again starts from what already failed.
 
@@ -129,7 +127,7 @@ was declared, and that subtraction was the only real difference between the two
 reports. Its one consumer was `prime`; once `prime` went, `partnersOf` was
 called by nothing but its own tests.
 
-**`prime`** was to propose a scope at `session start` from the repo's own
+**The original `prime` rule** was to propose a scope at `session start` from the repo's own
 co-change and drift history. It was measured against this repo's real log and
 never shipped: exact-path hit rates of 6%, 18% and 12% across three sessions,
 and the two rolled-up proposals that scored 100% did so by claiming 139 of 142
@@ -143,17 +141,13 @@ measured are kept under `Superseded` banners rather than deleted, because an
 append-only log cannot be backfilled and those questions had to be answered
 while a session could still be opened under them.
 
-`prime`'s backtest still runs, which is the point of keeping a rejection: the
-script vendors the co-change functions that were deleted with the command, so
-the measurement can be redone rather than only cited.
-
-$c_bt
-
-The three exact-path figures are the honest column — 6%, 18% and 12%. The two
-rolled-up proposals that read 100% did so by claiming almost the whole tree.
-Note the tree denominator moves with the tree: `decisions.md` records 142
-tracked files, measured before `cochange` was removed, and the same run now
-divides by 136.
+The old backtest is retained and requires the original target sessions.
+The current implementation uses exact files and comparable declarations'
+drift, with no co-change or roll-up. It can abstain and records accepted
+scopes separately from the original suggestion. See [Prime](prime.md) for
+the workflow, limits, and current evaluation. Run
+`node evidence/prime-evaluate.mjs` after building to evaluate the production
+rule against the history on this machine.
 
 ## Layout
 
@@ -173,6 +167,11 @@ model's rate. A release of this tool is not a price update.
 ## Tests
 
 $c_tests
+
+The generator runs the behavioral suite before writing this document, then
+checks `test/context.test.ts` against the newly written text. It excludes that
+self-check from the earlier run to avoid testing the stale document it is
+replacing.
 
 $c_tc
 

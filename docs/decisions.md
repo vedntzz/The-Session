@@ -33,7 +33,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 Nine fields. Everything else is a query over them.
 
 - **intent** — what you said you were doing, in your own words. Written once, never editable.
-- **intentSource** — where those words came from: **declared** if you typed them at `session start`, **primed** if `prime` proposed them and you accepted, **captured** if the hook took them off your first prompt. Fixed when the session opens, like the intent itself.
+- **intentSource** — **declared** if you typed the declaration at `session start`, **primed** if you reviewed the scope through Prime, **captured** if the hook took the intent off your first prompt. Prime keeps your words verbatim. Fixed when the session opens, like the intent itself.
 - **scope** — the files you expected to change. Path prefixes, matched at directory boundaries: `api/middleware/` covers everything beneath it, `api/order` never covers `api/orders.py`.
 - **baseline** — what was already modified when the session opened, so you are not billed for work that was sitting there before it.
 - **reality** — the files that actually changed, less the baseline.
@@ -60,6 +60,10 @@ Only that direction resolves. A checkout with a remote can always be asked what 
 
 ### Where a primed intent goes
 
+> The discussion below describes the original design. The current [Prime](prime.md)
+> restores `primed` for assisted scope selection, while keeping the intent in
+> the developer's own words.
+
 > **Superseded.** `prime` was measured and not built — see [Rejected](#rejected). `primed` is no longer a value of `IntentSource` and nothing below is in the code. Kept because the reasoning is what a second attempt would start from, and because both questions were settled before the backtest ran, on the grounds that an append-only log cannot be backfilled.
 
 `prime` proposes a scope at session start from the repo's own co-change and drift history; you accept it or edit it, and then it is written as intent. The record is append-only and signed, so whatever `intentSource` it gets is what it keeps — there is no relabelling pass later that does not fork a chain `session verify` walks line by line. So the label is settled before the command is built.
@@ -77,6 +81,9 @@ The cost is a third block in `estimate` and a third line in `survival`. Those bl
 What the record keeps of the proposal itself is settled below, because it has to be: the log is append-only, and a field not written when the session opened is a field that can never be filled in for it.
 
 ### What the record keeps of a proposal
+
+> The current [Prime](prime.md) retains an immutable proposal with additional
+> rule and evidence fields. The discussion below is the original design.
 
 > **Superseded.** `prime` was measured and not built — see [Rejected](#rejected). `primed` is no longer a value of `IntentSource` and nothing below is in the code. Kept because the reasoning is what a second attempt would start from, and because both questions were settled before the backtest ran, on the grounds that an append-only log cannot be backfilled.
 
@@ -828,6 +835,12 @@ Nothing is removed by this. Every command below still runs, and `session help al
 
 ## What 1.0 means
 
+> **Prime reopened, September 2026.** The user explicitly requested completing
+> Prime after the freeze. The current [Prime workflow](prime.md) uses exact
+> paths and comparable declarations' drift, retains an immutable proposal,
+> and labels accepted sessions `primed`. The original rejected algorithm
+> below remains historical evidence; co-change and roll-up remain removed.
+
 **The surface is frozen at twenty verbs.** No new commands after 1.0 — refinement only: bugs, documentation, error messages, and making what is already there clearer.
 
 Two exceptions, named here so that nothing else can be argued into the same shape later:
@@ -862,6 +875,10 @@ Be precise about what that shows. **Nothing measured says the pairs list was wro
 What survives is in `debt`, which was always the same shape: the same `readAllSessions` over every log on the machine, the same `IGNORED_CLASSES` and `MIN_HISTORY`, the same refusal to pool repos or to answer at all under three sessions of history. The rule that a checkout which cannot be asked is not a checkout that said no also survives, in `survival` and in `scan`.
 
 ### `prime` — a proposed scope from the repo's own history
+
+> **Historical rejected rule.** A different, conservative implementation now
+> exists: [Prime](prime.md). The results below describe the old co-change and
+> directory roll-up rule, not the current implementation.
 
 `session start --scope` only earns its keep if somebody types a scope, and mostly nobody does — fourteen of the twenty-two sessions in this repo's own log declared none. `prime` was to propose one from the record: co-change said which files moved together, `debt` says which files work keeps landing in that nobody plans for, and between them the tool should be able to offer a scope the developer accepts, edits or ignores. (Co-change has since been removed as well — see [above](#cochange--the-files-that-move-together) — so none of the machinery described below still exists.)
 
