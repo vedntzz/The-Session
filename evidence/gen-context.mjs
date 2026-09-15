@@ -45,7 +45,9 @@ const commands = {
     "node -e \"const r=require('./rates.json');" +
     "console.log('model entries: '+Object.keys(r.models).length);" +
     "console.log('prices checked: '+r.checked)\"",
-  tests: "npm test 2>&1 | tail -5",
+  // The document under construction cannot check its own old contents.
+  // Verify context.test.ts after the final write instead.
+  tests: "npm test -- --exclude test/context.test.ts 2>&1 | tail -5",
   tc: "npm run typecheck 2>&1 | tail -2",
   skills: "ls .claude/skills",
   skhead: "wc -l .claude/skills/measurement-rules/SKILL.md",
@@ -83,3 +85,5 @@ if (missing.length > 0) {
 const out = path.join(ROOT, "docs/context.md");
 writeFileSync(out, rendered);
 console.log(`wrote ${path.relative(ROOT, out)} — ${rendered.split("\n").length} lines`);
+// This check belongs after the write; propagate failure to the generator's caller.
+execSync("npx vitest run test/context.test.ts", { cwd: ROOT, stdio: "inherit" });

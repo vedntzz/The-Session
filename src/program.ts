@@ -13,6 +13,7 @@ import { registerHook } from "./program/hook.js";
 import { registerIntent } from "./program/intent.js";
 import { registerKey } from "./program/key.js";
 import { registerPr } from "./program/pr.js";
+import { registerPrime } from "./program/prime.js";
 import { registerScan } from "./program/scan.js";
 import { registerSettle } from "./program/settle.js";
 import { registerShow } from "./program/show.js";
@@ -87,6 +88,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
  */
 function registerCommands(program: Command, options: ProgramOptions, palette: Palette): void {
   registerStart(program, options);
+  registerPrime(program, options);
   registerIntent(program, options);
   registerStop(program, options);
   registerShow(program, options, palette);
