@@ -1,6 +1,6 @@
 ---
 name: terminal-output
-description: Load when changing anything a person reads — terminal views, colour, the help surface, or the Markdown and HTML reports. Editing render/palette.ts, render/terminal.ts, render/markdown.ts, render/html.ts, the help text in program.ts, or adding output to a command. Also load before introducing a colour role, hard-coding a hue, adding an emoji or spinner, putting a command in the short `--help` list, or interpolating an intent into a Markdown table.
+description: Load when changing anything a person reads — terminal views, colour, the help surface, Prime's preview, or the Markdown and HTML reports. Editing render/palette.ts, render/terminal.ts, render/prime.ts, render/markdown.ts, render/html.ts, the help text in program.ts, or adding output to a command. Also load before introducing a colour role, hard-coding a hue, adding an emoji or spinner, putting a command in the short `--help` list, or interpolating an intent into a Markdown table.
 ---
 
 # What a person reads
@@ -43,6 +43,28 @@ whether a window's money reads `$0.00`, a figure, or an em dash. `week` and
 `render/markdown.ts` both call it. Two copies of that two-clause test are two
 chances for the terminal and the page somebody pastes into Notion to disagree
 about what one week cost.
+
+## Prime's preview
+
+`prime` is a view before work starts, so it cannot lead with an outcome. It
+opens with the developer's intent and the history supporting its suggestion.
+`render/prime.ts` prints comparable and eligible declaration counts, every
+proposed exact file with its reason, and supporting session ids for historical
+suggestions. A named seed is labelled as named, never presented as a prediction.
+The measurement rules for these counts live in the `measurement-rules` skill.
+
+Tree coverage is always visible as proposed files over tracked files, with
+`exact paths only`. Keep abstention reasons and the count of further candidates
+omitted by the cap: a short list without either would conceal why it stopped.
+Quote intent and path values so their boundaries remain visible. No confidence
+score, generated explanation or claim that the suggestion is validated.
+
+The preview ends by saying **No session started** and gives the next action:
+repeat with `--start` to accept, or add `--scope` to replace the suggested scope.
+That next run recomputes; it does not accept a cached preview. `--scope`
+replaces the whole list and requires `--start`. A successful start says the
+suggested and accepted scopes were recorded separately. These are facts about
+what the command did, not a second confirmation flow.
 
 ## How wide a view may be
 
@@ -199,7 +221,9 @@ much is said at once. Two consequences worth keeping:
 - Where the paths are not named, one directory holding all of them reads `all
   in db/` rather than `mostly in db/`. "Mostly" would understate a fact the
   paths have already settled, and this line is all the reader gets.
-- **A declaration is never shortened; a captured prompt is.** The same rule and
+- **Declared and primed intents are never shortened; a captured prompt is.**
+  Prime keeps the developer's words; its assistance was with the scope.
+  The same rule and
   the same code as the pull request body — `headOf` in
   `render/terminal/intent.ts`, first sentence or first line, whichever ends
   sooner — because two copies of it are two chances for the two views to
@@ -251,6 +275,27 @@ The outcome line each view now leads with takes **no ink at all**. It is the
 one line that is always there, and colouring what is always there says nothing
 — the same argument that leaves the cost figure uncoloured. `merged` and
 `abandoned` stay where they mark one row out of a table of them.
+
+## Intent-source labels
+
+`INTENT_MARKER`, `INTENT_NOTE` and `INTENT_LEGEND` in
+`render/terminal/intent.ts` are the shared vocabulary. Declared has no marker,
+primed has `+` for **scope reviewed with Prime**, and captured has `~` for a
+first prompt recorded by the hook. The characters survive pipes and carry no
+new colour role. Never describe a primed intent as generated or not composed
+by the developer.
+
+Week, Markdown and HTML use the same markers. Their legends name only sources
+actually represented by rows, in `INTENT_SOURCES` order. Estimate and survival
+have a different contract: all three source blocks or lines print, even when
+empty, and their samples stay separate.
+
+The brief view labels Prime's scope assistance while keeping the intent whole.
+`show --full` displays the original `proposed` scope alongside the accepted
+`declared` scope; an empty original proposal reads `no suggestion`. Never
+replace one list with the other or use the proposal to decide drift. The
+accepted scope is the yardstick; the original suggestion is the record of
+what Prime offered.
 
 ## The week table
 
@@ -386,19 +431,21 @@ and nothing here may ever call one: the document's whole claim is that it is a
 transcription of the record, and its only sentences are the developer's own
 intent and a few file lists.
 
-It is the one view that does **not** lead with where the work went. There is
-nowhere for it to have gone yet — the document exists to open the pull request
-that would land it — so the summary line is the intent. Everything after that is
+Like Prime's preview, it does **not** lead with where the work went. The
+document exists to open the pull request that would land it, so the summary
+line is the intent. Everything after that is
 the usual order: what was declared, what changed, what went outside it, and the
 money last, unemphasised, on one line.
 
-- A **captured** intent is labelled in the summary line itself, not in a note
-  under it, so it survives into a `--template` that asked only for
-  `{{intent}}`. `CAPTURED_INTENT` is the wording, shared with `show`.
+- **Primed and captured** intents are labelled in the summary line itself,
+  not in a note under it, so the distinction survives into a `--template`
+  that asked only for `{{intent}}`. `INTENT_NOTE` is the wording, shared with
+  `show`: primed says the scope was reviewed with Prime, captured says the
+  words came from the first prompt.
 - A **captured** intent is also shortened to its first sentence or first line,
   whichever ends sooner, with the whole text folded into a `<details>` block
-  under it. **A declaration is never shortened and never gets the block** — it
-  is the promise the diff is held to, in full. Nothing is dropped and no model
+  under it. **Declared and primed intents are never shortened and never get
+  the block** — both keep the developer's words in full. Nothing is dropped and no model
   summarises anything: `headOf` in `render/terminal/intent.ts` is the only
   place where the head of a prompt is decided, shared with `show` and the bare
   screen, and `summarize` is the only place this document spends it. The block
