@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-09-17
+
 Prime has been reopened explicitly after the initial refinement freeze.
 
 ### Added
@@ -20,6 +22,9 @@ Prime has been reopened explicitly after the initial refinement freeze.
 
 ### Changed
 
+- **Primed records require a Prime-aware reader.** Older binaries reject the
+  new `primed` intent source. Existing records retain their original hashes and
+  interpretation; no migration or backfill is performed.
 - **`week`'s `drift files` column is now `drift`.** Breaking for anything that
   parsed the heading. The unit was there so the number beside it could not be
   read as a score, and it cost six columns for a column of single digits —
@@ -31,6 +36,9 @@ Prime has been reopened explicitly after the initial refinement freeze.
 
 ### Fixed
 
+- Agent guidance now documents Prime, its immutable proposal, and all three
+  intent sources. The Claude and Codex skill copies agree, with consistency
+  checks guarding the mirrors and the documented intent-source list.
 - **A mistyped command said the wrong thing.** `session wek` answered `error:
   too many arguments. Expected 0 arguments but got 1` — true of the parse, and
   no help to somebody who did not think they were passing an argument to
@@ -470,7 +478,8 @@ that a reader following the tags is not left wondering what became of it.
 - The hook now fires reliably on `SessionEnd`, under a 10-second timeout.
 - `week --open` no longer paints the waste hue over a figure of zero.
 
-[Unreleased]: https://github.com/vedntzz/The-Session/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/vedntzz/The-Session/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/vedntzz/The-Session/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/vedntzz/The-Session/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/vedntzz/The-Session/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/vedntzz/The-Session/compare/v0.7.0...v0.8.0

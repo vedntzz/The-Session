@@ -128,11 +128,12 @@ export type SessionOutcome = "open" | "merged" | "abandoned" | "empty";
  * `primed` keeps the developer's intent verbatim but records that the scope
  * was reviewed with Prime. Its original proposal remains on the record.
  *
- * The two are kept apart everywhere because they are different evidence. A
- * declaration is a commitment made in advance; a captured intent is a
- * transcript of what was asked for. Both are written before anything happened
- * and neither can be edited afterwards — but a reader comparing intent to
- * reality is owed the fact that one of them was never a promise.
+ * The three sources are kept apart because they are different evidence. An
+ * unaided declaration and one whose scope was reviewed with Prime are both
+ * commitments made in advance; a captured intent records what was asked for.
+ * Neither the intent nor its source can be revised afterwards. A reader
+ * comparing intent to reality is owed both how it was recorded and whether
+ * scope selection was assisted.
  *
  * A list rather than a bare union, like `SESSION_CLASSES`: every site that
  * branches on this is written as a `Record<IntentSource, …>` or a map over
@@ -140,8 +141,8 @@ export type SessionOutcome = "open" | "merged" | "abandoned" | "empty";
  * than one arm quietly answering for another. Prime's assisted samples stay
  * separate from both unaided declarations and passive captures.
  *
- * Ordered strongest promise to weakest, which is the order `estimate` and
- * `survival` print their blocks in.
+ * Ordered unaided declaration, assisted declaration, then passive capture,
+ * which is the order `estimate` and `survival` print their blocks in.
  */
 export const INTENT_SOURCES = ["declared", "primed", "captured"] as const;
 
@@ -182,7 +183,7 @@ export interface Session {
    */
   intent: string | null;
   /**
-   * Which of the two `intent` is. Absent on records written before passive
+   * How the intent and scope were chosen. Absent on records before passive
    * capture existed, where it reads as `declared` — nothing but `session
    * start` could have written one then, so this is a fact about those records
    * rather than a guess about them.

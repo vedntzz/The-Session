@@ -10,7 +10,7 @@
 2. **No server, no database, no account.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service, and anything needing one is wrong.
 3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else.
 4. **Turns that produced nothing are first-class.** Turns that changed no files are counted and displayed, never dropped — and where the record cannot say which turns those were, *that* is displayed rather than a nought. A transcript names the tool a call used, never what it did to the disk, so the question goes to git: `empty.ts` is the one rule, and no view reads `cost.emptyTurns` itself.
-5. **Cross-tool.** Nothing may assume Claude Code specifically. Adapters go behind an interface; the core reads a normalised shape.
+5. **Cross-tool.** Nothing may assume a specific coding tool. Adapters go behind an interface; the core reads a normalised shape.
 
 ## Stack
 
@@ -19,7 +19,7 @@ Node 20+, TypeScript, ESM. `commander` for the CLI, `picocolors` for output. Sto
 ## Layout
 
 ```
-src/  cli.ts registration   commands/ start stop show week scan debt survival pr sweep
+src/  cli.ts registration   commands/ start prime stop show week scan debt survival pr sweep
       verify key config settle estimate intent home hook   render/ palette.ts (semantic)
       terminal.ts html.ts markdown.ts pr.ts (a pull request body, from the record)
       capture/ hook.ts, adapters/claude-code.ts, transcript.ts
@@ -28,11 +28,15 @@ src/  cli.ts registration   commands/ start stop show week scan debt survival pr
       empty.ts which turns produced nothing, settled against the diff at stop
       pricing.ts money   observe.ts repo facts   scan.ts aggregation   git.ts diff, HEAD
       scope.ts what a declared scope covers (stop and debt share the one rule)
+      prime.ts exact-file scope suggestions from past unaided declarations
+      commands/prime.ts preview or start   program/prime.ts CLI registration
+      render/prime.ts original proposal, support and tracked-tree coverage
       debt.ts paths that keep drifting and were never declared since, per repo
       survival.ts whether merged work is still there at 14 and 30 days
       commands/sweep.ts settle + due checks, once a day per repo, silent unless written
       chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
       config.ts .session.json, checked in   ../rates.json prices per model, per Mtok
+../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
 ## The record
@@ -42,8 +46,10 @@ type Session = {
   id: string; repo: string; startCommit: string
   startedAt: string; endedAt: string | null
   intent: string | null        // immutable; null until a passive session's first prompt
-  intentSource?: IntentSource  // 'declared' | 'captured'; absent reads as declared
-  scope: string[]              // declared, may be empty
+  intentSource?: IntentSource  // 'declared' | 'primed' | 'captured'; absent reads as declared
+  proposal?: PrimeProposal    // present exactly for primed; original suggestion,
+                               // immutable and signed at start, even if scope is replaced
+  scope: string[]              // accepted scope, may be empty; separate from proposal
   baseline: string[]           // dirty at start, subtracted from reality
   reality: string[]            // observed from git diff, less baseline
   drift: string[]              // reality minus scope
@@ -93,4 +99,4 @@ type SessionCost = TokenCounts & {
 
 ## The rest
 
-Rules for one area each, loaded when that area is what you are changing: `.claude/skills/measurement-rules` (outcome, class, intent source, scan, debt, survival, estimate, money), `.claude/skills/sync-and-chain` (the line on disk, verify, refs), `.claude/skills/terminal-output` (CLI surface, colour, Markdown, the pull request body). Why any of it is this way: [docs/decisions.md](docs/decisions.md).
+Rules for one area each, loaded when that area is what you are changing: `.claude/skills/measurement-rules` (outcome, class, intent source, scan, debt, survival, estimate, Prime, money), `.claude/skills/sync-and-chain` (the line on disk, verify, refs), `.claude/skills/terminal-output` (CLI surface, colour, Markdown, Prime's preview, the pull request body). Why any of it is this way: [docs/decisions.md](docs/decisions.md).

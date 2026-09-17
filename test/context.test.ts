@@ -6,7 +6,7 @@
 // its own, and what matters is that the copied bytes are still the source's
 // bytes. The fix for a failure here is never to edit `docs/context.md` — run
 // `node evidence/gen-context.mjs` and commit what it writes.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -65,6 +65,17 @@ describe("docs/context.md", () => {
     const text = document();
     for (const { source } of BLOCKS) {
       expect(text, `context.md never names ${source} as a source`).toContain(source);
+    }
+  });
+
+  it("repoints measurement-rule links at existing local documents", () => {
+    const links = [...extracts.measurementRules(ROOT).matchAll(/\[[^\]]+\]\(([^)]+)\)/g)]
+      .map((match) => match[1]!)
+      .filter((target) => !/^(?:#|[a-z][a-z\d+.-]*:|\/\/)/i.test(target));
+    expect(links.length, "measurement rules contain no local document links to check").toBeGreaterThan(0);
+    for (const target of links) {
+      const file = path.resolve(path.dirname(CONTEXT), target.replace(/[?#].*$/, ""));
+      expect(existsSync(file), `measurement-rule link ${target} does not resolve from docs/context.md`).toBe(true);
     }
   });
 

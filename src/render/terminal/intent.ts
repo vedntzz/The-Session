@@ -13,10 +13,10 @@ import {
 export const DRIFT_MARKER = "!";
 
 /**
- * Marks an intent the developer did not compose. Like `DRIFT_MARKER`, these
- * are characters rather than inks, so the distinction survives a pipe, a log
- * file and a screenshot; the tables that use them say what they mean
- * underneath.
+ * Marks scope reviewed with Prime or an intent captured from the first prompt.
+ * A primed intent is still the developer's own words. Like `DRIFT_MARKER`,
+ * these are characters rather than inks, so the distinction survives a pipe,
+ * a log file and a screenshot; the tables that use them explain each marker.
  *
  * One table, read by the week table, the Markdown document and the HTML page
  * alike. A marker drawn one way in one view and another way in the next is a

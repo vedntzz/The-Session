@@ -76,7 +76,7 @@ export function measurementRules(root) {
   return lines
     .slice(1) // its H1; context.md's own heading covers it
     .map((line) => (line.startsWith("#") ? `#${line}` : line))
-    .map((line) => line.replaceAll("../../../docs/decisions.md", "decisions.md"))
+    .map((line) => line.replaceAll("../../../docs/", ""))
     .join("\n")
     .trim();
 }
