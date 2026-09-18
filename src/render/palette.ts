@@ -1,5 +1,12 @@
 import pc from "picocolors";
 
+/** Screen controls, kept here beside the terminal's other escape sequences. */
+export const screenControl = {
+  enter: "\u001b[?1049h\u001b[?25l",
+  leave: "\u001b[?25h\u001b[?1049l",
+  paint: "\u001b[H\u001b[2J",
+};
+
 /**
  * What the terminal views are allowed to say with colour.
  *
@@ -124,4 +131,38 @@ export function colorEnabled(signals: ColorSignals = {}): boolean {
 /** The palette this process should render with. */
 export function paletteFor(signals: ColorSignals = {}): Palette {
   return colorEnabled(signals) ? ansiPalette : plainPalette;
+}
+
+/** The explicitly requested indigo design is scoped to the full-screen UI.
+ * Ordinary CLI output retains the terminal-owned 16-colour palette above. */
+export type UiRole = "text" | "meta" | "intent" | "focus" | "drift";
+export interface UiTheme {
+  background: string;
+  reset: string;
+  paint(text: string, role?: UiRole, selected?: boolean): string;
+}
+export const plainUiTheme: UiTheme = { background: "", reset: "", paint: (text) => text };
+export function uiThemeFor(signals: ColorSignals = {}): UiTheme {
+  if (!colorEnabled(signals)) return plainUiTheme;
+  const env = signals.env ?? process.env;
+  const rgb = /^(truecolor|24bit)$/i.test(env["COLORTERM"] ?? "") || /direct/.test(env["TERM"] ?? "");
+  if (!rgb) {
+    const ink = pc.createColors(true);
+    return { background: "", reset: "\u001b[0m", paint(text, role = "text", selected = false) {
+      const styled = role === "focus" ? ink.blue(ink.bold(text)) : role === "drift" ? ink.red(text) :
+        role === "intent" ? ink.bold(text) : role === "meta" ? ink.dim(text) : text;
+      return selected ? ink.inverse(styled) : styled;
+    } };
+  }
+  const background = "\u001b[48;2;17;19;29m";
+  const selectedBackground = "\u001b[48;2;27;32;51m";
+  const foreground: Record<UiRole, string> = {
+    text: "237;235;231", intent: "237;235;231", meta: "170;179;198", focus: "155;167;245", drift: "245;128;128",
+  };
+  return {
+    background, reset: "\u001b[0m",
+    paint(text, role = "text", selected = false) {
+      return `${selected ? selectedBackground : background}\u001b[38;2;${foreground[role]}m${role === "intent" ? "\u001b[1m" : ""}${text}\u001b[0m${background}`;
+    },
+  };
 }

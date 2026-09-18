@@ -141,6 +141,21 @@ Colour goes to a terminal and nowhere else — redirect the output and you get
 exactly the bytes above with no escape codes in them. `NO_COLOR=1` turns it
 off in a terminal too, and `FORCE_COLOR=1` turns it on anywhere.
 
+The full-screen `session ui` has a deliberately separate, user-selected theme:
+midnight indigo behind the timeline, a lighter indigo behind the selected entry,
+and periwinkle for focus. This is the exception to the basic-colour rule above,
+scoped to a screen whose background the tool paints itself. Exact RGB colours
+are used only when the terminal advertises true colour; otherwise selection
+uses inverse video and focus uses basic blue. `NO_COLOR` and `FORCE_COLOR`
+retain their precedence. The ordinary CLI palette is unchanged, and exiting
+the UI resets its colours and restores the previous terminal screen.
+
+The timeline reads existing records without writing them. Search combines
+literal text with `outside:yes|no`, `outcome:...`, and `source:...` filters.
+Running sessions and captured sessions cannot match `outside:no`: pending or
+unmeasured drift is not a measured zero. File trees mark drift inline; usage,
+the immutable Prime proposal and recorded observations are disclosed with `e`.
+
 ## What it cost
 
 Tokens are not a unit anybody budgets in. Money is, so money is what leads.
@@ -843,12 +858,17 @@ Nothing is removed by this. Every command below still runs, and `session help al
 
 **The surface is frozen at twenty verbs.** No new commands after 1.0 — refinement only: bugs, documentation, error messages, and making what is already there clearer.
 
-Two exceptions, named here so that nothing else can be argued into the same shape later:
+Three exceptions, named here so that nothing else can be argued into the same shape later:
 
 - **A GitHub Action that posts the record on a pull request.** `pr` already writes it; this puts it where the review happens.
 - **A team view over the peer records `pull` already fetches.** They are on the machine and nothing reads them together.
+- **`ui`, a browsable ledger over the same window `week` prints.** Added September 2026, the twenty-first verb.
 
-Neither is a new measurement. Both are a surface onto what the tool already records.
+None of the three is a new measurement. All are a surface onto what the tool already records.
+
+**Why `ui` passes the same test as the other two.** It reads through `weekSessions`, so its rows are the rows `week` prints and its outcomes come through `withOutcomes` like everything else; it writes nothing, creates nothing, and asks the repository no question `week` does not already ask. Every figure on it comes from `pricing.ts`, `empty.ts` and `scope.ts` — there is no arithmetic in `render/tui/` that exists nowhere else. What it adds is reach: `week` fits a session to one row and a page to eighty columns, so the paths, the proposal and the observations behind a row have nowhere to go, and `show` reaches them one session at a time. A timeline you can move through answers "which of these went wrong" without printing twenty sessions at full depth.
+
+**What it cost to say yes.** A verb, and the admission that the freeze now has three exceptions rather than two — which is the shape the freeze was written to resist, and the reason this paragraph exists rather than a quiet edit to the list above. The line that has not moved is the one about measurement: a fourth exception that computes something is a different argument and does not get to cite this one.
 
 The reason is that the surface outgrew the story once already, and not narrowly. `prime` was measured and never shipped; `cochange` shipped and was cut. The same fault both times: each measured something other than the distance between a declaration and a diff, and it took a backtest and a fold to see it.
 

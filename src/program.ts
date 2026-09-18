@@ -23,6 +23,8 @@ import { registerSurvival } from "./program/survival.js";
 import { registerSync } from "./program/sync.js";
 import { registerVerify } from "./program/verify.js";
 import { registerWeek } from "./program/week.js";
+import { registerKnowledge } from "./program/knowledge.js";
+import { registerUi } from "./program/ui.js";
 import type { ProgramOptions } from "./program/options.js";
 
 export { parseFlag, type ProgramOptions } from "./program/options.js";
@@ -93,6 +95,8 @@ function registerCommands(program: Command, options: ProgramOptions, palette: Pa
   registerStop(program, options);
   registerShow(program, options, palette);
   registerWeek(program, options, palette);
+  registerUi(program, options, palette);
+  registerKnowledge(program, options);
   registerPr(program, options);
   registerScan(program, options, palette);
   registerDebt(program, options, palette);

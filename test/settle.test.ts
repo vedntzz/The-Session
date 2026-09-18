@@ -132,10 +132,21 @@ describe("an ordinary merge", () => {
 });
 
 describe("work that never landed", () => {
-  it("is abandoned once the branch is gone and the tree is clean", async () => {
+  it("reads open once the branch is gone, because nobody has said it was abandoned", async () => {
     const session = await sessionOnBranch("feature", "src/a.ts", "the work");
     await git("checkout", "-q", "main");
     await git("branch", "-qD", "feature");
+
+    // A missing branch is a failed check, not a decision: the same evidence is
+    // produced by a branch nobody pushed and a checkout on another machine.
+    await expect(outcomeOf(session)).resolves.toBe("open");
+  });
+
+  it("is abandoned once somebody marks it so", async () => {
+    const session = await sessionOnBranch("feature", "src/a.ts", "the work");
+    await git("checkout", "-q", "main");
+    await git("branch", "-qD", "feature");
+    await markSession(session.id, "abandoned", options);
 
     await expect(outcomeOf(session)).resolves.toBe("abandoned");
   });
@@ -317,7 +328,7 @@ describe("mark", () => {
     const session = await sessionOnBranch("feature", "src/a.ts", "the work");
     await git("checkout", "-q", "main");
     await git("branch", "-qD", "feature");
-    await expect(outcomeOf(session)).resolves.toBe("abandoned");
+    await expect(outcomeOf(session)).resolves.toBe("open");
 
     // It shipped as somebody else's patch, which no amount of looking at this
     // repository would reveal.
@@ -411,10 +422,13 @@ describe("week --outcome", () => {
     expect(stored.every((session) => session.outcome === "open")).toBe(true);
 
     const mergedRows = await weekSessions(7, options, { outcome: "merged" });
-    const abandonedRows = await weekSessions(7, options, { outcome: "abandoned" });
-
     expect(mergedRows.map((session) => session.id)).toEqual([merged.id]);
-    expect(abandonedRows.map((session) => session.intent)).toEqual(["work on src/two.ts"]);
+
+    // The deleted branch is reported open, so `--outcome abandoned` finds
+    // nothing until a person records the abandonment.
+    expect(await weekSessions(7, options, { outcome: "abandoned" })).toEqual([]);
+    const openRows = await weekSessions(7, options, { outcome: "open" });
+    expect(openRows.map((session) => session.intent)).toEqual(["work on src/two.ts"]);
   });
 
   it("follows a manual mark", async () => {

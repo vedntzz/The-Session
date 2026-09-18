@@ -81,7 +81,18 @@ function clean(overrides: Partial<Session> = {}): Session {
 }
 
 function rows(html: string): string[] {
-  return html.match(/<li class="row[^]*?<\/li>/g) ?? [];
+  // Split rather than match: a row's detail holds its own `<li>` path list, so
+  // nothing anchored on `</li>` can find where a row ends any more.
+  const block = /<ol class="week[^]*<\/ol>/.exec(html)?.[0] ?? "";
+  return block
+    .split('<li class="row')
+    .slice(1)
+    .map((part) => `<li class="row${part}`);
+}
+
+/** A row's own cells, without the detail it opens. */
+function cellsOf(row: string): string {
+  return row.split('<div class="detail">')[0] ?? "";
 }
 
 function heightOf(row: string): number {
@@ -159,9 +170,12 @@ describe("renderWeek", () => {
   it("spends its two semantic hues on the intent, the money and waste, and nothing else", () => {
     const html = renderWeek(week(), 7, {}, priced);
 
-    // The intent and the cost: what the row was for, and what it came to.
-    expect(html.match(/var\(--primary\)/g)).toHaveLength(2);
-    expect(html.match(/var\(--waste\)/g)).toHaveLength(1);
+    // Colour marks content, never structure: no rule paints a border, a rule or
+    // a background in either hue. What each one is spent on is checked below.
+    for (const structural of [/border[^;]*var\(--primary\)/, /border[^;]*var\(--waste\)/,
+      /background[^;]*var\(--primary\)/, /background[^;]*var\(--waste\)/]) {
+      expect(html).not.toMatch(structural);
+    }
     expect(html).toContain(".cost { color: var(--primary); }");
     expect(html).toContain(".intent {\n  font-family: var(--prose);\n  font-size: 1.0625rem;\n  color: var(--primary);");
     expect(html).toContain(".waste { color: var(--waste); }");
@@ -241,16 +255,29 @@ describe("renderWeek", () => {
     expect(listed[0]).toContain('<span class="figure empty quiet">0 produced nothing</span>');
   });
 
-  it("counts every session, dollar and turn in the summary", () => {
-    expect(renderWeek(week(), 7, {}, priced)).toContain(
-      '<p class="summary">3 sessions · $9.00 · 19 turns · ',
-    );
+  it("counts each intent source on its own row, and never totals them", () => {
+    const html = renderWeek(week(), 7, {}, priced);
+
+    // Every one of these sessions is declared, so the other two rows stand
+    // empty — and still print, or the declared row would read as the answer.
+    expect(html).toContain('<th scope="row">declared</th>');
+    expect(html).toContain('<th scope="row">primed</th>');
+    expect(html).toContain('<th scope="row">captured</th>');
+    expect(html).toContain('<span class="figure">3</span>');
+    expect(html).toContain('<span class="figure">$9.00</span><span class="q">3 of 3 priced</span>');
+    expect(html).toContain('<span class="figure">19</span>');
+    expect(html).not.toContain("Total");
   });
 
-  it("adds the tokens to the summary when --tokens asks", () => {
-    expect(renderWeek(week(), 7, {}, { ...priced, tokens: true })).toContain(
-      '<p class="summary">3 sessions · $9.00 · 19 turns · 600,210 tokens · ',
-    );
+  it("gives an empty source a row of its own rather than dropping it", () => {
+    const html = renderWeek(week(), 7, {}, priced);
+
+    expect(html.match(/<span class="quiet">none<\/span>/g)).toHaveLength(2);
+    expect(html).toContain('<span class="quiet">—</span>');
+  });
+
+  it("says which axis the rows were compared on", () => {
+    expect(renderWeek(week(), 7, {}, priced)).toContain("Rows compared in money");
   });
 
   it("says what the week cost and how much of it never merged", () => {
@@ -272,8 +299,9 @@ describe("renderWeek", () => {
 
   it("omits the waste sentence when no turns were captured", () => {
     const html = renderWeek([session()], 7, {}, priced);
+    const footer = /<footer>[^]*<\/footer>/.exec(html)?.[0] ?? "";
 
-    expect(html).not.toContain("changed no files");
+    expect(footer).not.toContain("changed no files");
   });
 
   it("says so when the window is empty, and lists nothing", () => {
@@ -339,8 +367,10 @@ describe("renderWeek: the waste hue never lands on a zero", () => {
     expect(html).toContain('<span class="waste">1</span> of 3 turns changed no files');
   });
 
-  it("mutes a zero drift total in the summary", () => {
-    expect(renderWeek([clean()], 7, {}, priced)).toContain('<span class="quiet">0 outside</span>');
+  it("mutes a source that drifted onto nothing", () => {
+    expect(renderWeek([clean()], 7, {}, priced)).toContain(
+      '<span class="quiet">none</span><span class="q">in 1 that declared one</span>',
+    );
   });
 });
 
@@ -353,18 +383,22 @@ describe("renderWeek: drift", () => {
     expect(listed[2]).toContain("2 outside");
   });
 
-  it("lists the drifted paths on the element, rather than in another column", () => {
+  it("names the drifted paths in the detail, where a keyboard can reach them", () => {
     const listed = rows(renderWeek(week(), 7, {}, priced));
 
-    expect(listed[0]).toContain('title="db/schema.py"');
-    expect(listed[2]).toContain('title="web/app.ts&#10;db/schema.py"');
+    // Not a tooltip: a title attribute is reachable only with a mouse, and the
+    // paths are the answer to the count beside them.
+    expect(listed[0]).toContain('<li class="outside">db/schema.py</li>');
+    expect(listed[2]).toContain('<li class="outside">web/app.ts</li>');
+    expect(listed[2]).toContain("Outside the declared scope — 2 of 2 changed paths");
+    expect(listed[0]).not.toContain("title=");
   });
 
-  it("mutes a session that stayed inside its scope, and gives it nothing to hover", () => {
+  it("says outright that a session stayed inside its scope", () => {
     const listed = rows(renderWeek(week(), 7, {}, priced));
 
     expect(listed[1]).toContain('<span class="figure drift quiet">0 outside</span>');
-    expect(listed[1]).not.toContain("title=");
+    expect(listed[1]).toContain("Nothing changed outside the declared scope.");
   });
 
   it("escapes a drifted path rather than letting it write an attribute", () => {
@@ -375,16 +409,21 @@ describe("renderWeek: drift", () => {
     expect(html).toContain("&quot; onmouseover=&quot;alert(1)");
   });
 
-  it("totals the week's drift in the summary", () => {
-    // 1 from the first session and 2 from the third: the rows add up.
-    expect(renderWeek(week(), 7, {}, priced)).toContain('<span class="waste">3 outside</span>');
+  it("counts the source's drift in its own row, and the rows add up to it", () => {
+    // 1 from the first session and 2 from the third.
+    expect(renderWeek(week(), 7, {}, priced)).toContain(
+      '<span class="waste">3 paths</span><span class="q">in 2 of 3 that declared one</span>',
+    );
   });
 
-  it("keeps to two hues: what a row is and cost, and everything wasted", () => {
+  it("keeps to two hues, and spends neither on structure", () => {
     const html = renderWeek(week(), 7, {}, priced);
 
-    expect(html.match(/var\(--primary\)/g)).toHaveLength(2);
-    expect(html.match(/var\(--waste\)/g)).toHaveLength(1);
+    // Content only: no rule paints a border, a background or a rule in either.
+    for (const structural of [/border[^;]*var\(--primary\)/, /background[^;]*var\(--primary\)/,
+      /border[^;]*var\(--waste\)/, /background[^;]*var\(--waste\)/]) {
+      expect(html).not.toMatch(structural);
+    }
     // Drift and empty turns share the one waste rule rather than taking a
     // third hue between them.
     expect(html).toContain(".waste { color: var(--waste); }");
@@ -410,10 +449,12 @@ describe("renderWeek: sessions the hook recorded", () => {
     expect(listed[0]).toContain("~ why does /orders 500");
   });
 
-  it("says on the element what the mark means", () => {
+  it("says in the detail and the footer what the mark means", () => {
     const listed = rows(renderWeek([captured()], 7, {}, priced));
 
-    expect(listed[0]).toContain('title="captured from the first prompt, not declared"');
+    // Not a tooltip: the row carries the marker, the detail carries the words.
+    expect(listed[0]).toContain("Intent captured from the first prompt, not declared.");
+    expect(listed[0]).not.toContain("title=");
   });
 
   it("leaves a declared intent unmarked", () => {
@@ -431,18 +472,22 @@ describe("renderWeek: sessions the hook recorded", () => {
     expect(listed[0]).not.toContain("0 outside");
   });
 
-  it("explains that on hover too", () => {
+  it("explains in the detail why there is nothing to compare against", () => {
     const listed = rows(renderWeek([captured()], 7, {}, priced));
 
-    expect(listed[0]).toContain(
-      'title="no scope was declared, so there is nothing for these paths to be outside of"',
-    );
+    expect(listed[0]).toContain("No scope was declared, so no comparison is possible.");
+    expect(listed[0]).toContain("No scope declared. Nothing was written down before the agent ran.");
   });
 
-  it("keeps such a session out of the week's drift total", () => {
+  it("keeps such a session out of every drift figure", () => {
     const html = renderWeek([...week(), captured()], 7, {}, priced);
 
-    expect(html).toContain('<span class="waste">3 outside</span>');
+    expect(html).toContain(
+      '<span class="waste">3 paths</span><span class="q">in 2 of 3 that declared one</span>',
+    );
+    expect(html).toContain(
+      '<span class="quiet">no scope declared</span><span class="q">nothing to compare against</span>',
+    );
   });
 
   it("says in the footer how many rows the hook recorded", () => {
@@ -492,12 +537,14 @@ describe("renderWeek: the figure columns", () => {
     });
     const html = renderWeek([heavy], 7, {}, { ...priced, tokens: true });
     // `minmax(8rem, 1fr)` is one track, not two, so it cannot be split on spaces.
-    const declared = /\.with-tokens \.row \{\n {2}grid-template-columns: ([^;]+);/.exec(html)?.[1] ?? "";
+    const declared =
+      /\.with-tokens summary\.cells \{\n {2}grid-template-columns: ([^;]+);/.exec(html)?.[1] ?? "";
     const columns = declared.match(/minmax\([^)]*\)|\S+/g) ?? [];
 
     expect(html).toContain("4,244,694 tokens");
     // "4,244,694 tokens" is 16 monospace characters, about 8.4rem at this size.
-    expect(Number.parseFloat(columns[5] as string)).toBeGreaterThanOrEqual(9);
+    // Column 6 now, the source having taken a track after the intent.
+    expect(Number.parseFloat(columns[6] as string)).toBeGreaterThanOrEqual(9);
     expect(html).toMatch(/\.figure \{[^}]*white-space: nowrap;/);
   });
 
@@ -512,10 +559,14 @@ describe("renderWeek: the figure columns", () => {
   it("says nothing rather than three zeroes when no cost was captured", () => {
     const listed = rows(renderWeek([session()], 7, {}, priced));
 
-    expect(listed[0]).toContain('<span class="figure nocost quiet">—</span>');
-    expect(listed[0]).not.toContain("0 turns");
-    expect(listed[0]).not.toContain("0 tokens");
-    expect(listed[0]).not.toContain("produced nothing");
+    const cells = cellsOf(listed[0] ?? "");
+
+    expect(cells).toContain('<span class="figure nocost quiet">—</span>');
+    expect(cells).not.toContain("0 turns");
+    expect(cells).not.toContain("0 tokens");
+    expect(cells).not.toContain("produced nothing");
+    // And the detail says unknown rather than putting noughts behind the dash.
+    expect(listed[0]).toContain('<span class="big quiet">unknown</span>');
   });
 
   it("still reports drift on a session with no captured cost", () => {
@@ -537,17 +588,17 @@ describe("renderWeek: the figure columns", () => {
   it("keeps the figures once there is any cost to report", () => {
     const listed = rows(renderWeek([clean()], 7, {}, { ...priced, tokens: true }));
 
-    expect(listed[0]).toContain("3 turns");
-    expect(listed[0]).toContain("1,000 tokens");
-    expect(listed[0]).not.toContain("—");
+    expect(cellsOf(listed[0] ?? "")).toContain("3 turns");
+    expect(cellsOf(listed[0] ?? "")).toContain("1,000 tokens");
+    expect(cellsOf(listed[0] ?? "")).not.toContain("—");
   });
 
   it("leads the figures with the cost", () => {
     const listed = rows(renderWeek([clean()], 7, {}, priced));
 
     // 1,000 input tokens at $15 per million: a penny and a half.
-    expect(listed[0]).toContain('<span class="figure cost">$0.02</span>');
-    expect(listed[0]).not.toContain("tokens");
+    expect(cellsOf(listed[0] ?? "")).toContain('<span class="figure cost">$0.02</span>');
+    expect(cellsOf(listed[0] ?? "")).not.toContain("tokens");
   });
 
   it("marks a row it cannot price rather than leaving the column blank", () => {
@@ -559,7 +610,7 @@ describe("renderWeek: the figure columns", () => {
 
 /** The page's one summary line, which is where the window's money goes. */
 function summaryOf(page: string): string {
-  return /<p class="summary">.*?<\/p>/u.exec(page)?.[0] ?? "";
+  return /<table class="bysource">[^]*?<\/table>/u.exec(page)?.[0] ?? "";
 }
 
 describe("a page where nothing could be priced", () => {
@@ -592,7 +643,9 @@ describe("a page where nothing could be priced", () => {
     // way to say which it meant.
     const free = session({ cost: cost({ turns: 4, apiCalls: 9 }) });
 
-    expect(summaryOf(renderWeek([free], 7, {}, priced))).toContain("$0.00");
+    expect(summaryOf(renderWeek([free], 7, {}, priced))).toContain(
+      '<span class="figure">$0.00</span><span class="q">1 of 1 priced</span>',
+    );
   });
 
   it("leaves the money out for a week nothing was captured in", () => {

@@ -434,8 +434,15 @@ describe("declared and captured, kept apart", () => {
     for (let n = 0; n < 5; n += 1) {
       await record(`declared ${n}`, { outcome: "merged" });
     }
+    // Marked, not inferred: `reportedOutcome` shows an unmarked abandonment as
+    // `open`, and an open session is not decided, so it would leave the
+    // captured side with nothing to take a rate over.
     for (let n = 0; n < 5; n += 1) {
-      await record(`captured ${n}`, { outcome: "abandoned", source: "captured" });
+      await record(`captured ${n}`, {
+        outcome: "abandoned",
+        source: "captured",
+        observations: [observation("abandoned", "manual")],
+      });
     }
 
     const estimate = await estimateFor({ intent: "another endpoint" }, RATES, options);

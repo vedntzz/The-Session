@@ -1,230 +1,63 @@
-// The week as a page: the summary, the rows, and what the rows leave out.
-import { describeFilter, stamp, type View } from "../terminal.js";
+// The week as a page: the window split by source, the rows, and what the rows
+// leave out.
+import { describeFilter, type View } from "../terminal.js";
 import type { SessionFilter } from "../../commands/week.js";
-import {
-  formatUsd,
-  priceSession,
-  shippedNote,
-  spendOf,
-  unpricedThroughout,
-  wasMeasured,
-  type RateTable,
-  type Spend,
-} from "../../pricing.js";
-import { hasDeclaredScope, intentSourceOf, totalTokens, type Session } from "../../store.js";
-import { intentLegends, intentOf, markedIntent, INTENT_NOTE } from "../terminal.js";
+import { formatUsd, shippedNote, spendOf, type RateTable, type Spend } from "../../pricing.js";
+import type { Session } from "../../store.js";
+import { intentLegends } from "../terminal.js";
 import { documentHead, isWasteful } from "./style.js";
-import { emptyTurnsOf, emptyTurnsTotal, unmeasuredEmpty } from "../../empty.js";
-import { escapeHtml } from "./text.js";
+import { emptyTurnsTotal, unmeasuredEmpty } from "../../empty.js";
+import { NO_POOL_NOTE, sourceTable } from "./summary.js";
+import { hue, renderRow, weigh, weighedInMoney } from "./row.js";
+import { escapeHtml, figure, plural } from "./text.js";
 
-/** Shortest a row gets, so a cheap session is still a readable line. */
-export const MIN_ROW = 44;
-
-/** Tallest a row gets. The heaviest session in the window is exactly this. */
-export const MAX_ROW = 180;
-
-
-/**
- * How tall a session's row stands: its share of the heaviest session in the
- * window. Spend is the only thing the layout encodes, which is why there are
- * no charts — the row is the chart.
- *
- * The floor means rows below about a quarter of the heaviest all stand the
- * same height; below that a row would be too short to read, and an unreadable
- * row states its cost at the price of stating anything else.
- */
-export function rowHeight(weight: number, heaviest: number): number {
-  if (heaviest <= 0) {
-    return MIN_ROW;
-  }
-  return Math.max(MIN_ROW, Math.round((weight / heaviest) * MAX_ROW));
-}
-
-/**
- * What a row's height is measured in: dollars when every session in the window
- * has a price, tokens otherwise.
- *
- * Money is the truer axis — it is what the height is trying to say — but it
- * only works when the whole window is on it. One unpriced session among priced
- * ones would stand at the floor and read as cheap rather than as unknown, so
- * the window falls back to the axis every session can be put on.
- */
-export function weigh(sessions: readonly Session[], rates: RateTable): number[] {
-  const prices = sessions.map((session) => priceSession(session.cost, rates));
-  if (prices.every((price) => price.priced)) {
-    return prices.map((price) => (price.priced ? price.usd : 0));
-  }
-  return sessions.map((session) => totalTokens(session.cost));
-}
-
-/**
- * Which treatment a count gets. Red is reserved for a count that is actually
- * above zero: a red nought teaches the eye that red means nothing in
- * particular, and then the one number that matters cannot get its attention.
- */
-export function hue(count: number): string {
-  return count > 0 ? "waste" : "quiet";
-}
-
-/**
- * True when the session has no captured cost to report, rather than a zero.
- *
- * `wasMeasured` decides it, as it does for every other surface: a page that
- * dashed a different set of sessions from the table beside it would be two
- * answers to one question.
- */
-export function uncosted(session: Session): boolean {
-  return !wasMeasured(session.cost);
-}
-
-export function figure(value: number): string {
-  return value.toLocaleString("en-US");
-}
-
-export function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
-/** The cost cells, or one dash when there was no cost to capture. */
-export function costCells(session: Session, rates: RateTable, tokens: boolean): string {
-  if (uncosted(session)) {
-    return `<span class="figure nocost quiet">—</span>`;
-  }
-
-  const { turns } = session.cost;
-  const price = priceSession(session.cost, rates);
-  const raw = tokens
-    ? `<span class="figure tokens">${escapeHtml(figure(totalTokens(session.cost)))} tokens</span>`
-    : "";
-  // A dash where the diff cannot say which turn wrote a file, and no hue on
-  // it: the waste ink means there is something here, and not knowing is not
-  // something here.
-  const empty = emptyTurnsOf(session);
-  const emptyCell =
-    empty === undefined
-      ? `<span class="figure empty quiet">— produced nothing</span>`
-      : `<span class="figure empty ${hue(empty)}">${escapeHtml(figure(empty))} produced nothing</span>`;
-
-  return (
-    `<span class="figure cost">${escapeHtml(price.priced ? formatUsd(price.usd) : "—")}</span>` +
-    `<span class="figure turns">${escapeHtml(plural(turns, "turn", "turns"))}</span>` +
-    emptyCell +
-    raw
-  );
-}
-
-/**
- * What the session changed that nobody declared. The count is the signal; the
- * paths are on the element, so the question "which files?" is a hover rather
- * than another column.
- *
- * A session the hook recorded declared no scope, so it has no drift — and `0
- * outside` would be a claim that it stayed inside one. The column says which
- * of the two it is looking at instead.
- */
-export function driftCell(session: Session): string {
-  if (!hasDeclaredScope(session)) {
-    return (
-      `<span class="figure drift quiet" title="no scope was declared, ` +
-      `so there is nothing for these paths to be outside of">no scope</span>`
-    );
-  }
-
-  const count = session.drift.length;
-  const paths =
-    count > 0 ? ` title="${session.drift.map(escapeHtml).join("&#10;")}"` : "";
-  return `<span class="figure drift ${hue(count)}"${paths}>${escapeHtml(figure(count))} outside</span>`;
-}
-
-/**
- * The intent, marked when nobody declared it. The same `~` the terminal table
- * uses, for the same reason: the page is read next to that table, and a
- * distinction drawn one way in one view and another way in the other is a
- * distinction the reader has to learn twice.
- */
-export function intentCell(session: Session): string {
-  const note = INTENT_NOTE[intentSourceOf(session)];
-  if (note === undefined) {
-    return `<span class="intent">${escapeHtml(intentOf(session))}</span>`;
-  }
-  return (
-    `<span class="intent" title="${escapeHtml(note)}">` +
-    `${escapeHtml(markedIntent(session))}</span>`
-  );
-}
-
-export function renderRow(
-  session: Session,
-  weight: number,
-  heaviest: number,
-  rates: RateTable,
-  tokens: boolean,
-): string {
-  const classes = session.outcome === "abandoned" ? "row abandoned" : "row";
-
-  return (
-    `<li class="${classes}" style="height:${rowHeight(weight, heaviest)}px">` +
-    `<span class="when">${escapeHtml(stamp(session.startedAt))}</span>` +
-    intentCell(session) +
-    costCells(session, rates, tokens) +
-    driftCell(session) +
-    `<span class="outcome">${escapeHtml(session.outcome)}</span>` +
-    `</li>`
-  );
-}
+export { hue, rowHeight, weigh, MIN_ROW, MAX_ROW } from "./row.js";
 
 export function sum(sessions: readonly Session[], of: (session: Session) => number): number {
   return sessions.reduce((running, session) => running + of(session), 0);
+}
+
+/**
+ * Which axis the rows were compared on, said out loud.
+ *
+ * The page falls back to tokens as soon as one session cannot be priced, so
+ * the reader is told — a column of heights that quietly changed what it meant
+ * would rank the window on a measure nobody chose.
+ */
+export function basisNote(sessions: readonly Session[], rates: RateTable): string {
+  if (weighedInMoney(sessions, rates)) {
+    return (
+      "Rows compared in money: every session in this window has a rate for its model."
+    );
+  }
+  return (
+    "Rows compared in tokens, not money: at least one session here has no rate for" +
+    " its model, and a dollar column would rank the window on partial figures. The" +
+    " known spend above is unchanged, per source, with its coverage stated."
+  );
 }
 
 export function renderBody(sessions: readonly Session[], window: string, view: View): string {
   if (sessions.length === 0) {
     return `<p class="nothing">No sessions in the last ${escapeHtml(window)}</p>`;
   }
-
   const rates = view.rates ?? new Map();
   const showTokens = view.tokens === true;
-  const spend = spendOf(sessions, rates);
-
   return (
-    summaryLine(sessions, spend, showTokens) +
+    sourceTable(sessions, rates) +
+    `<p class="nopool">${escapeHtml(NO_POOL_NOTE)}</p>` +
+    `<p class="basis">${escapeHtml(basisNote(sessions, rates))}</p>` +
     rowsBlock(sessions, rates, showTokens) +
-    footerBlock(sessions, spend)
-  );
-}
-
-/**
- * The one line above the rows: how much of what, and how much of it went
- * outside plan.
- *
- * The money is left out only where there is none to give — a window nothing
- * could be priced in. A window that genuinely cost nothing carries `$0.00`,
- * because that is what it cost; dropping it there would render an absence and
- * a nought the same way, and the page would have no way to tell the reader
- * which of the two it meant.
- */
-export function summaryLine(sessions: readonly Session[], spend: Spend, showTokens: boolean): string {
-  const turns = sum(sessions, (session) => session.cost.turns);
-  // Summed per session, so the rows add up to the total. A file that drifted
-  // in two sessions drifted twice.
-  const drift = sum(sessions, (session) => session.drift.length);
-  const tokens = sum(sessions, (session) => totalTokens(session.cost));
-  const counted = [
-    plural(sessions.length, "session", "sessions"),
-    ...(unpricedThroughout(spend) ? [] : [formatUsd(spend.usd)]),
-    plural(turns, "turn", "turns"),
-    ...(showTokens ? [`${figure(tokens)} tokens`] : []),
-  ]
-    .map(escapeHtml)
-    .join(" · ");
-  return (
-    `<p class="summary">${counted} · ` +
-    `<span class="${hue(drift)}">${escapeHtml(figure(drift))} outside</span></p>`
+    footerBlock(sessions, spendOf(sessions, rates))
   );
 }
 
 /** The rows themselves, each as tall as its share of the money. */
-export function rowsBlock(sessions: readonly Session[], rates: RateTable, showTokens: boolean): string {
+export function rowsBlock(
+  sessions: readonly Session[],
+  rates: RateTable,
+  showTokens: boolean,
+): string {
   const weights = weigh(sessions, rates);
   const heaviest = Math.max(...weights);
   const rows = sessions
@@ -233,43 +66,64 @@ export function rowsBlock(sessions: readonly Session[], rates: RateTable, showTo
   return `<ol class="week${showTokens ? " with-tokens" : ""}">${rows}</ol>`;
 }
 
-/** What the rows do not say: the split of the money, the waste, the marker. */
-export function footerBlock(sessions: readonly Session[], spend: Spend): string {
+/**
+ * The money the window spent, and how much of it has not landed.
+ *
+ * Omitted where the total is nought, whether because nothing was spent or
+ * because nothing could be priced — the table above carries that distinction,
+ * per source, which is the only place it can be stated without pooling.
+ */
+function spentLine(spend: Spend): string {
+  return spend.usd > 0
+    ? `<p>${escapeHtml(formatUsd(spend.usd))} spent, ${escapeHtml(shippedNote(spend))}</p>`
+    : "";
+}
+
+/**
+ * Said either way, like the terminal's note: a page that drops the line reads
+ * as a week where nothing was wasted.
+ */
+function wastedLine(sessions: readonly Session[]): string {
   const turns = sum(sessions, (session) => session.cost.turns);
+  if (turns === 0) {
+    return "";
+  }
   const empty = emptyTurnsTotal(sessions);
-  // Not in the waste hue. Red is for money that is definitely gone, and most
-  // of this figure is work that has simply not landed yet. Omitted where the
-  // total is nought, whether because nothing was spent or because nothing
-  // could be priced — the summary above carries that distinction.
-  const spent =
-    spend.usd > 0
-      ? `<p>${escapeHtml(formatUsd(spend.usd))} spent, ${escapeHtml(shippedNote(spend))}</p>`
-      : "";
-  // Said either way, like the terminal's note: a page that drops the line
-  // reads as a week where nothing was wasted.
-  const wasted =
-    turns === 0
-      ? ""
-      : empty !== undefined
-        ? `<p><span class="${hue(empty)}">${escapeHtml(figure(empty))}</span> of ` +
-          `${escapeHtml(plural(turns, "turn", "turns"))} changed no files</p>`
-        : `<p class="quiet">${escapeHtml(plural(unmeasuredEmpty(sessions), "session", "sessions"))} ` +
-          "cannot say which turns changed no files — the diff answers for the session, " +
-          "not for the turn</p>";
-  // A legend per marker the rows actually carry, from the same list the
-  // terminal footer and the Markdown document read.
-  const recorded = intentLegends(sessions)
+  if (empty === undefined) {
+    const unknown = plural(unmeasuredEmpty(sessions), "session", "sessions");
+    return (
+      `<p class="quiet">${escapeHtml(unknown)} cannot say which turns changed no files` +
+      " — the diff answers for the session, not for the turn</p>"
+    );
+  }
+  return (
+    `<p><span class="${hue(empty)}">${escapeHtml(figure(empty))}</span> of ` +
+    `${escapeHtml(plural(turns, "turn", "turns"))} changed no files</p>`
+  );
+}
+
+/** A legend per marker the rows actually carry. */
+function legendLines(sessions: readonly Session[]): string {
+  return intentLegends(sessions)
     .map(
       (legend) =>
         `<p>${escapeHtml(`${legend.marker} ${plural(legend.count, "session", "sessions")}`)} ` +
         `${escapeHtml(legend.text)}</p>`,
     )
     .join("");
+}
+
+/** What the rows do not say: the split of the money, the waste, the marker. */
+export function footerBlock(sessions: readonly Session[], spend: Spend): string {
+  const spent = spentLine(spend);
+  const wasted = wastedLine(sessions);
+  const recorded = legendLines(sessions);
   return spent || wasted || recorded ? `<footer>${spent}${wasted}${recorded}</footer>` : "";
 }
 
 /**
- * The week as a page: one row per session, tallest where the money went.
+ * The week as a page: one row per session, tallest where the money went, each
+ * opening onto what it declared and what it changed.
  *
  * Self-contained by construction — no scripts, no stylesheets, no fonts and no
  * images fetched from anywhere. It is a file on the developer's disk that

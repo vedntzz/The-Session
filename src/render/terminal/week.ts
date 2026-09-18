@@ -61,7 +61,7 @@ function count(sessions: readonly Session[], outcome: SessionOutcome): number {
  * are any — a nought here is a category with nothing in it, which is the same
  * defect as a money figure over an empty category.
  */
-function outcomeHeadline(sessions: readonly Session[]): string {
+export function outcomeHeadline(sessions: readonly Session[]): string {
   const open = count(sessions, "open");
   const empty = count(sessions, "empty");
   return [

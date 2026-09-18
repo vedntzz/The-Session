@@ -33,6 +33,9 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       render/prime.ts original proposal, support and tracked-tree coverage
       debt.ts paths that keep drifting and were never declared since, per repo
       survival.ts whether merged work is still there at 14 and 30 days
+      commands/ui.ts terminal ownership, keys, refresh   program/ui.ts registration
+      render/tui/ screen.ts frame, state.ts keys and filters, text.ts widths and
+      safeText (record text is data, never a terminal command) — reads only
       commands/sweep.ts settle + due checks, once a day per repo, silent unless written
       chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
       config.ts .session.json, checked in   ../rates.json prices per model, per Mtok
@@ -95,7 +98,7 @@ type SessionCost = TokenCounts & {
 
 - Don't let `session config` grow past attribution: who the work was for is a fact about the repo and the team, so it lives in a checked-in [`.session.json`](docs/decisions.md#who-the-work-was-for) where everyone spells the client the same way. This replaced a flat "no config files" ban, which held until attribution needed a home a team could share — don't read it as licence for a second config. `~/.session/rates.json` holds prices and nothing else. No user-level config, no `--format`, no default flags file.
 - Don't build a spec language — scope is a list of path prefixes, matched at directory boundaries.
-- Don't add telemetry, a knowledge graph, a web server, or anything to log into. A generated file the user opens or sends is not that.
+- Don't add telemetry, a web server, or anything to log into. `session knowledge` is a read-only graph and compact context export derived from existing records, never a second database, an inferred dependency graph, or an LLM summary. A generated file the user opens or sends is not a service.
 
 ## The rest
 

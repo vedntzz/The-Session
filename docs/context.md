@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `a455c02 evidence: intent query — underpowered by construction, records the confounds` (`v1.0.0-3-ga455c02`).
+Derived at `984c881 feat(prime): record, intent note, guidance test` (`v1.0.0-10-g984c881`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -35,7 +35,7 @@ the product.
 $ npm pkg get name version engines dependencies
 {
   "name": "@vedantzz/session",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "engines": {
     "node": ">=20"
   },
@@ -48,7 +48,7 @@ $ npm pkg get name version engines dependencies
 
 ```console
 $ npm ls --omit=dev --depth=0
-@vedantzz/session@1.0.0 /Users/vedant/dev-session
+@vedantzz/session@2.0.0 /Users/vedant/dev-session
 ├── commander@14.0.3
 └── picocolors@1.1.1
 ```
@@ -58,14 +58,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-      99
-   15666
+     107
+   16739
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      40
-   17037
+      42
+   17391
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -82,7 +82,7 @@ document is downstream of these.
 2. **No server, no database, no account.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service, and anything needing one is wrong.
 3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else.
 4. **Turns that produced nothing are first-class.** Turns that changed no files are counted and displayed, never dropped — and where the record cannot say which turns those were, *that* is displayed rather than a nought. A transcript names the tool a call used, never what it did to the disk, so the question goes to git: `empty.ts` is the one rule, and no view reads `cost.emptyTurns` itself.
-5. **Cross-tool.** Nothing may assume Claude Code specifically. Adapters go behind an interface; the core reads a normalised shape.
+5. **Cross-tool.** Nothing may assume a specific coding tool. Adapters go behind an interface; the core reads a normalised shape.
 
 ## The surface
 
@@ -92,8 +92,8 @@ of it, and not from the Readme, which is prose.
 
 ```console
 $ node evidence/verbs.mjs
-top-level verbs:        21
-including subcommands:  25
+top-level verbs:        22
+including subcommands:  26
 
 start [intent]            Begin a new session
                           --scope <paths...>  --passive
@@ -107,6 +107,8 @@ show [id]                 Show the last closed session
                           --full  --tokens
 week                      Summarize recent sessions, one row each
                           --days <n>  --client <name>  --project <name>  --outcome <state>  --class [name]  --intent <source>  --tokens  --md  --copy  --open
+ui                        Browse sessions in an interactive terminal interface
+                          --days <n>
 pr [id]                   Write a pull request body from a session's record
                           --copy  --out <path>  --template <path>
 scan                      What the agent sessions already on this machine have cost — no setup needed
@@ -154,12 +156,17 @@ Verbatim from `docs/decisions.md`:
 
 **The surface is frozen at twenty verbs.** No new commands after 1.0 — refinement only: bugs, documentation, error messages, and making what is already there clearer.
 
-Two exceptions, named here so that nothing else can be argued into the same shape later:
+Three exceptions, named here so that nothing else can be argued into the same shape later:
 
 - **A GitHub Action that posts the record on a pull request.** `pr` already writes it; this puts it where the review happens.
 - **A team view over the peer records `pull` already fetches.** They are on the machine and nothing reads them together.
+- **`ui`, a browsable ledger over the same window `week` prints.** Added September 2026, the twenty-first verb.
 
-Neither is a new measurement. Both are a surface onto what the tool already records.
+None of the three is a new measurement. All are a surface onto what the tool already records.
+
+**Why `ui` passes the same test as the other two.** It reads through `weekSessions`, so its rows are the rows `week` prints and its outcomes come through `withOutcomes` like everything else; it writes nothing, creates nothing, and asks the repository no question `week` does not already ask. Every figure on it comes from `pricing.ts`, `empty.ts` and `scope.ts` — there is no arithmetic in `render/tui/` that exists nowhere else. What it adds is reach: `week` fits a session to one row and a page to eighty columns, so the paths, the proposal and the observations behind a row have nowhere to go, and `show` reaches them one session at a time. A timeline you can move through answers "which of these went wrong" without printing twenty sessions at full depth.
+
+**What it cost to say yes.** A verb, and the admission that the freeze now has three exceptions rather than two — which is the shape the freeze was written to resist, and the reason this paragraph exists rather than a quiet edit to the list above. The line that has not moved is the one about measurement: a fourth exception that computes something is a different argument and does not get to cite this one.
 
 The reason is that the surface outgrew the story once already, and not narrowly. `prime` was measured and never shipped; `cochange` shipped and was cut. The same fault both times: each measured something other than the distance between a declaration and a diff, and it took a backtest and a fold to see it.
 
@@ -209,7 +216,7 @@ export interface Session {
    */
   intent: string | null;
   /**
-   * Which of the two `intent` is. Absent on records written before passive
+   * How the intent and scope were chosen. Absent on records before passive
    * capture existed, where it reads as `declared` — nothing but `session
    * start` could have written one then, so this is a fact about those records
    * rather than a guess about them.
@@ -289,7 +296,7 @@ to nest here and its relative links repointed at this directory.
 
 ```console
 $ wc -l .claude/skills/measurement-rules/SKILL.md
-     549 .claude/skills/measurement-rules/SKILL.md
+     599 .claude/skills/measurement-rules/SKILL.md
 ```
 
 That file is the copy a change is held to. **If the two ever disagree, the
@@ -379,27 +386,75 @@ comes from one table or the other, and the command says which.
 
 ### Intent source
 
-`declared` was typed at `session start`, before the agent ran. `captured` was
-taken off the first prompt of a session the hook opened. Both are written
-before anything happened and neither can be edited afterwards, so invariant 1
-holds for both — but only one of them was ever a promise, and a reader
-comparing intent to reality is owed that.
+`declared` was typed at `session start`, before the agent ran. `primed` keeps
+the developer's intent verbatim and records that the scope was reviewed with
+Prime. `captured` was taken off the first prompt of a session the hook opened.
+All three fix the intent before the work and preserve it afterwards. The
+distinction is unaided declaration, assisted scope selection, or passive
+capture — Prime does not compose the words.
 
 Decided when the session opens and fixed there. `captureIntent` fills in a
 passive session's words later; it does not change what kind of intent they
 are, and `updateSession` refuses the field outright. A session opened with no
-intent is `captured` by construction — recording it as `declared` would be a
-claim that somebody typed it — and `appendSession` refuses the combination.
+intent is `captured` by construction, and `appendSession` refuses any other
+source for it. A new `primed` session must carry its original `proposal`;
+other sources cannot carry one. The writer refuses changes to the proposal,
+and the reader keeps the creating record's proposal and source even if a later
+patch tries to replace them.
 
 Absent on records written before passive capture existed, where it reads as
 `declared`: nothing but `session start` could have written an intent then, so
 that is a fact about those records rather than a guess about them. Same shape
 as `classOf` — every reader goes through `intentSourceOf`, never the raw
-field, so those records land in `--intent declared` rather than in neither
-half.
+field, so those records land in `--intent declared` rather than outside the
+groups.
 
 `show` names it, `week` marks the row and filters on it, and `estimate`
-reports the two apart. Nothing pools them.
+reports all three apart. `INTENT_SOURCES` fixes their order: declared, primed,
+captured. Source decisions use exhaustive tables or walk that list; a test
+against `captured` alone would silently give a future source the wrong answer.
+`sourceHasScope` and `inOwnWords` are separate questions, even though declared
+and primed currently answer yes to both.
+
+### Prime
+
+Current rule and workflow: [Prime](prime.md). The original
+co-change proposal below remains rejected; the current rule reads repeated
+planning misses, not coupling or file popularity.
+
+`proposeScope` is pure. Its eligible history is this repo's closed, unaided
+declarations with nonempty scope, ended strictly before the question. Captured
+and primed sessions never train it: accepted suggestions cannot become evidence
+for the next suggestion. Comparable means two shared content words under the
+fixed tokenizer, or an exactly matching scope entry and seed — a wording match,
+never semantic understanding or a confidence score.
+
+Suggestions are exact tracked files present in the checkout. Named seed files
+come first; historical candidates need at least `PRIME_SUPPORT` (three)
+comparable declarations and `PRIME_RATE` (60%) support. A later eligible
+unaided declaration covering a path clears its earlier misses. The comparable
+count stays the denominator. Historical candidates sort by support, then path;
+`PRIME_LIMIT` caps the complete suggestion at five. No parent-directory
+roll-up, co-change expansion or arbitrary subset of an overbroad seed. Missing
+seeds and seeds covering more than five files cause an abstention.
+
+A preview reads only: no record, store creation or session start. `--start`
+computes a proposal for that invocation and accepts it; `--scope` replaces the
+whole accepted scope and may name new files. An empty suggestion requires an
+explicit replacement to start. The record retains the original proposal whole,
+including rule version, intent, suggested scope, supporting ids and counts,
+coverage and abstention. It stays unchanged even if every path is replaced.
+Only accepted `scope` participates in drift and debt; a suggestion alone clears
+neither. Old records are never backfilled.
+
+`evidence/prime-evaluate.mjs` calls the production rule, uses only history that
+closed before each target started, and reads the tracked tree at that target's
+start commit. No current-tree fallback. Seeded and unseeded results stay apart:
+a path supplied by the developer is not a prediction Prime earned. Report
+precision, recall, abstentions and tree coverage with their denominators;
+recall alone rewards suggesting the whole tree. Missing historical trees are
+counted as skipped. Conservative abstention is not evidence of useful
+prediction, and results on one repo do not validate the rule on others.
 
 ### Scan
 
@@ -464,7 +519,9 @@ Four thresholds, and each is a refusal to say more than the log supports:
   computes drift with — `src/api/` clears every file under it. *After* is
   decided by position in the session list, which is why `debtOf` documents that
   it wants them oldest first. A file declared and then drifted onto again is
-  owed again.
+  owed again. A scope accepted through Prime counts here; `proposal.scope`
+  never does. This differs from Prime's training rule, which admits only
+  unaided declarations.
 - **Docs, config and build are never listed**, by `classOfPath` and no second
   list of exceptions. They are touched by everything and owned by nobody, and
   left in they bury every path that means something.
@@ -505,8 +562,10 @@ two.
 the arithmetic and nothing it printed could be a planning failure — what it
 ranked was which files are central. `debt` reads `drift`, which is `reality`
 less what was declared, and that subtraction is the whole difference between
-the two reports. Its one consumer was `prime`, also rejected, after which
-`partnersOf` had no caller but its own tests.
+the two reports. Its one consumer was the original co-change version of
+`prime`, also rejected, after which `partnersOf` had no caller but its own
+tests. The current Prime rule above does not restore that consumer or its
+coupling inputs.
 
 **The rule.** No view returns that reads coupling, centrality, or how often two
 paths appear together, and nothing derives a scope suggestion from one. A
@@ -574,9 +633,9 @@ gather.
 The rate is over **paths, not sessions** — a session that touched forty files
 is forty files' worth of evidence — while `MIN_SESSIONS` still counts sessions,
 since what has to be numerous enough to generalise from is the work. Below it,
-the count prints and no rate does, exactly as in `estimate`. Declared and
-captured are separate lines and never a total, and a block holding nothing
-still prints, for the reasons under Estimate.
+the count prints and no rate does, exactly as in `estimate`. Declared, primed
+and captured are separate source lines and never a pooled source rate. Every
+source prints even when it holds nothing, for the reasons under Estimate.
 
 `SURVIVAL_BENCHMARK` is one constant, quoted from both ends: churn here is
 exactly the share that did not survive, so 90% survival and 10% churn are the
@@ -600,27 +659,25 @@ ran, which is also why the sample is printed above the figures and why fewer
 than five sessions reports the count and nothing else — a median of two looks
 like knowledge and is not.
 
-The answer is two blocks, one per intent source, and never a total. Declared
-and captured sessions are different evidence and on most logs they do not cost
-the same or land at the same rate; a pooled median describes neither, and it
-would move whenever the mix moved with nothing in the output to say that was
-what changed. Teams adopting the hook record far more captured sessions than
-declared ones, so the pool would be dragged wherever the hook happened to
-point.
+The answer has one block per `INTENT_SOURCES` entry, currently declared,
+primed and captured, and never a total. Unaided declarations, assisted scope
+selection and passive captures are different evidence; a pooled median would
+move whenever their mix moved. Prime can lower drift mechanically by putting
+historical misses into the accepted scope. Pooling those sessions with unaided
+declarations would disguise that change as better planning.
 
-`MIN_SESSIONS` therefore applies to each block on its own. Six declared and
-six captured sessions are not twelve of anything, and a threshold that let
-them add up would be the pool again under another name. A block holding
-nothing still prints — dropping it would leave the other reading as the whole
-answer, which is the pooled reading this exists to prevent.
+`MIN_SESSIONS` therefore applies to each block on its own. Samples from
+different sources cannot add up to cross the threshold. Every block prints,
+including primed when it has no sessions — dropping one would leave the others
+reading as the whole answer.
 
-Drift is finally counted over a plain denominator, because every session
-behind the declared block declared a scope. The captured block says outright
-that there was nothing to drift from rather than printing no drift line: a
-missing line there reads as captured sessions never drifting.
+Drift in the declared and primed blocks is measured against accepted scope,
+never against `proposal.scope`. The captured block says outright that there
+was nothing to drift from rather than printing no drift line: a missing line
+there reads as captured sessions never drifting.
 
-`--since` is printed once, above both blocks. Twice would suggest the two
-could have been cut at different dates.
+`--since` is printed once, above all blocks. Repeating it would suggest the
+groups could have been cut at different dates.
 
 The percentile is nearest-rank: p90 is an amount some session was actually
 billed, not one interpolated between two of them. "First time" means the first
@@ -630,13 +687,13 @@ it did not merge the first time.
 
 Sessions that changed no files come out before anything is counted, and the
 count of them is printed beside the sample of the block they came from — how
-often a session comes to nothing is not the same question for work somebody
-declared and work the hook happened to catch. They are not instances of the work
-being asked about: they would drag the median below anything anyone was billed
-for doing it, and sit in the merge rate's denominator as failures to merge
-when there was nothing to merge. Note they mostly land in `other`, since a
-session with no paths has nothing to read a class off — which is exactly the
-estimate they would otherwise swamp.
+often a session comes to nothing is not the same question for an unaided
+declaration, a scope reviewed through Prime, and work the hook happened to
+catch. They are not instances of the work being asked about: they would drag
+the median below anything anyone was billed for doing it, and sit in the merge
+rate's denominator as failures to merge when there was nothing to merge. Note
+they mostly land in `other`, since a session with no paths has nothing to read
+a class off — which is exactly the estimate they would otherwise swamp.
 
 ### Cost in money
 
@@ -886,7 +943,7 @@ rule against the history on this machine.
 Verbatim from `Claude.md`:
 
 ```
-src/  cli.ts registration   commands/ start stop show week scan debt survival pr sweep
+src/  cli.ts registration   commands/ start prime stop show week scan debt survival pr sweep
       verify key config settle estimate intent home hook   render/ palette.ts (semantic)
       terminal.ts html.ts markdown.ts pr.ts (a pull request body, from the record)
       capture/ hook.ts, adapters/claude-code.ts, transcript.ts
@@ -895,11 +952,18 @@ src/  cli.ts registration   commands/ start stop show week scan debt survival pr
       empty.ts which turns produced nothing, settled against the diff at stop
       pricing.ts money   observe.ts repo facts   scan.ts aggregation   git.ts diff, HEAD
       scope.ts what a declared scope covers (stop and debt share the one rule)
+      prime.ts exact-file scope suggestions from past unaided declarations
+      commands/prime.ts preview or start   program/prime.ts CLI registration
+      render/prime.ts original proposal, support and tracked-tree coverage
       debt.ts paths that keep drifting and were never declared since, per repo
       survival.ts whether merged work is still there at 14 and 30 days
+      commands/ui.ts terminal ownership, keys, refresh   program/ui.ts registration
+      render/tui/ screen.ts frame, state.ts keys and filters, text.ts widths and
+      safeText (record text is data, never a terminal command) — reads only
       commands/sweep.ts settle + due checks, once a day per repo, silent unless written
       chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
       config.ts .session.json, checked in   ../rates.json prices per model, per Mtok
+../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
 ## Prices
@@ -919,10 +983,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  39 passed (39)
-      Tests  1459 passed (1459)
-   Start at  17:37:09
-   Duration  223.32s (transform 1.83s, setup 0ms, collect 5.77s, tests 1042.20s, environment 5ms, prepare 2.16s)
+ Test Files  41 passed (41)
+      Tests  1484 passed (1484)
+   Start at  11:08:51
+   Duration  212.82s (transform 2.15s, setup 0ms, collect 7.45s, tests 977.06s, environment 5ms, prepare 2.65s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

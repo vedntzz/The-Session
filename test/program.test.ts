@@ -711,7 +711,7 @@ describe("session", () => {
     await expect(readdir(store.home as string)).rejects.toThrow();
   });
 
-  it("registers the frozen command set plus the reopened Prime workflow", () => {
+  it("registers the command set including Prime, the ledger and knowledge export", () => {
     const names = buildProgram()
       .commands.map((command) => command.name())
       .sort();
@@ -723,6 +723,7 @@ describe("session", () => {
       "hook",
       "intent",
       "key",
+      "knowledge",
       "mark",
       "peers",
       "pr",
@@ -735,6 +736,7 @@ describe("session", () => {
       "start",
       "stop",
       "survival",
+      "ui",
       "verify",
       "week",
     ]);

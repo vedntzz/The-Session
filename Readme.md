@@ -53,6 +53,18 @@ One session's gap is an anecdote. **Intent debt** is the accumulated gap between
 
 ## Commands
 
+`session ui` opens an interactive terminal ledger for this repository. Use
+`--days 30` to look further back. Arrow keys or `j`/`k` select a session in
+the timeline; `Enter` expands it inline and `e` reveals usage and evidence.
+`/` searches intents, ids and paths, with combinable filters such as
+`outside:yes outcome:merged source:declared`. `PgUp`/`PgDn` scroll long entries,
+`Esc` clears filters, `r` refreshes, `?` shows help and `q` exits.
+The indigo background and periwinkle selection use true colour when the terminal
+advertises it (`COLORTERM=truecolor` or `24bit`), with a basic ANSI fallback and
+support for `NO_COLOR`. The view reads
+local records and current Git outcomes without changing the records.
+Use `session week` when piping output to a file.
+
 `session prime "<intent>"` previews up to five specific scope paths, with the
 past planning misses supporting each one. `--seed <paths...>` names files to
 start from; `--start` accepts this run's proposal and opens an assisted session.
@@ -73,6 +85,35 @@ recorded. Thin evidence produces no suggestion. [Prime workflow and limits](docs
 `session settle` and the due survival checks also run themselves — once a day per repo, off the back of the editor hook or the next `week`, `show` or bare `session` you type. Silent unless something was written, and both commands still work by hand.
 
 `session help all` lists the other twelve — `stop`, `settle`, `mark`, `verify`, `push`, `pull`, `peers`, `config`, `key`, `hook`, `intent`, `help`.
+
+## Knowledge graph and agent context
+
+```bash
+session knowledge graph                         # interactive local HTML + compact JSON
+session knowledge graph --days 90 --limit 200    # a larger history window
+session knowledge graph --no-open --out graph.html
+session knowledge context --path src/api --limit 20 > context.json
+session knowledge context --session <id>         # JSON only, suitable for an agent
+```
+
+The graph opens in your browser and works offline. Search by intent, id or path,
+filter outcomes, drag nodes, pan, zoom, and inspect a selected neighborhood.
+Circles are sessions; squares are literal paths. Edges distinguish declarations,
+observed changes, and changes outside scope. A scope path may be a directory
+prefix. Shared paths do not imply dependencies or code quality.
+
+The export keeps original intents and records each path once, referring to it by
+index from compact session tuples. A schema and column names travel with the
+file, so any agent with file or shell access can decode it without an SDK. Use
+`--path` or `--session` to supply relevant context instead of the whole history.
+This reduces repeated text; token savings depend on the data and tokenizer.
+
+The signed JSONL log stays authoritative. Graphs are dated snapshots, with
+current outcomes resolved when generated. The default is the latest 100 matching
+sessions in 30 days; omissions are disclosed. The viewer caps visible nodes for
+readability without removing sessions from the JSON export. Empty sessions remain
+included, and unknown drift is `null`. No records are modified. See the
+[format and limits](docs/knowledge.md).
 
 ## Privacy
 

@@ -263,6 +263,29 @@ export function effectiveOutcome(session: Session, facts?: RepoFacts): SessionOu
   return classify(evidenceFor(session, facts)).outcome;
 }
 
+/**
+ * The outcome a view prints, which is not always the one `classify` reached.
+ *
+ * `abandoned` is a person's word. `classify` arrives at it by inference —
+ * nothing landed and nothing is still in the working tree — and that same
+ * evidence is produced by a branch nobody has pushed, a checkout on another
+ * machine, and a rename this tool cannot follow. So a computed `abandoned` is
+ * reported as `open`: not yet settled, which is exactly what it is. Only
+ * `session mark` writes the word, and `manualOutcome` is how that is known.
+ *
+ * The record keeps the computed verdict either way — `settle` writes what it
+ * judged, through `effectiveOutcome` rather than through this. What changes is
+ * only what a reader is shown, and it changes in one place for the reason
+ * `emptyTurnsOf` exists: two readers of the field would be two answers to
+ * "did this land".
+ */
+export function reportedOutcome(session: Session): SessionOutcome {
+  if (session.outcome !== "abandoned") {
+    return session.outcome;
+  }
+  return manualOutcome(session)?.outcome === "abandoned" ? "abandoned" : "open";
+}
+
 /** The verdict with its evidence, for the commands that explain themselves. */
 export function judge(session: Session, facts: RepoFacts): OutcomeVerdict {
   if (attemptedNothing(session)) {

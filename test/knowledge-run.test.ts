@@ -1,0 +1,67 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rm, writeFile, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readKnowledge, writeKnowledge, parseKnowledgeLimit } from "../src/commands/knowledge.js";
+import { startSession } from "../src/commands/start.js";
+import { updateSession, resolveStoreFile } from "../src/store.js";
+import { buildProgram } from "../src/program.js";
+const exec=promisify(execFile);
+let root:string, options:{cwd:string;home:string};
+beforeEach(async()=>{
+  root=await mkdtemp(path.join(tmpdir(),'session-knowledge-'));
+  options={cwd:path.join(root,'repo'),home:path.join(root,'store')};
+  await mkdir(options.cwd);
+  await exec('git',['init','-q','-b','main',options.cwd]);
+  await exec('git',['-C',options.cwd,'config','user.email','test@example.com']);
+  await exec('git',['-C',options.cwd,'config','user.name','Test']);
+  await exec('git',['-C',options.cwd,'config','commit.gpgsign','false']);
+  await writeFile(path.join(options.cwd,'a.ts'),'initial');
+  await exec('git',['-C',options.cwd,'add','a.ts']);
+  await exec('git',['-C',options.cwd,'commit','-qm','initial']);
+});
+afterEach(async()=>{vi.restoreAllMocks();await rm(root,{recursive:true,force:true});});
+describe('knowledge commands',()=>{
+  it('resolves outcomes without changing the log or checkout, and honors path and id filters',async()=>{
+    const session=await startSession('fix api orders',{...options,scope:['src/api']});
+    await updateSession(session.id,{endedAt:new Date().toISOString(),reality:[],drift:[],outcome:'merged'},options);
+    const file=await resolveStoreFile(options), before=await readFile(file,'utf8');
+    const graph=await readKnowledge({...options,days:30,limit:10});
+    expect(graph.sessions[0]![5]).toBe('empty');
+    expect(await readFile(file,'utf8')).toBe(before);
+    expect((await exec('git',['-C',options.cwd,'status','--porcelain'])).stdout).toBe('');
+    expect((await readKnowledge({...options,days:30,limit:10,path:'src/api/orders.ts'})).sessions).toHaveLength(1);
+    expect((await readKnowledge({...options,days:30,limit:10,path:'src/apis'})).sessions).toHaveLength(0);
+    expect((await readKnowledge({...options,days:30,limit:10,session:session.id.slice(0,8)})).sessions).toHaveLength(1);
+  });
+  it('writes private offline artifacts and emits only parseable JSON for agents',async()=>{
+    await startSession('add request tracing',{...options,scope:['src']});
+    const log=vi.spyOn(console,'log').mockImplementation(()=>{});
+    await buildProgram(options).parseAsync(['knowledge','context','--days','30'],{from:'user'});
+    expect(log).toHaveBeenCalledTimes(1);
+    const graph=JSON.parse(String(log.mock.calls[0]![0]));
+    expect(graph.schema).toBe('session.knowledge/v1');
+    const output=await writeKnowledge(graph,{out:path.join(root,'nested','graph.html')});
+    expect(JSON.parse(await readFile(output.json,'utf8'))).toEqual(graph);
+    expect(await readFile(output.html,'utf8')).toContain('Interactive graph');
+    expect((await stat(output.json)).mode & 0o777).toBe(0o600);
+    log.mockClear();
+    const launch=vi.fn(async()=>{});
+    await buildProgram({...options,tmp:root,launch}).parseAsync(['knowledge','graph','--no-open'],{from:'user'});
+    expect(launch).not.toHaveBeenCalled();
+    await buildProgram({...options,tmp:root,launch}).parseAsync(['knowledge','graph'],{from:'user'});
+    expect(launch).toHaveBeenCalledOnce();
+  });
+  it('reports omitted sessions and validates limits and output filenames',async()=>{
+    const first=await startSession('first',options);
+    await updateSession(first.id,{endedAt:new Date().toISOString()},options);
+    await startSession('second',options);
+    const graph=await readKnowledge({...options,days:30,limit:1});
+    expect(graph.snapshot).toMatchObject({matching:2,returned:1,omitted:1});
+    expect(graph.sessions[0]![3]).toBe('second');
+    for(const value of ['0','1001','1.5','oops'])expect(()=>parseKnowledgeLimit(value)).toThrow();
+    await expect(writeKnowledge(graph,{out:path.join(root,'bad.json')})).rejects.toThrow('.html');
+  });
+});

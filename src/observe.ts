@@ -1,5 +1,5 @@
 import { gatherRepoFacts } from "./git.js";
-import { effectiveOutcome, type RepoFacts } from "./outcome.js";
+import { effectiveOutcome, reportedOutcome, type RepoFacts } from "./outcome.js";
 import type { Session } from "./store.js";
 
 /**
@@ -48,5 +48,18 @@ export async function withOutcomes(
   gathered?: RepoFacts,
 ): Promise<Session[]> {
   const facts = gathered ?? (await factsFor(sessions, cwd));
-  return sessions.map((session) => ({ ...session, outcome: effectiveOutcome(session, facts) }));
+  return sessions.map((session) => resolve(session, facts));
+}
+
+/**
+ * One session's computed answer, then the word a reader is shown for it.
+ *
+ * Two steps and not one: `effectiveOutcome` says where the work went, and
+ * `reportedOutcome` decides whether `abandoned` is a thing anybody actually
+ * recorded. Doing it here rather than in each view is what keeps the terminal
+ * table, the page and the Markdown document from printing three answers.
+ */
+function resolve(session: Session, facts?: RepoFacts): Session {
+  const computed = { ...session, outcome: effectiveOutcome(session, facts) };
+  return { ...computed, outcome: reportedOutcome(computed) };
 }
