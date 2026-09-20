@@ -1,7 +1,8 @@
-// `session week`: where the week's work went, one row per session, and what
-// the rows do not say. The geometry of the table is in `week/table.ts`.
+// `session week`: where the week's work went, one block per intent source, and
+// what the blocks do not say. The geometry of the rows is in `week/table.ts`.
 import type { SessionFilter } from "../../commands/week.js";
 import { emptyTurnsTotal, unmeasuredEmpty } from "../../empty.js";
+import { reportedOutcome } from "../../outcome.js";
 import {
   formatUsd,
   shippedNote,
@@ -10,7 +11,14 @@ import {
   type RateTable,
   type Spend,
 } from "../../pricing.js";
-import { totalTokens, type Session, type SessionOutcome } from "../../store.js";
+import {
+  hasDeclaredScope,
+  INTENT_SOURCES,
+  intentSourceOf,
+  type IntentSource,
+  type Session,
+  type SessionOutcome,
+} from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import {
   NO_PRICE,
@@ -25,11 +33,10 @@ import { intentLegends } from "./intent.js";
 import { figure, INDENT, note, plural } from "./text.js";
 import {
   cellsFor,
-  emptyCell,
-  HEADINGS,
+  figureRow,
+  headingRow,
+  intentLines,
   measure,
-  sessionRow,
-  totalsRow,
   type Columns,
   type WeekCells,
   type Widths,
@@ -41,25 +48,25 @@ function sum(sessions: readonly Session[], of: (session: Session) => number): nu
   return sessions.reduce((running, session) => running + of(session), 0);
 }
 
+/**
+ * How many of these ended that way, read through `reportedOutcome`.
+ *
+ * Never off the field: `abandoned` is a person's word, and the computation
+ * arrives at it from evidence an unpushed branch produces just as readily. A
+ * count taken off the raw field would report somebody's unfinished work as
+ * thrown away.
+ */
 function count(sessions: readonly Session[], outcome: SessionOutcome): number {
-  return sessions.filter((session) => session.outcome === outcome).length;
+  return sessions.filter((session) => reportedOutcome(session) === outcome).length;
 }
 
 /**
- * The first line: how many sessions, and where their work went.
+ * How many sessions, and where their work went — for a caller that wants one
+ * line over a window rather than the blocks below.
  *
- * Read off `outcome`, which by the time a view runs holds what the repository
- * says now rather than what the record happened to be written with — see
- * `withOutcomes`. Nothing here is a new measurement: it is a count of the
- * column the rows below already show.
- *
- * Four ends, and each is its own clause. A session still open has not landed
- * and has not failed to; a session that changed no files never had anything to
- * land. Folding either into "did not land" would put work in a bucket it never
- * belonged to, and this line is the one most readers will stop at. The two
- * that describe the repo rather than the developer are named only when there
- * are any — a nought here is a category with nothing in it, which is the same
- * defect as a money figure over an empty category.
+ * Kept for `render/tui`, which has one header line and no room to split it
+ * three ways. `week` itself no longer prints this: pooling declared, primed
+ * and captured into one count is the reading the blocks exist to prevent.
  */
 export function outcomeHeadline(sessions: readonly Session[]): string {
   const open = count(sessions, "open");
@@ -85,8 +92,8 @@ export function describeFilter(filter: SessionFilter): string | undefined {
   if (filter.class !== undefined) {
     parts.push(`${filter.class} sessions`);
   }
-  // Named because nothing else in the table would say so: the marker beside a
-  // row marks a captured intent, and a table of nothing but declared ones
+  // Named because nothing else in the view would say so: the marker beside a
+  // row marks a captured intent, and a week of nothing but declared ones
   // carries no mark at all — which reads exactly like an unfiltered week.
   if (filter.intent !== undefined) {
     parts.push(`${filter.intent} intents`);
@@ -95,12 +102,38 @@ export function describeFilter(filter: SessionFilter): string | undefined {
 }
 
 /**
- * The week as `session week` prints it: where the work went, then one row per
- * session. Abandoned sessions are struck through rather than dropped — they
- * are part of what the week was, and hiding them would flatter it.
+ * Why there is no total, said where a reader looks for one.
+ *
+ * Declared, primed and captured are different evidence. Prime can lower drift
+ * mechanically by putting historical misses into the accepted scope, so a
+ * figure over all three would move whenever the mix moved and would describe
+ * none of them.
+ */
+export const NO_POOL =
+  "one block per intent source, never pooled and never totalled: declared, " +
+  "primed and captured are different evidence, and one figure over all three " +
+  "would move whenever their mix moved";
+
+/** What a block says instead of a drift figure when nothing was declared. */
+export const NOTHING_DECLARED =
+  "nothing was declared, so there is nothing to measure drift against";
+
+/** Everything a row needs beyond the session itself. */
+interface Layout {
+  cells: ReadonlyMap<Session, WeekCells>;
+  widths: Widths;
+  show: Columns;
+  palette: Palette;
+  /** Columns the lines may wrap at. Absent is no limit — see `terminalWidth`. */
+  limit: number | undefined;
+}
+
+/**
+ * The week as `session week` prints it: the window, then one block per intent
+ * source, then what the blocks do not say and what the week cost.
  *
  * `sessions` is expected to be the window already; `days` only says what to
- * call it when the window is empty.
+ * call it.
  */
 export function formatWeek(
   sessions: readonly Session[],
@@ -109,129 +142,155 @@ export function formatWeek(
   filter: SessionFilter = {},
   view: View = {},
 ): string[] {
-  // A filtered table with nothing saying so is a table that lies by omission:
-  // the counts and the totals are a subset, and nothing on the page admits it.
   const narrowed = describeFilter(filter);
   if (sessions.length === 0) {
     const window = `No sessions in the last ${plural(days, "day", "days")}`;
     return ["", `${INDENT}${window}${narrowed ? ` for ${narrowed}` : ""}`];
   }
-
   const rates = view.rates ?? NO_RATES;
-  const show: Columns = { tokens: view.tokens === true, classes: view.classes === true };
-  const rows = sessions.map((session) => cellsFor(session, rates));
   const spend = spendOf(sessions, rates);
-  const totals = weekTotals(sessions);
-  const widths = measure(rows, totals, show, view.width);
-  const checked = view.checked;
-  return weekTable({
-    sessions,
-    rows,
-    totals,
-    widths,
-    show,
-    spend,
-    narrowed,
-    checked,
-    palette,
-    limit: view.width,
-  });
+  return [
+    "",
+    ...note(windowLine(days, narrowed), (text) => text, view.width),
+    ...note(NO_POOL, palette.meta, view.width),
+    ...blocks(sessions, layoutFor(sessions, rates, palette, view)),
+    "",
+    ...footnotes(
+      turnNotes(sessions, palette, view.width),
+      spendNotes(spend, view.checked, palette, view.width),
+    ),
+  ];
 }
 
-/** What a week is once the figures are in: the headline, the rows, the notes. */
-interface WeekTable {
-  sessions: readonly Session[];
-  rows: readonly WeekCells[];
-  totals: WeekCells;
-  widths: Widths;
-  show: Columns;
-  spend: Spend;
-  narrowed: string | undefined;
-  /** The date the prices under the table were checked, where the file gives one. */
-  checked: string | undefined;
-  palette: Palette;
-  /** Columns the notes may wrap at. Absent is no limit — see `terminalWidth`. */
-  limit: number | undefined;
+/** The window the rows were taken from, and any narrowing applied to it. */
+function windowLine(days: number, narrowed: string | undefined): string {
+  const window = `The last ${plural(days, "day", "days")}`;
+  return narrowed === undefined ? window : `${window}, only ${narrowed}`;
 }
 
 /**
- * The order a week is read in: where the work went, the rows, what the rows do
- * not say, and — last and dim — what the week cost.
+ * The cells, measured once.
  *
- * The narrowing note sits under the headline rather than above it, so the
- * first line is the outcome either way; it is still the line before the table,
- * where a reader meets it before any figure it qualifies.
+ * Every column is measured across the whole window rather than per block, so
+ * the three blocks share one set of columns and a figure keeps its place as
+ * the eye moves down the page. That is the only thing they share.
  */
-function weekTable({
-  sessions,
-  rows,
-  totals,
-  widths,
-  show,
-  spend,
-  narrowed,
-  checked,
-  palette,
-  limit,
-}: WeekTable): string[] {
+function layoutFor(
+  sessions: readonly Session[],
+  rates: RateTable,
+  palette: Palette,
+  view: View,
+): Layout {
+  const cells = new Map(sessions.map((session) => [session, cellsFor(session, rates)] as const));
+  return {
+    cells,
+    widths: measure([...cells.values()]),
+    show: { tokens: view.tokens === true, classes: view.classes === true },
+    palette,
+    limit: view.width,
+  };
+}
+
+/**
+ * Every source, in `INTENT_SOURCES` order, whether or not it holds anything.
+ *
+ * A source with nothing in it still prints its line. Dropping the empty arm
+ * would leave the others reading as the whole answer, which is the pooled
+ * reading the split exists to prevent.
+ */
+function blocks(sessions: readonly Session[], layout: Layout): string[] {
+  return INTENT_SOURCES.flatMap((source) => ["", ...sourceBlock(source, sessions, layout)]);
+}
+
+/** One source's own sessions: its counts, its drift, and its rows. */
+function sourceBlock(source: IntentSource, all: readonly Session[], layout: Layout): string[] {
+  const mine = all.filter((session) => intentSourceOf(session) === source);
+  const { palette, limit } = layout;
+  if (mine.length === 0) {
+    return [`${INDENT}${source} · no sessions`];
+  }
   return [
-    "",
-    ...note(outcomeHeadline(sessions), (text) => text, limit),
-    ...(narrowed ? note(`only ${narrowed}`, palette.meta, limit) : []),
-    "",
-    palette.meta(sessionRow(HEADINGS, widths, show)),
-    ...sessionRows(sessions, rows, widths, show, palette),
-    "",
-    totalsRow(totals, widths, show),
-    ...footnotes(turnNotes(sessions, palette, limit), spendNotes(spend, checked, palette, limit)),
+    ...note(blockHeadline(source, mine), (text) => text, limit),
+    ...note(driftLine(mine), palette.meta, limit),
+    palette.meta(headingRow(layout.widths, layout.show)),
+    ...mine.flatMap((session) => sessionLines(session, layout)),
   ];
 }
 
 /**
- * The notes under the table, in two blocks with a line between them.
+ * Where one source's work went.
  *
- * They had run to five lines under a four-row table — what the turn counts
- * cannot say, what the marker in the intent column means, what the week cost,
- * how old the prices are, and what the figure does not cover — and five dim
- * sentences in a stack read as one paragraph nobody finishes. Every one of
- * them is owed to the reader, so none is dropped or folded into another; what
- * they get instead is the blank line that says they are answering two
- * different questions.
+ * `marked abandoned` says on its face that a person wrote the word — only
+ * `session mark` does, and a computed one reads `open`, which is what it is.
+ * The buckets with nothing in them are left unnamed: a nought here is a
+ * category with no members rather than a measurement of one.
+ */
+function blockHeadline(source: IntentSource, mine: readonly Session[]): string {
+  const marked = count(mine, "abandoned");
+  const open = count(mine, "open");
+  const empty = count(mine, "empty");
+  return [
+    `${source} · ${plural(mine.length, "session", "sessions")}`,
+    `${figure(count(mine, "merged"))} landed on the default branch`,
+    ...(marked > 0 ? [`${figure(marked)} marked abandoned`] : []),
+    ...(open > 0 ? [`${figure(open)} still open`] : []),
+    ...(empty > 0 ? [`${figure(empty)} changed no files`] : []),
+  ].join(" · ");
+}
+
+/**
+ * What this source changed outside what it declared.
  *
- * Above it: what the table does not say. Below it: the money, and the two
- * things that qualify it. Which also leaves the total where the ordering rules
- * want it — one dim line at the bottom, with nothing between it and the end.
+ * A source whose sessions declared no scope says so rather than reporting
+ * none: `0 outside` would be a claim that they stayed inside one. The
+ * denominator is the sessions that declared a scope, never the block.
+ */
+function driftLine(mine: readonly Session[]): string {
+  const scoped = mine.filter(hasDeclaredScope);
+  if (scoped.length === 0) {
+    return NOTHING_DECLARED;
+  }
+  const declared = `${plural(scoped.length, "session", "sessions")} that declared one`;
+  const paths = sum(scoped, (session) => session.drift.length);
+  if (paths === 0) {
+    return `nothing outside what was declared, in ${declared}`;
+  }
+  const drifted = scoped.filter((session) => session.drift.length > 0).length;
+  return `${plural(paths, "path", "paths")} outside what was declared, in ${drifted} of ${declared}`;
+}
+
+/**
+ * A session, in two lines: its intent at the left margin, its figures under it.
+ *
+ * The intent takes the width of the view and the `intent` ink, because it is
+ * what the row is about; everything else is what became of it. A row written
+ * off by a mark takes one ink and no other — nothing inside it gets to argue
+ * with the strike.
+ */
+function sessionLines(session: Session, layout: Layout): string[] {
+  const { palette, widths, show } = layout;
+  const cells = layout.cells.get(session) as WeekCells;
+  const intent = intentLines(session, layout.limit);
+  const outcome = reportedOutcome(session);
+  if (outcome === "abandoned") {
+    return [...intent, figureRow(cells, widths, show)].map((line) => palette.abandoned(line));
+  }
+  const ink = { outcome: outcomeInk(palette, outcome) };
+  return [...intent.map((line) => palette.intent(line)), figureRow(cells, widths, show, ink)];
+}
+
+/**
+ * The notes under the blocks, in two blocks with a line between them.
+ *
+ * Above it: what the rows do not say. Below it: the money, and the two things
+ * that qualify it. Which also leaves the total where the ordering rules want
+ * it — one dim line at the bottom, with nothing between it and the end.
  */
 function footnotes(turns: readonly string[], spend: readonly string[]): string[] {
   if (turns.length === 0 || spend.length === 0) {
     return [...turns, ...spend];
   }
   return [...turns, "", ...spend];
-}
-
-/**
- * The bottom row: a total of every column that has one.
- *
- * The cost cell is left empty on purpose. What the week cost is one dim line
- * under the table and nowhere else, and a second copy of it here would put the
- * figure back in the middle of the columns the table is read for. The row is
- * trimmed, so the empty cell costs no trailing space.
- */
-function weekTotals(sessions: readonly Session[]): WeekCells {
-  return {
-    // The label of the totals row runs across the whole left block, starting
-    // in the id column, so the id cell has nothing of its own to hold.
-    id: "",
-    when: plural(sessions.length, "session", "sessions"),
-    intent: "",
-    class: "",
-    outcome: "",
-    drift: figure(sum(sessions, (session) => session.drift.length)),
-    turns: figure(sum(sessions, (session) => session.cost.turns)),
-    tokens: figure(sum(sessions, (session) => totalTokens(session.cost))),
-    empty: emptyCell(emptyTurnsTotal(sessions)),
-    cost: "",
-  };
 }
 
 /**
@@ -256,28 +315,6 @@ function emptyNote(sessions: readonly Session[], turns: number): string {
   );
 }
 
-/** One row per session, inked by what became of the session. */
-function sessionRows(
-  sessions: readonly Session[],
-  rows: readonly WeekCells[],
-  widths: Widths,
-  show: Columns,
-  palette: Palette,
-): string[] {
-  return sessions.map((session, index) => {
-    const cells = rows[index] as WeekCells;
-    // An abandoned row takes one ink and no other: the whole row is written
-    // off, and brightening its intent inside the strike would argue with it.
-    if (session.outcome === "abandoned") {
-      return palette.abandoned(sessionRow(cells, widths, show));
-    }
-    return sessionRow(cells, widths, show, {
-      intent: (text) => palette.intent(text),
-      outcome: outcomeInk(palette, session.outcome),
-    });
-  });
-}
-
 /**
  * What the week cost, as a footnote and nothing more.
  *
@@ -287,17 +324,13 @@ function sessionRows(
  * else already answered. It is still printed, because a week nobody can put a
  * figure on is a week nobody can bill.
  *
- * The waste share is left dim with the rest of the line rather than taking the
- * `waste` ink: red inside a footnote would make the footnote the loudest thing
- * on the page, which is the arrangement this ordering exists to undo. `show
- * --full` still raises its voice about it, per session, where the reader has
- * asked for the detail.
+ * It is the one figure here over the whole window rather than per source —
+ * money is what a week is billed at, not a rate that moves with the mix — and
+ * the blocks above carry no money at all.
  *
- * Always one line, whatever the week came to — see `moneyLine` for the three
- * things it can say. Under it, the date the prices behind it were checked, so
- * the figure is not quoted at prices of no stated age; then what the figure
- * does not cover, because it is a total over the rest — the sessions nothing
- * was captured for, and the ones whose model no rate covers.
+ * Under it, the date the prices behind it were checked, so the figure is not
+ * quoted at prices of no stated age; then what the figure does not cover,
+ * because it is a total over the rest.
  */
 function spendNotes(
   spend: Spend,
@@ -311,53 +344,62 @@ function spendNotes(
   if (checked !== undefined && !unpricedThroughout(spend)) {
     lines.push(...note(pricesChecked(checked), palette.meta, limit));
   }
-  // Both said out loud, because the figure above is a total over the rest, and
-  // the two are different absences: a rate would fix the first and nothing
-  // would fix the second. A row reading `—` that no note underneath accounts
-  // for is a hole the reader can see and the table will not admit to.
-  if (spend.uncaptured > 0) {
-    lines.push(
-      ...note(
-        `${plural(spend.uncaptured, "session", "sessions")} uncaptured: ` +
-          "no turns on the record, so nothing to price",
-        palette.meta,
-        limit,
-      ),
-    );
+  return [...lines, ...coverageNotes(spend, palette, limit)];
+}
+
+/**
+ * What the figure above does not cover.
+ *
+ * Both said out loud, because the figure is a total over the rest and the two
+ * are different absences: a rate would fix the first and nothing would fix the
+ * second. A cell reading `unknown` that no note underneath accounts for is a
+ * hole the reader can see and the view will not admit to.
+ */
+function coverageNotes(spend: Spend, palette: Palette, limit?: number): string[] {
+  return [
+    ...uncapturedNote(spend, palette, limit),
+    ...unpricedNotes(spend, palette, limit),
+  ];
+}
+
+/** Sessions with no turns on the record: nothing was found to price them with. */
+function uncapturedNote(spend: Spend, palette: Palette, limit?: number): string[] {
+  if (spend.uncaptured === 0) {
+    return [];
   }
-  if (spend.unpriced > 0) {
-    lines.push(
-      ...note(
-        `${plural(spend.unpriced, "session", "sessions")} unpriced: ` +
-          `${spend.unpricedModels.join(", ")} — save this as ${RATES_HINT}`,
-        palette.meta,
-        limit,
-      ),
-      // Not wrapped: a stub is JSON the reader is meant to copy into a file,
-      // and a line break through the middle of it is a line break they would
-      // have to take back out.
-      ...stubLines(spend.unpricedModels, palette),
-    );
+  const sessions = plural(spend.uncaptured, "session", "sessions");
+  const what = "no turns on the record, so nothing to price";
+  return note(`${sessions} uncaptured: ${what}`, palette.meta, limit);
+}
+
+/**
+ * Sessions whose model no rate covers, and the file that would fix them.
+ *
+ * The stub is not wrapped: it is JSON the reader is meant to copy into a file,
+ * and a line break through the middle of it is one they would have to take
+ * back out.
+ */
+function unpricedNotes(spend: Spend, palette: Palette, limit?: number): string[] {
+  if (spend.unpriced === 0) {
+    return [];
   }
-  return lines;
+  const sessions = plural(spend.unpriced, "session", "sessions");
+  const models = spend.unpricedModels.join(", ");
+  const what = `${sessions} unpriced: ${models} — save this as ${RATES_HINT}`;
+  return [...note(what, palette.meta, limit), ...stubLines(spend.unpricedModels, palette)];
 }
 
 /**
  * What a window cost, as the figure alone.
  *
- * Nought is not the same as unknown, and since the totals row above leaves its
- * cost cell empty this is the only place either gets said. A window nothing
- * could be priced in gets the dash; one that genuinely cost nothing gets
- * `$0.00`, because nothing was captured for it and so no rate is missing. The
- * second case used to be carried by the total row, which is why it is spelled
- * out rather than left to an omission nobody would read.
+ * Nought is not the same as unknown, and since no block above carries money
+ * this is the only place either gets said. A window nothing could be priced in
+ * gets the dash; one that genuinely cost nothing gets `$0.00`, because nothing
+ * was captured for it and so no rate is missing.
  *
  * Exported because `week --md` closes on the same figure, and two copies of a
  * two-clause test are two chances for the terminal and the document somebody
- * pastes into Notion to disagree about what a week cost — the same reason
- * `shippedNote` lives in `pricing.ts` rather than in either caller. Takes the
- * three fields it reads, so a caller with no `unmerged` to report is held to
- * the same rule.
+ * pastes into Notion to disagree about what a week cost.
  */
 export function spentFigure(spend: Pick<Spend, "usd" | "unpriced" | "unpricedModels">): string {
   if (unpricedThroughout(spend)) {
@@ -381,7 +423,7 @@ function moneyLine(spend: Spend): string {
   return `${spent}, ${shippedNote(spend)}`;
 }
 
-/** How much of the week produced nothing, and what the marker in it means. */
+/** How much of the week produced nothing, and what the markers in it mean. */
 function turnNotes(sessions: readonly Session[], palette: Palette, limit?: number): string[] {
   const lines: string[] = [];
   const turns = sum(sessions, (session) => session.cost.turns);
@@ -389,17 +431,12 @@ function turnNotes(sessions: readonly Session[], palette: Palette, limit?: numbe
     lines.push(...note(emptyNote(sessions, turns), palette.meta, limit));
   }
   // Only the markers rows actually carry. A legend for a marker nobody used is
-  // a line the reader has to check the table against to find out it says
+  // a line the reader has to check the blocks against to find out it says
   // nothing — and the same list feeds the Markdown and the HTML page, so all
-  // three tables explain a marker the same way.
+  // three explain a marker the same way.
   for (const legend of intentLegends(sessions)) {
-    lines.push(
-      ...note(
-        `${legend.marker} ${plural(legend.count, "session", "sessions")} ${legend.text}`,
-        palette.meta,
-        limit,
-      ),
-    );
+    const what = `${legend.marker} ${plural(legend.count, "session", "sessions")} ${legend.text}`;
+    lines.push(...note(what, palette.meta, limit));
   }
   return lines;
 }
