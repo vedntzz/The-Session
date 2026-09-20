@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `984c881 feat(prime): record, intent note, guidance test` (`v1.0.0-10-g984c881`).
+Derived at `6406984 feat(ui): html ledger, reportedOutcome across views` (`v1.0.0-13-g6406984`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -35,7 +35,7 @@ the product.
 $ npm pkg get name version engines dependencies
 {
   "name": "@vedantzz/session",
-  "version": "2.0.0",
+  "version": "0.6.0",
   "engines": {
     "node": ">=20"
   },
@@ -48,7 +48,7 @@ $ npm pkg get name version engines dependencies
 
 ```console
 $ npm ls --omit=dev --depth=0
-@vedantzz/session@2.0.0 /Users/vedant/dev-session
+@vedantzz/session@0.6.0 /Users/vedant/dev-session
 ├── commander@14.0.3
 └── picocolors@1.1.1
 ```
@@ -58,14 +58,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     107
-   16739
+     113
+   17105
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      42
-   17391
+      45
+   17756
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -79,7 +79,7 @@ Copied verbatim from `Claude.md`, which owns them — extracted with
 document is downstream of these.
 
 1. **`intent` is immutable.** Written once at `session start`, never edited afterward. A declaration you can revise after seeing the result is a rationalisation. No `--edit-intent` flag, ever.
-2. **No server, no database, no account.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service, and anything needing one is wrong.
+2. **Source code, prompts and transcripts never leave the machine.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service. The tool itself needs no account, reaches no network but that remote, and sends nothing. An [optional hosted team layer](docs/decisions.md#what-never-leaves-the-machine) may take metadata only — paths, counts, decisions, outcomes, costs — and does not exist yet, so anything in this repo reaching for one is wrong. Content never crosses, under any flag.
 3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else.
 4. **Turns that produced nothing are first-class.** Turns that changed no files are counted and displayed, never dropped — and where the record cannot say which turns those were, *that* is displayed rather than a nought. A transcript names the tool a call used, never what it did to the disk, so the question goes to git: `empty.ts` is the one rule, and no view reads `cost.emptyTurns` itself.
 5. **Cross-tool.** Nothing may assume a specific coding tool. Adapters go behind an interface; the core reads a normalised shape.
@@ -92,8 +92,8 @@ of it, and not from the Readme, which is prose.
 
 ```console
 $ node evidence/verbs.mjs
-top-level verbs:        22
-including subcommands:  26
+top-level verbs:        23
+including subcommands:  29
 
 start [intent]            Begin a new session
                           --scope <paths...>  --passive
@@ -109,6 +109,11 @@ week                      Summarize recent sessions, one row each
                           --days <n>  --client <name>  --project <name>  --outcome <state>  --class [name]  --intent <source>  --tokens  --md  --copy  --open
 ui                        Browse sessions in an interactive terminal interface
                           --days <n>
+knowledge                 Explore recorded session relationships and export agent context
+knowledge graph           Create an interactive local graph and compact JSON snapshot
+                          --days <n>  --limit <n>  --path <prefix>  --session <id>  --out <file.html>  --no-open
+knowledge context         Print compact, self-describing JSON for any agent to read
+                          --days <n>  --limit <n>  --path <prefix>  --session <id>
 pr [id]                   Write a pull request body from a session's record
                           --copy  --out <path>  --template <path>
 scan                      What the agent sessions already on this machine have cost — no setup needed
@@ -983,10 +988,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  41 passed (41)
-      Tests  1484 passed (1484)
-   Start at  11:08:51
-   Duration  212.82s (transform 2.15s, setup 0ms, collect 7.45s, tests 977.06s, environment 5ms, prepare 2.65s)
+ Test Files  1 failed | 43 passed (44)
+      Tests  11 failed | 1490 passed (1501)
+   Start at  12:50:57
+   Duration  146.48s (transform 1.26s, setup 0ms, collect 5.46s, tests 607.27s, environment 5ms, prepare 1.70s)
 ```
 
 The generator runs the behavioral suite before writing this document, then
