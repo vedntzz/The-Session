@@ -9,6 +9,8 @@ import {
   formatSession,
   formatWeek,
   MIN_WIDTH,
+  NO_POOL,
+  NOTHING_DECLARED,
   SHORT_ID,
   terminalWidth,
   type View,
@@ -447,6 +449,17 @@ function week(): Session[] {
         emptyTurns: 4,
       }),
       outcome: "abandoned",
+      // Marked by hand. `abandoned` is a person's word: a computed one reads
+      // `open`, which is what a branch nobody has pushed actually is.
+      observations: [
+        {
+          outcome: "abandoned",
+          observedAt: at(9, 0, 17),
+          commit: "def5678",
+          branch: "origin/main",
+          source: "manual",
+        },
+      ],
     }),
   ];
 }
@@ -550,41 +563,184 @@ describe("formatWeek", () => {
     return found[0] as string;
   }
 
-  /** The totals row: the one row whose label is a session count, under a blank line. */
-  function totalsOf(lines: readonly string[]): string {
-    const at = lines.findIndex((line) => /^ {2}\d+ sessions? {2,}/.test(line));
-    expect(at).toBeGreaterThan(0);
-    return lines[at] as string;
+  /** One source's block: its headline, and every line down to the next blank. */
+  function blockOf(lines: readonly string[], source: string): string[] {
+    const at = lines.findIndex((line) => visible(line).startsWith(`  ${source} · `));
+    expect(at, `no ${source} block in ${lines.join("\n")}`).toBeGreaterThan(-1);
+    const rest = lines.slice(at);
+    const end = rest.findIndex((line, index) => index > 0 && line === "");
+    return end === -1 ? rest : rest.slice(0, end);
   }
 
-  it("renders one row per session, with a totals footer", () => {
+  /** A session's second line, found by the id printed at the head of it. */
+  function figuresFor(lines: readonly string[], id: string): string {
+    const row = lines.find((line) => visible(line).startsWith(`    ${id}`));
+    expect(row, `no figure line for ${id}`).toBeDefined();
+    return row as string;
+  }
+
+  it("renders the window, a block per source, and the money last of all", () => {
     expect(formatWeek(week(), 7, plainPalette, {}, priced)).toEqual([
       "",
-      "  3 sessions · 1 landed on the default branch · 1 did not · 1 still open",
+      "  The last 7 days",
+      `  ${NO_POOL}`,
       "",
-      "  id        started      intent                        outcome    drift  turns  empty   cost",
-      "  a1b2c3d4  01-15 09:14  add rate limiting to /orders  open           0      3      1  $1.26",
-      "  b2c3d4e5  01-15 11:02  refactor the transcript sto…  merged         0     12      5  $6.19",
-      "  c3d4e5f6  01-16 08:31  try the websocket thing       abandoned      0      4      4  $1.55",
+      "  declared · 3 sessions · 1 landed on the default branch · 1 marked abandoned · 1 still open",
+      "  nothing outside what was declared, in 3 sessions that declared one",
+      "                                      outside  turns  no edits   cost",
+      "  add rate limiting to /orders",
+      "    a1b2c3d4  01-15 09:14  open             0      3         1  $1.26",
+      "  refactor the transcript store adapter",
+      "    b2c3d4e5  01-15 11:02  merged           0     12         5  $6.19",
+      "  try the websocket thing",
+      "    c3d4e5f6  01-16 08:31  abandoned        0      4         4  $1.55",
       "",
-      "  3 sessions                                                          0     19     10",
+      "  primed · no sessions",
+      "",
+      "  captured · no sessions",
+      "",
       "  10 of 19 turns changed no files",
-      // What the table does not say, then the money: two questions, so two
+      // What the rows do not say, then the money: two questions, so two
       // blocks rather than one stack of dim sentences.
       "",
       "  $9.00 spent, $2.81 of it on changes that never merged",
     ]);
   });
 
+  it("prints a source with nothing in it rather than dropping the block", () => {
+    // Dropping the empty arm would leave the others reading as the whole
+    // answer, which is the pooled reading the split exists to prevent.
+    const declared = formatWeek(week(), 7, plainPalette, {}, priced);
+
+    expect(declared).toContain("  primed · no sessions");
+    expect(declared).toContain("  captured · no sessions");
+  });
+
+  it("prints every source in INTENT_SOURCES order, whichever ones hold anything", () => {
+    const captured = [
+      session({ intent: "why does /orders 500", intentSource: "captured", cost: cost({ turns: 1 }) }),
+    ];
+    const lines = formatWeek(captured, 7, plainPalette, {}, priced);
+    const order = lines
+      .filter((line) => /^ {2}(declared|primed|captured) · /.test(line))
+      .map((line) => line.trim().split(" ")[0]);
+
+    expect(order).toEqual(["declared", "primed", "captured"]);
+    expect(lines).toContain("  declared · no sessions");
+    expect(lines).toContain("  primed · no sessions");
+  });
+
+  it("never totals the three sources into one figure", () => {
+    const rendered = formatWeek(week(), 7, plainPalette, {}, priced);
+
+    // No row whose label is a session count over the whole window, and the
+    // reason said out loud where a reader would look for one.
+    expect(rendered.some((line) => /^ {2}\d+ sessions {2,}/.test(line))).toBe(false);
+    expect(rendered[2]).toContain("never pooled and never totalled");
+  });
+
+  it("says unknown, never a nought, where the diff cannot say which turns wrote files", () => {
+    // Files changed, and which turn changed them is not on the record: a
+    // nought in this column is the claim that no turn was wasted.
+    const unmeasured = session({
+      id: "d4e5f6a7-2222-3333-4444-555555555555",
+      reality: ["api/orders.py"],
+      cost: cost({ inputTokens: 84_200, turns: 6, apiCalls: 12 }),
+    });
+    const lines = formatWeek([unmeasured], 7, plainPalette, {}, priced);
+
+    expect(figuresFor(lines, "d4e5f6a7")).toBe(
+      "    d4e5f6a7  01-15 14:02  open        0      6   unknown  $1.26",
+    );
+    expect(noteMatching(lines, /cannot say/)).toBe(
+      "  1 session cannot say which turns changed no files — the diff answers for the " +
+        "session, not for the turn",
+    );
+  });
+
+  it("says unknown for a session nothing was captured for, and counts it below", () => {
+    const uncaptured = session({ id: "e5f6a7b8-2222-3333-4444-555555555555", reality: ["a.ts"] });
+    const lines = formatWeek([uncaptured], 7, plainPalette, {}, priced);
+
+    expect(figuresFor(lines, "e5f6a7b8")).toContain("unknown   unknown  unknown");
+    expect(lines).toContain(
+      "  1 session uncaptured: no turns on the record, so nothing to price",
+    );
+  });
+
+  it("writes abandoned only where somebody marked it, and open where nobody did", () => {
+    // The computation reaches `abandoned` from evidence an unpushed branch
+    // produces just as readily, so a computed one reads as what it is.
+    const [first] = week();
+    const computed = { ...(first as Session), outcome: "abandoned" as const };
+    const lines = formatWeek([computed], 7, plainPalette, {}, priced);
+
+    expect(figuresFor(lines, "a1b2c3d4")).toContain("open");
+    expect(lines.join("\n")).not.toContain("abandoned");
+  });
+
+  it("keeps an open session out of the landed count without calling it a failure", () => {
+    const lines = formatWeek([week()[0] as Session], 7, plainPalette, {}, priced);
+
+    expect(blockOf(lines, "declared")[0]).toBe(
+      "  declared · 1 session · 0 landed on the default branch · 1 still open",
+    );
+  });
+
+  it("names a bucket only when something is in it", () => {
+    const merged = week().map((one) => ({ ...one, outcome: "merged" as const, observations: undefined }));
+
+    expect(blockOf(formatWeek(merged, 7, plainPalette, {}, priced), "declared")[0]).toBe(
+      "  declared · 3 sessions · 3 landed on the default branch",
+    );
+  });
+
+  it("keeps a session that changed no files out of the ones that did not land", () => {
+    // It had nothing to land, so calling it work that failed to ship would put
+    // it in a bucket it never belonged to.
+    const rows = week().map((one, index) => ({
+      ...one,
+      observations: undefined,
+      outcome: (index === 0 ? "empty" : "merged") as Session["outcome"],
+    }));
+
+    expect(blockOf(formatWeek(rows, 7, plainPalette, {}, priced), "declared")[0]).toBe(
+      "  declared · 3 sessions · 2 landed on the default branch · 1 changed no files",
+    );
+  });
+
+  it("measures drift against the sessions that declared a scope, not the block", () => {
+    const rows = [
+      session({ intent: "one", drift: ["db/schema.py", "db/pool.py"], cost: cost({ turns: 1 }) }),
+      session({ intent: "two", cost: cost({ turns: 1 }) }),
+    ];
+
+    expect(blockOf(formatWeek(rows, 7, plainPalette, {}, priced), "declared")[1]).toBe(
+      "  2 paths outside what was declared, in 1 of 2 sessions that declared one",
+    );
+  });
+
+  it("says a captured block had nothing to drift from, rather than reporting none", () => {
+    // `0 outside` would be a claim that they stayed inside a scope, and there
+    // was never one to stay inside.
+    const rows = [
+      session({ intent: "why does /orders 500", intentSource: "captured", cost: cost({ turns: 1 }) }),
+    ];
+    const block = blockOf(formatWeek(rows, 7, plainPalette, {}, priced), "captured");
+
+    expect(block[1]).toBe(`  ${NOTHING_DECLARED}`);
+    // And the cell says the question was not asked, rather than a nought.
+    expect(block.at(-1)).toContain("      —  ");
+  });
+
   it("prints the id every command that takes one accepts, at settle's width", () => {
     const lines = formatWeek(week(), 7, plainPalette, {}, priced);
 
-    expect(lines[3]).toMatch(/^ {2}id {8}started/);
-    week().forEach((one, index) => {
-      const row = lines[4 + index] as string;
+    for (const one of week()) {
+      const row = figuresFor(lines, one.id.slice(0, SHORT_ID));
       // A prefix of the real id, so it can be typed back at `pr` or `mark`.
       expect(row.trim().split(/\s+/)[0]).toBe(one.id.slice(0, SHORT_ID));
-    });
+    }
   });
 
   it("dates the prices under the money, and says where to override them", () => {
@@ -595,10 +751,7 @@ describe("formatWeek", () => {
   });
 
   it("says nothing about the age of prices where there is no figure to date", () => {
-    const unpriced = week().map((one) => ({
-      ...one,
-      cost: { ...one.cost, model: "mystery-9" },
-    }));
+    const unpriced = week().map((one) => ({ ...one, cost: { ...one.cost, model: "mystery-9" } }));
     const lines = formatWeek(unpriced, 7, plainPalette, {}, { ...priced, checked: "2026-08-23" });
 
     expect(lines.join("\n")).toContain("nothing here could be priced");
@@ -611,53 +764,98 @@ describe("formatWeek", () => {
     );
   });
 
-  it("leads with where the work went, before any figure", () => {
-    const [, headline] = formatWeek(week(), 7, plainPalette, {}, priced) as string[];
+  it("leads with the window and what the blocks are, before any figure", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
 
-    expect(headline).toBe(
-      "  3 sessions · 1 landed on the default branch · 1 did not · 1 still open",
-    );
-    expect(headline).not.toContain("$");
-  });
-
-  it("names a bucket only when something is in it", () => {
-    const merged = week().map((one) => ({ ...one, outcome: "merged" as const }));
-
-    expect((formatWeek(merged, 7, plainPalette, {}, priced)[1] as string)).toBe(
-      "  3 sessions · 3 landed on the default branch · 0 did not",
-    );
-  });
-
-  it("keeps a session that changed no files out of the ones that did not land", () => {
-    // It had nothing to land, so calling it work that failed to ship would put
-    // it in a bucket it never belonged to.
-    const rows = week().map((one, index) => ({
-      ...one,
-      outcome: (index === 0 ? "empty" : "merged") as Session["outcome"],
-    }));
-
-    expect((formatWeek(rows, 7, plainPalette, {}, priced)[1] as string)).toBe(
-      "  3 sessions · 2 landed on the default branch · 0 did not · 1 changed no files",
-    );
+    expect(lines[1]).toBe("  The last 7 days");
+    expect(lines[1]).not.toContain("$");
+    expect(lines.slice(0, 4).join("\n")).not.toContain("$");
   });
 
   it("leaves the class column out until --class asks for it", () => {
     const lines = formatWeek(week(), 7, plainPalette, {}, priced);
 
-    expect(lines[3]).not.toContain("class");
+    expect(figuresFor(lines, "a1b2c3d4")).not.toContain("api");
   });
 
   it("adds the class column when --class asks for it", () => {
     const classed = [
-      session({ intent: "rate limit /orders", reality: ["src/api/orders.ts"] }),
-      session({ intent: "restyle the header", reality: ["src/components/Header.tsx"] }),
+      session({ id: "a1b2c3d4-0000-0000-0000-000000000000", intent: "rate limit /orders", reality: ["src/api/orders.ts"] }),
+      session({ id: "b2c3d4e5-0000-0000-0000-000000000000", intent: "restyle the header", reality: ["src/components/Header.tsx"] }),
     ];
 
     const lines = formatWeek(classed, 7, plainPalette, {}, { ...priced, classes: true });
 
-    expect(lines[3]).toContain("class");
-    expect(lines[4]).toContain("api");
-    expect(lines[5]).toContain("ui");
+    expect(figuresFor(lines, "a1b2c3d4")).toContain("api");
+    expect(figuresFor(lines, "b2c3d4e5")).toContain("ui");
+  });
+
+  it("adds the tokens column back when --tokens asks for it", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, tokens: true });
+
+    expect(lines[6]).toBe(
+      "                                      outside  turns   tokens  no edits   cost",
+    );
+    expect(figuresFor(lines, "a1b2c3d4")).toBe(
+      "    a1b2c3d4  01-15 09:14  open             0      3   84,200         1  $1.26",
+    );
+  });
+
+  it("right-aligns every figure under its heading", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
+    const headings = lines[6] as string;
+    const rows = week().map((one) => figuresFor(lines, one.id.slice(0, SHORT_ID)));
+
+    for (const [heading, cells] of [
+      ["turns", ["3", "12", "4"]],
+      ["no edits", ["1", "5", "4"]],
+      ["outside", ["0", "0", "0"]],
+      ["cost", ["$1.26", "$6.19", "$1.55"]],
+    ] as const) {
+      const edge = headings.indexOf(heading) + heading.length;
+      for (const [index, cell] of cells.entries()) {
+        const row = rows[index] as string;
+        expect(row.slice(edge - cell.length, edge)).toBe(cell);
+        // Whatever precedes the figure is padding, never another column.
+        expect(row[edge - cell.length - 1]).toBe(" ");
+      }
+    }
+  });
+
+  it("puts the intent on its own line, at the left margin, whole", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
+
+    // A declaration is the promise the diff is held to: a view that showed
+    // half of it would be hiding the yardstick.
+    expect(lines).toContain("  refactor the transcript store adapter");
+    expect(lines).toContain("  add rate limiting to /orders");
+  });
+
+  it("shortens a captured prompt to its first sentence, and marks it", () => {
+    const long = session({
+      intent: "why does /orders 500 when the cart is empty. It only happens on staging.",
+      intentSource: "captured",
+      cost: cost({ turns: 1 }),
+    });
+
+    const lines = formatWeek([long], 7, plainPalette, {}, priced);
+
+    expect(lines).toContain("  ~ why does /orders 500 when the cart is empty.…");
+    expect(lines.join("\n")).not.toContain("staging");
+  });
+
+  it("wraps a declaration too long for the width rather than cutting it", () => {
+    const long = session({
+      intent: "add rate limiting to /orders and to /carts and to every other endpoint that talks to the payment provider",
+      cost: cost({ turns: 1 }),
+    });
+
+    const lines = formatWeek([long], 7, plainPalette, {}, { ...priced, width: 80 });
+
+    expect(lines).toContain(
+      "  add rate limiting to /orders and to /carts and to every other endpoint that",
+    );
+    expect(lines).toContain("  talks to the payment provider");
   });
 
   it("marks the rows the hook recorded, and says underneath what the mark means", () => {
@@ -673,9 +871,8 @@ describe("formatWeek", () => {
 
     const lines = formatWeek(rows, 7, plainPalette, {}, priced);
 
-    expect(lines[4]).toContain("add rate limiting");
-    expect(lines[4]).not.toContain("~");
-    expect(lines[5]).toContain("~ why does /orders 500");
+    expect(lines).toContain("  add rate limiting");
+    expect(lines).toContain("  ~ why does /orders 500");
     expect(noteMatching(lines, /editor hook/)).toBe(
       "  ~ 1 session recorded by the editor hook: intent captured from the first prompt, " +
         "no scope declared",
@@ -688,7 +885,6 @@ describe("formatWeek", () => {
     expect(lines.some((text) => text.includes("recorded by the editor hook"))).toBe(false);
   });
 
-
   it("counts the marked rows in the plural", () => {
     const rows = [
       session({ intent: "one", intentSource: "captured", cost: cost({ turns: 1 }) }),
@@ -700,106 +896,35 @@ describe("formatWeek", () => {
     );
   });
 
-  it("keeps the marked intent inside its column", () => {
-    const long = session({
-      intent: "why does /orders 500 when the cart is empty and the user is new",
-      intentSource: "captured",
-      cost: cost({ turns: 1 }),
-    });
-
-    const [, , , headings, row] = formatWeek([long], 7, plainPalette, {}, priced) as string[];
-
-    // The marker lives inside the intent column, so the figures beside it
-    // still line up under their headings.
-    expect((row as string).includes("~ why does /orders 500 when…")).toBe(true);
-    expect(endOf(row as string, "1")).toBe(endOf(headings as string, "turns"));
-  });
-
-  it("keeps the totals label spanning the columns on the left", () => {
-    const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, classes: true });
-    const [, , , headings, , , , , totals] = lines as string[];
-
-    // The figures still line up under their headings once a column is added.
-    expect(endOf(totals as string, "19")).toBe(endOf(headings as string, "turns"));
-  });
-
-  it("adds the tokens column back when --tokens asks for it", () => {
-    const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, tokens: true });
-
-    expect(lines[3]).toBe(
-      "  id        started      intent                        outcome    drift  turns   tokens  empty   cost",
-    );
-    expect(lines[4]).toBe(
-      "  a1b2c3d4  01-15 09:14  add rate limiting to /orders  open           0      3   84,200      1  $1.26",
-    );
-  });
-
-  it("right-aligns every figure under its heading, footer included", () => {
-    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
-    const headings = lines[3] as string;
-    // The three session rows, then the totals row: all four share the columns.
-    const rows = [lines[4], lines[5], lines[6], lines[8]] as string[];
-
-    // Cost is not totalled in the row — the footnote under the table carries
-    // it — so the three session rows are all it has to line up.
-    for (const [heading, cells] of [
-      ["turns", ["3", "12", "4", "19"]],
-      ["empty", ["1", "5", "4", "10"]],
-      ["drift", ["0", "0", "0", "0"]],
-    ] as const) {
-      const edge = headings.indexOf(heading) + heading.length;
-      for (const [index, cell] of cells.entries()) {
-        const row = rows[index] as string;
-        expect(row.slice(edge - cell.length, edge)).toBe(cell);
-        // Whatever precedes the figure is padding, never another column.
-        expect(row[edge - cell.length - 1]).toBe(" ");
-      }
+  it("does not pad past the last figure, so a struck row has no trailing rule", () => {
+    for (const line of formatWeek(week(), 7, plainPalette, {}, priced)) {
+      expect(line).toBe(line.trimEnd());
     }
   });
 
-  it("right-aligns the cost under its heading on every session row", () => {
-    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
-    const headings = lines[3] as string;
-    const edge = headings.indexOf("cost") + "cost".length;
-
-    for (const [index, cell] of ["$1.26", "$6.19", "$1.55"].entries()) {
-      const row = lines[4 + index] as string;
-      expect(row.slice(edge - cell.length, edge)).toBe(cell);
-    }
-  });
-
-  it("left-aligns the intents in one column", () => {
-    const rows = formatWeek(week(), 7, plainPalette, {}, priced).slice(4, 7);
-    const starts = rows.map((row) => row.indexOf("  ", 2) + 2);
-
-    expect(new Set(starts).size).toBe(1);
-  });
-
-  it("truncates an intent that would widen the table, and marks the cut", () => {
-    const [, , , , , second] = formatWeek(week(), 7, plainPalette, {}, priced) as string[];
-
-    expect(second).toContain("refactor the transcript sto…");
-    expect(second).not.toContain("adapter");
-  });
-
-  it("leaves an intent that fits exactly alone", () => {
-    // 28 characters: the width of the column, so nothing should be cut.
-    const [, , , , first] = formatWeek(week(), 7, plainPalette, {}, priced) as string[];
-    expect(first).toContain("add rate limiting to /orders");
-  });
-
-  it("writes off abandoned sessions and leaves the others in normal weight", () => {
+  it("treats the headings and the notes as metadata, not the intents", () => {
     const lines = formatWeek(week(), 7, tagged, {}, priced);
 
-    expect(lines[6]).toMatch(/^<abandoned> {2}c3d4e5f6 {2}01-16 08:31/);
-    expect(lines[6]).toMatch(/\$1\.55<\/abandoned>$/);
-    expect(lines[5]).not.toContain("<abandoned>");
-    expect(lines[4]).not.toContain("<abandoned>");
+    expect(lines[6]).toMatch(/^<meta>.*<\/meta>$/);
+    expect(noteMatching(lines, /changed no files/)).toBe(
+      "<meta>  10 of 19 turns changed no files</meta>",
+    );
+    expect(lines[7]).not.toContain("<meta>");
+  });
+
+  it("writes off both lines of a marked row and leaves the others alone", () => {
+    const lines = formatWeek(week(), 7, tagged, {}, priced);
+
+    expect(lines[11]).toBe("<abandoned>  try the websocket thing</abandoned>");
+    expect(lines[12]).toMatch(/^<abandoned> {4}c3d4e5f6 {2}01-16 08:31/);
+    expect(lines[12]).toMatch(/\$1\.55<\/abandoned>$/);
+    expect(lines[9]).not.toContain("<abandoned>");
   });
 
   it("writes off the whole row, so the eye can drop the figures too", () => {
-    const abandoned = formatWeek(week(), 7, tagged, {}, priced)[6] as string;
-    expect(visible(abandoned)).toBe(formatWeek(week(), 7, plainPalette, {}, priced)[6]);
+    const abandoned = formatWeek(week(), 7, tagged, {}, priced)[12] as string;
+
+    expect(visible(abandoned)).toBe(formatWeek(week(), 7, plainPalette, {}, priced)[12]);
     // One ink and no other: nothing inside a row that has been written off
     // gets to argue with the strike.
     expect(abandoned.match(/<abandoned>/g)).toHaveLength(1);
@@ -809,50 +934,15 @@ describe("formatWeek", () => {
   it("marks a merged outcome, and leaves an open one in the terminal's own colour", () => {
     const lines = formatWeek(week(), 7, tagged, {}, priced);
 
-    expect(lines[5]).toContain("<merged>merged   </merged>");
-    expect(lines[4]).toContain("  open     ");
+    expect(lines[10]).toContain("<merged>merged   </merged>");
+    expect(lines[8]).toContain("  open     ");
   });
 
   it("marks each live row's intent, and nothing else in it", () => {
-    const [, , , , first] = formatWeek(week(), 7, tagged, {}, priced) as string[];
-
-    expect(first).toContain("<intent>add rate limiting to /orders</intent>");
-    expect(visible(first as string)).toBe(formatWeek(week(), 7, plainPalette, {}, priced)[4]);
-  });
-
-  it("does not pad past the last figure, so a struck row has no trailing rule", () => {
-    for (const line of formatWeek(week(), 7, plainPalette, {}, priced)) {
-      expect(line).toBe(line.trimEnd());
-    }
-  });
-
-  it("treats the headings and the waste line as metadata, not the rows", () => {
     const lines = formatWeek(week(), 7, tagged, {}, priced);
 
-    expect(lines[3]).toMatch(/^<meta>.*<\/meta>$/);
-    expect(noteMatching(lines, /changed no files/)).toBe(
-      "<meta>  10 of 19 turns changed no files</meta>",
-    );
-    expect(lines[4]).not.toContain("<meta>");
-  });
-
-  it("totals the drift files, turns and empty turns across the week", () => {
-    expect(totalsOf(formatWeek(week(), 7, plainPalette, {}, priced))).toBe(
-      "  3 sessions                                                          0     19     10",
-    );
-  });
-
-  it("leaves the cost out of the totals row, so the footnote is the only total", () => {
-    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
-    const footer = totalsOf(lines);
-
-    expect(footer).not.toContain("$");
-    expect(lines.filter((line) => line.includes("$9.00"))).toHaveLength(1);
-  });
-
-  it("counts every session in the footer, abandoned ones included", () => {
-    // Abandoned work still cost money; leaving it out would flatter the week.
-    expect(totalsOf(formatWeek(week(), 7, plainPalette, {}, priced))).toContain("3 sessions");
+    expect(lines[7]).toBe("<intent>  add rate limiting to /orders</intent>");
+    expect(visible(lines[8] as string)).toBe(formatWeek(week(), 7, plainPalette, {}, priced)[8]);
   });
 
   it("says what the week cost last of all, under everything the rows do not say", () => {
@@ -860,6 +950,16 @@ describe("formatWeek", () => {
 
     // $1.26 open plus $1.55 abandoned; the $6.19 that merged is not waste.
     expect(lines.at(-1)).toBe("  $9.00 spent, $2.81 of it on changes that never merged");
+  });
+
+  it("carries no money in any block, so the footnote is the only total", () => {
+    const lines = formatWeek(week(), 7, plainPalette, {}, priced);
+    const headlines = lines.filter((line) => /^ {2}\w+ · /.test(line));
+
+    for (const headline of headlines) {
+      expect(headline).not.toContain("$");
+    }
+    expect(lines.filter((line) => line.includes("$9.00"))).toHaveLength(1);
   });
 
   it("omits the money when nothing in the window could be priced", () => {
@@ -905,7 +1005,10 @@ describe("formatWeek", () => {
     // Otherwise the total silently means "the sessions I happened to know a
     // rate for", which is exactly the number that ends up on an invoice.
     const [first, ...rest] = week();
-    const mixed = [{ ...(first as Session), cost: { ...(first as Session).cost, model: "gpt-9" } }, ...rest];
+    const mixed = [
+      { ...(first as Session), cost: { ...(first as Session).cost, model: "gpt-9" } },
+      ...rest,
+    ];
     const lines = formatWeek(mixed, 7, plainPalette, {}, priced);
 
     expect(lines).toContain("  $7.74 spent, $1.55 of it on changes that never merged");
@@ -938,7 +1041,10 @@ describe("formatWeek", () => {
   });
 
   it("says so when the window is empty", () => {
-    expect(formatWeek([], 7, plainPalette, {}, priced)).toEqual(["", "  No sessions in the last 7 days"]);
+    expect(formatWeek([], 7, plainPalette, {}, priced)).toEqual([
+      "",
+      "  No sessions in the last 7 days",
+    ]);
   });
 
   it("names the window it found nothing in", () => {
@@ -947,9 +1053,11 @@ describe("formatWeek", () => {
   });
 
   it("dates each row, so a window wider than a day stays readable", () => {
-    const rows = formatWeek(week(), 30, plainPalette, {}, priced).slice(4, 7);
+    const lines = formatWeek(week(), 30, plainPalette, {}, priced);
+    const rows = week().map((one) => figuresFor(lines, one.id.slice(0, SHORT_ID)));
+
     // Past the indent and the id column, which is `SHORT_ID` wide plus its gap.
-    expect(rows.map((row) => row.slice(12, 23))).toEqual([
+    expect(rows.map((row) => row.slice(14, 25))).toEqual([
       "01-15 09:14",
       "01-15 11:02",
       "01-16 08:31",
@@ -957,18 +1065,22 @@ describe("formatWeek", () => {
   });
 
   it("widens the figure columns rather than letting a big number break alignment", () => {
-    const heavy = session({ cost: cost({ cacheReadTokens: 12_345_678, turns: 2, apiCalls: 9 }) });
-    const [, , , headings, row] = formatWeek([heavy], 7, plainPalette, {}, {
-      ...priced,
-      tokens: true,
-    }) as string[];
+    const heavy = session({
+      id: "a1b2c3d4-9999-9999-9999-999999999999",
+      cost: cost({ cacheReadTokens: 12_345_678, turns: 2, apiCalls: 9 }),
+    });
+    const lines = formatWeek([heavy], 7, plainPalette, {}, { ...priced, tokens: true }) as string[];
 
-    expect(endOf(row as string, "12,345,678")).toBe(endOf(headings as string, "tokens"));
+    expect(endOf(figuresFor(lines, "a1b2c3d4"), "12,345,678")).toBe(
+      endOf(lines[6] as string, "tokens"),
+    );
   });
 
   it("shows a session that is still running, with the outcome it has so far", () => {
-    const running = session({ endedAt: null, outcome: "open" });
-    expect(formatWeek([running], 7, plainPalette, {}, priced)[4]).toContain("  open ");
+    const running = session({ id: "a1b2c3d4-1111-1111-1111-111111111111", endedAt: null });
+    const lines = formatWeek([running], 7, plainPalette, {}, priced);
+
+    expect(figuresFor(lines, "a1b2c3d4")).toContain("  open");
   });
 });
 
@@ -1009,22 +1121,22 @@ describe("attribution on show", () => {
 });
 
 describe("a filtered week", () => {
-  it("says what it was narrowed to, so the totals are not read as everything", () => {
+  it("says what it was narrowed to, so the blocks are not read as everything", () => {
     const lines = formatWeek(week(), 7, plainPalette, { client: "Acme" }, priced);
 
-    // Under the headline, so the outcome is still the first line — and still
-    // above every figure the narrowing applies to.
-    expect(lines[2]).toBe("  only client Acme");
+    // On the line naming the window, which is the first line of all and above
+    // every figure the narrowing applies to.
+    expect(lines[1]).toBe("  The last 7 days, only client Acme");
   });
 
   it("names both filters when both were given", () => {
     const lines = formatWeek(week(), 7, plainPalette, { client: "Acme", project: "orders-api" }, priced);
 
-    expect(lines[2]).toBe("  only client Acme, project orders-api");
+    expect(lines[1]).toBe("  The last 7 days, only client Acme, project orders-api");
   });
 
   it("says nothing when the week was not narrowed", () => {
-    expect(formatWeek(week(), 7, plainPalette, {}, priced)[2]).toBe("");
+    expect(formatWeek(week(), 7, plainPalette, {}, priced)[1]).toBe("  The last 7 days");
   });
 
   it("names an intent-source filter, which nothing else in the table would say", () => {
@@ -1032,13 +1144,13 @@ describe("a filtered week", () => {
     // which reads exactly like an unfiltered week.
     const lines = formatWeek(week(), 7, plainPalette, { intent: "declared" }, priced);
 
-    expect(lines[2]).toBe("  only declared intents");
+    expect(lines[1]).toBe("  The last 7 days, only declared intents");
   });
 
   it("names it beside the others when both were given", () => {
     const lines = formatWeek(week(), 7, plainPalette, { client: "Acme", intent: "captured" }, priced);
 
-    expect(lines[2]).toBe("  only client Acme, captured intents");
+    expect(lines[1]).toBe("  The last 7 days, only client Acme, captured intents");
   });
 
   it("says which filter came up empty rather than just 'no sessions'", () => {
@@ -1140,8 +1252,11 @@ describe("one record, what it cost, and every view of it", () => {
   });
   const NOW = new Date(2026, 0, 15, 18, 0);
 
-  /** The last column of a terminal row, which is where the money is. */
-  const terminalCost = (row: string): string => row.trimEnd().split(/\s+/).at(-1) as string;
+  /** The last column of a session's figure line, which is where the money is. */
+  const terminalCost = (lines: readonly string[]): string => {
+    const row = lines.find((line) => /^ {4}\w{8} {2}\d\d-\d\d/.test(line)) as string;
+    return row.trimEnd().split(/\s+/).at(-1) as string;
+  };
 
   /** The same cell of the Markdown table, which puts money last as well. */
   const markdownCost = (document: string): string =>
@@ -1157,15 +1272,14 @@ describe("one record, what it cost, and every view of it", () => {
     // A row reading an em dash under a footnote reading $0.00 is the failure
     // this tool's whole claim rests on not making.
     const lines = formatWeek([nothingCaptured], 7, plainPalette, {}, priced);
-    const row = lines.find((line) => line.includes("rate limiting")) as string;
     const footnote = lines.find((line) => line.includes("spent")) as string;
     const document = renderMarkdownWeek([nothingCaptured], 7, priced, NOW);
 
-    expect(terminalCost(row)).toBe("—");
+    expect(terminalCost(lines)).toBe("unknown");
     expect(footnote).toBe("  — spent: nothing here could be priced");
-    // The word is the surface's own — a column read at a glance can spend an
-    // em dash, a document read cold says what it means — but no surface may
-    // put a nought where none of them has a figure.
+    // The word is the surface's own — the cell says what it means now that the
+    // intent is not competing for the room, the total keeps the em dash — but
+    // no surface may put a nought where none of them has a figure.
     expect(markdownCost(document)).toBe("not captured");
     expect(`${lines.join("\n")}\n${document}`).not.toContain("$0.00");
   });
@@ -1196,9 +1310,8 @@ describe("one record, what it cost, and every view of it", () => {
       reality: ["a.py"],
     });
     const lines = formatWeek([ran], 7, plainPalette, {}, priced);
-    const row = lines.find((line) => line.includes("rate limiting")) as string;
 
-    expect(terminalCost(row)).toBe("—");
+    expect(terminalCost(lines)).toBe("unknown");
     expect(markdownCost(renderMarkdownWeek([ran], 7, priced, NOW))).toBe("unpriced");
   });
 });
@@ -1490,15 +1603,16 @@ describe("laying out against a terminal", () => {
     expect(terminalWidth({ isTTY: true, columns: 20 })).toBe(MIN_WIDTH);
   });
 
-  it("fits the table inside the terminal by giving up intent, not figures", () => {
+  it("fits inside the terminal by wrapping the prose, not the figures", () => {
     const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, width: 90 });
+    const headings = lines.find((line) => line.includes("no edits")) as string;
 
     expect(widest(lines)).toBeLessThanOrEqual(90);
-    // The figures are all still there: it is the one column that can give that
-    // gave, and every row gave the same amount so the columns still line up.
-    expect(lines[3]).toContain("drift");
-    expect(lines[3]).toContain("cost");
-    expect(lines[4]).toContain("$1.26");
+    // Every figure is still there and still under its heading: the intent has
+    // a line of its own now, so nothing competes with them for the room.
+    expect(headings).toContain("outside");
+    expect(headings).toContain("cost");
+    expect(rowFor(lines, "a1b2c3d4")).toContain("$1.26");
   });
 
   it("gives the intent every column the other columns are not using", () => {
@@ -1511,15 +1625,13 @@ describe("laying out against a terminal", () => {
     expect(widest(narrow)).toBeLessThan(widest(wide));
   });
 
-  it("stops shrinking the intent before the rows become indistinguishable", () => {
+  it("keeps every intent whole at the narrowest width, wrapping instead", () => {
     const lines = formatWeek(week(), 7, plainPalette, {}, { ...priced, width: MIN_WIDTH });
 
-    // The floor is binding here, so the table overflows rather than cutting
-    // every row down to a few characters — a table whose rows cannot be told
-    // apart is not an improvement on one that wrapped.
-    expect(widest(lines)).toBeGreaterThan(MIN_WIDTH);
-    expect(rowFor(lines, "a1b2c3d4")).toContain("add rate limi");
-    expect(rowFor(lines, "b2c3d4e5")).toContain("refactor the");
+    // Nothing is cut. A declaration is the promise the diff is held to, and it
+    // takes as many lines as it needs rather than losing its second half.
+    expect(lines).toContain("  add rate limiting to /orders");
+    expect(lines.join("\n")).toContain("refactor the transcript store adapter");
   });
 
   it("wraps the prose at the width, whatever the table could not fit into", () => {

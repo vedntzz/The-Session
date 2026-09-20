@@ -97,6 +97,19 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+/** A session's figure line: the one under the intent that names it. */
+function figuresUnder(lines: readonly string[], what: string): string {
+  const at = lines.findIndex((line) => line.includes(what));
+  expect(at, `no intent line for ${what}`).toBeGreaterThan(-1);
+  return lines[at + 1] as string;
+}
+/** One intent source's headline, wherever the blocks pushed it to. */
+/** One source's headline, wherever the blocks above it pushed it to. */
+function blockHeadline(lines: readonly string[], source: string): string {
+  return lines.find((line) => line.startsWith(`  ${source} \u00b7 `)) as string;
+}
+
+
 describe("session", () => {
   it("week prints a row per session", async () => {
     await run("start", "the first thing");
@@ -106,22 +119,19 @@ describe("session", () => {
 
     const lines = await run("week");
 
-    expect(lines[1]).toContain("2 sessions");
-    expect(lines[1]).toContain("landed on the default branch");
-    expect(lines[3]).toContain("started");
-    expect(lines[4]).toContain("the first thing");
-    expect(lines[5]).toContain("the second thing");
-    // Third from the end now: the money line and the date under it close the
-    // view, in that order.
-    expect(lines.at(-3)).toContain("2 sessions");
+    expect(blockHeadline(lines, "declared")).toContain("2 sessions");
+    expect(blockHeadline(lines, "declared")).toContain("landed on the default branch");
+    expect(lines.some((line) => line.includes("no edits"))).toBe(true);
+    expect(lines).toContain("  the first thing");
+    expect(lines).toContain("  the second thing");
   });
 
   it("prints an id in week that show and pr take back", async () => {
     await run("start", "the first thing");
     await run("stop");
 
-    const row = (await run("week")).find((line) => line.includes("the first thing")) as string;
-    const id = row.trim().split(/\s+/)[0] as string;
+    const lines = await run("week");
+    const id = figuresUnder(lines, "the first thing").trim().split(/\s+/)[0] as string;
 
     // The whole point of the column: what is printed is what the commands
     // that take an id accept, without opening the JSONL to find a longer one.
@@ -158,8 +168,9 @@ describe("session", () => {
 
     const lines = await run("week", "--days", "1");
 
-    expect(lines[4]).toContain("today's thing");
-    expect(lines.at(-3)).toContain("1 session");
+    expect(lines[1]).toBe("  The last 1 day");
+    expect(lines).toContain("  today's thing");
+    expect(blockHeadline(lines, "declared")).toContain("1 session");
   });
 
   it("week refuses a --days that is not a whole number of days", async () => {
@@ -863,7 +874,7 @@ describe("session", () => {
 
     const lines = await run("week", "--client", "Acme");
 
-    expect(lines[2]).toBe("  only client Acme");
+    expect(lines[1]).toBe("  The last 7 days, only client Acme");
     expect(lines.join("\n")).toContain("for acme");
     expect(lines.join("\n")).not.toContain("for globex");
   });
@@ -1181,13 +1192,14 @@ describe("session, priced", () => {
     await spent();
 
     const plain = await run("week");
-    expect(plain[3]).toContain("cost");
-    expect(plain[3]).not.toContain("tokens");
-    expect(plain[4]).toContain("$15.00");
+    const headings = plain.find((line) => line.includes("no edits")) as string;
+    expect(headings.trimEnd().endsWith("cost")).toBe(true);
+    expect(headings).not.toContain("tokens");
+    expect(figuresUnder(plain, "spend some money")).toContain("$15.00");
 
     const detailed = await run("week", "--tokens");
-    expect(detailed[3]).toContain("tokens");
-    expect(detailed[4]).toContain("1,000,000");
+    expect(detailed.find((line) => line.includes("no edits"))).toContain("tokens");
+    expect(figuresUnder(detailed, "spend some money")).toContain("1,000,000");
   });
 
   it("week says what the window cost and how much never merged", async () => {
@@ -1203,8 +1215,8 @@ describe("session, priced", () => {
 
     const lines = await run("week");
 
-    expect(lines[1]).toContain("1 changed no files");
-    expect(lines[4]).toContain("  empty ");
+    expect(blockHeadline(lines, "declared")).toContain("1 changed no files");
+    expect(figuresUnder(lines, "read the code and change nothing")).toContain("  empty ");
     expect(lines.join("\n")).not.toContain("abandoned");
   });
 
@@ -1278,10 +1290,11 @@ describe("session, priced", () => {
     await run("stop");
 
     const lines = await run("week");
-    const row = lines.find((line) => line.includes("no transcript for this one")) as string;
+    const row = figuresUnder(lines, "no transcript for this one");
     const document = (await run("week", "--md")).join("\n");
 
-    expect(row.trimEnd().split(/\s+/).at(-1)).toBe("—");
+    // The word, not a nought: nothing on the record could price this one.
+    expect(row.trimEnd().split(/\s+/).at(-1)).toBe("unknown");
     expect(lines.at(-2)).toBe("  — spent: nothing here could be priced");
     expect(lines.at(-1)).toBe(
       "  1 session uncaptured: no turns on the record, so nothing to price",
@@ -1330,7 +1343,7 @@ describe("session, priced", () => {
 
     // Nothing was rewritten: the same record, read against a table that now
     // has a price in it.
-    expect((await run("week"))[4]).toContain("$2.00");
+    expect(figuresUnder(await run("week"), "spend some money")).toContain("$2.00");
   });
 
   it("keeps the bundled rates when the store adds one model", async () => {
@@ -1342,7 +1355,7 @@ describe("session, priced", () => {
       "utf8",
     );
 
-    expect((await run("week"))[4]).toContain("$15.00");
+    expect(figuresUnder(await run("week"), "spend some money")).toContain("$15.00");
   });
 });
 
@@ -1431,7 +1444,7 @@ describe("passive capture, end to end", () => {
 
     const lines = await run("week");
 
-    expect(lines[4]).toContain("~ why does /orders 500");
+    expect(lines).toContain("  ~ why does /orders 500");
     // Found rather than counted from the end: the notes under the table sit in
     // two blocks with a blank line between them.
     expect(lines.filter((line) => line.includes("recorded by the editor hook"))).toEqual([
@@ -1490,12 +1503,12 @@ describe("passive capture, end to end", () => {
     await run("stop", "--if-open");
 
     const captured = await run("week", "--intent", "captured");
-    expect(captured[2]).toBe("  only captured intents");
+    expect(captured[1]).toBe("  The last 7 days, only captured intents");
     expect(captured.join("\n")).toContain("never said a word");
     expect(captured.join("\n")).not.toContain("declared it first");
 
     const declared = await run("week", "--intent", "declared");
-    expect(declared[2]).toBe("  only declared intents");
+    expect(declared[1]).toBe("  The last 7 days, only declared intents");
     expect(declared.join("\n")).toContain("declared it first");
     expect(declared.join("\n")).not.toContain("never said a word");
   });
