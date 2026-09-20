@@ -28,10 +28,16 @@ alike. They are what the views are *for*, not a house style:
    sentence about it precedes every one about money.
 3. **A total in money is one dim line at the bottom, and nowhere else.** Never
    a heading, never the first figure, never bright, and never in a totals row
-   as well — `week`'s and the Markdown table's cost cells in the totals row are
-   deliberately empty, and the line under the table is the only total. Per
-   session, cost stays in the detail views: `show`'s figure line, `show
-   --full`'s rows, the cost column of a table.
+   as well — the Markdown table's cost cell in its totals row is deliberately
+   empty, `week`'s source blocks carry no money at all, and the line under them
+   is the only total. Per session, cost stays in the detail views: `show`'s
+   figure line, `show --full`'s rows, the cost column of a table.
+
+   `week`'s bottom line is the one figure there over the whole window rather
+   than per source. Money is what a week is billed at, not a rate that moves
+   with the mix of sources, so it is the one thing the blocks below do not
+   split — and they carry none of it themselves, which is what keeps it the
+   only total.
 
 The reason is that the agents meter their own spend now, so a view that opened
 on a dollar figure would be answering a question its reader has already had
@@ -85,19 +91,16 @@ Two rules for what a view does with it:
 
 - **Prose wraps; tables do not.** A sentence has no column to be measured
   against, so `note` and `wrapSegments` fold it at the width and carry the same
-  indent onto every continuation line. A table has columns, and the only one
-  that may give is the one carrying text — `week`'s intent, down to
-  `MIN_INTENT`. Every other column is a fixed shape or a figure whose digits
-  cannot be dropped.
+  indent onto every continuation line. A table has columns, and every one of
+  `week`'s is now a fixed shape or a figure whose digits cannot be dropped —
+  the intent, which used to be the one that could give, is no longer a column.
+  It has a line of its own and wraps into it like the prose it is.
 - **There is a floor, and past it a view overflows on purpose.** `MIN_WIDTH`
-  for prose, `MIN_INTENT` for the intent column. A table whose rows cannot be
-  told apart from each other is not an improvement on a table that wrapped, so
-  below the floor the layout stops shrinking and runs past the edge. `week`
-  fits exactly at 80 columns and up. Getting it there cost the unit off the
-  `drift` heading — see below — and there is **no budget left**: the only
-  remaining six columns are the time in `started`, which is how a developer
-  recognises a session. Anything added to this table takes width from the
-  intent, and the intent has a floor.
+  for prose. `week`'s figure line fits inside 80 columns with either `--class`
+  or `--tokens` on, and overflows with both — the same way it overflowed with
+  `--tokens` alone before the intent left the row. Anything added to that line
+  takes from a budget nothing else can give back, since no column on it flexes
+  any more.
 
 Ink goes on **after** the wrap, never before. `wrapSegments` takes the runs of
 a sentence with their inks, wraps the plain text, and inks each line's share of
@@ -183,10 +186,11 @@ say, which is a session that changed nothing. Every view reads it through
 `emptyTurnsOf`, never off `cost.emptyTurns`; see the `measurement-rules` skill
 under "Which turns produced nothing". The brief line simply stops at two
 figures where the third is unknown, while `show --full` spells the absence out
-as `not measured`: a dash in a line read at a glance is a puzzle about the
-tool, and the labelled view is where an absence belongs. `week`'s column and
-its totals take the dash, with a note under the table naming how many sessions
-could not be counted. No view prints a count of calls that changed no files —
+as `not measured`: a mark in a line read at a glance is a puzzle about the
+tool, and the labelled view is where an absence belongs. `week`'s `no edits`
+column says `unknown` — a word, since the intent no longer competes for the
+room one costs — with a note under the blocks naming how many sessions could
+not be counted. No view prints a count of calls that changed no files —
 that figure is gone. The labelled layout is `--full`,
 and `--tokens` implies it rather than being quietly ignored.
 
@@ -299,37 +303,67 @@ what Prime offered.
 
 ## The week table
 
-Columns, left to right: `id`, `started`, `intent`, `class` (`--class` only),
-`outcome`, `drift`, `turns`, `tokens` (`--tokens` only), `empty`, `cost`.
-Outcome sits in the left block with the text; the figures are right-aligned so
-a column can be scanned.
+**One block per intent source — declared, primed, captured — and never a
+total.** They are different evidence: Prime can lower drift mechanically by
+putting historical misses into the accepted scope, so a figure over all three
+moves whenever their mix moves and describes none of them. The same rule the
+HTML page follows, and the measurement rules behind it are in the
+`measurement-rules` skill under Estimate.
 
-`drift` **used to read `drift files`**, on the rule that a bare `drift` over a
-column of small integers reads as a score. The unit cost six columns for a
-column of single digits, and six was exactly what stood between this table and
-an eighty-column terminal — and a table that wraps has no columns left to
-misread. So the unit went, and the risk it guarded against is **real and
-accepted**: nothing in this view names what the number counts. `week --md`
-spells it `Unplanned` for a reader who was not there, and `show --full` lists
-the paths under `outside`. A reader of this table who wants to know what
-drifted opens one of those. If somebody reads the column as a score, that is
-this decision surfacing, not a bug — and putting the unit back means finding
-six columns somewhere else first.
+A source holding nothing **still prints its line** — `primed · no sessions` —
+for the reason `estimate` prints an empty block: dropping the empty arm leaves
+the others reading as the whole answer, which is the pooled reading the split
+exists to prevent. `blocks` walks `INTENT_SOURCES`, so a source added later is
+printed by this view without anyone remembering to.
 
-Two consequences of outcome no longer being the last column. A row is trimmed
-rather than padded, so an abandoned row's strikethrough stops at the last
-figure instead of running out over trailing spaces — which is what the old
-last-column rule existed to prevent, and it is now handled once in `tableRow`.
-And the totals row can leave its cost cell empty without a ragged edge.
+There is **no totals row**. `NO_POOL` says so at the top, under the window
+line, where a reader looks for the total before deciding the view forgot one.
 
-The intent column is the only one that flexes — see "How wide a view may be".
-`INTENT_WIDTH` is its natural width, not the width every render uses: `measure`
-gives it whatever the other columns leave, down to `MIN_INTENT`, and
-`fixedWidth` counts the rest off the same `Widths` the row is laid out from, so
-a column added to `tableRow` cannot leave that arithmetic behind and silently
-push the table back over the edge. The cell is truncated twice on purpose —
-once in `cellsFor` to the natural width, once at render to whatever the column
-actually got.
+**A session is two lines.** The intent first, at the left margin, in the
+`intent` ink; the id, the stamp, the class (`--class` only), the outcome and
+the figures on a second line indented one level further. That indent is the
+whole of what tells the two apart once colour is stripped, which is the render
+that goes into a pipe and a bug report.
+
+The intent is **not shortened for anybody who composed their own** — a
+declaration is the promise the diff is held to, and a primed intent is the
+developer's words as well, so both wrap over as many lines as they need.
+Only a captured prompt is cut, by `headOf`, the one rule for where somebody's
+first sentence ends, shared with `show` and the pull request body.
+
+Figures, left to right: `outside`, `turns`, `tokens` (`--tokens` only),
+`no edits`, `cost`. Right-aligned so a column can be scanned, and the headings
+sit over them with **nothing over the left block**: an id, a stamp and an
+outcome are not figures to scan down a column, and three more headings above
+them would make the reader find the four that are.
+
+`outside` rather than `drift`, which is what this column used to read, and
+`drift files` before that. A bare `drift` over a column of small integers reads
+as a score; the unit that guarded against it cost six columns, and six was
+exactly what stood between the old table and an eighty-column terminal. The
+intent no longer competes for that room, so the heading can name what the
+number counts again. `no edits` rather than `empty` for a plainer reason:
+`empty` is also an outcome, and the two used to sit in one row saying different
+things.
+
+**Two absences, and they are not the same absence.** `UNKNOWN` — the word, not
+a mark — where the record cannot supply a figure: which turns of a session that
+changed files wrote nothing, a session with no turns on it, a model no rate
+covers. `NOT_ASKED`, an em dash, where the question cannot be asked at all: a
+session that declared no scope has no distance to measure, and the block's own
+line says so. Never a nought for either. Every `unknown` in the cost column is
+counted by one of the two notes under the blocks.
+
+The row is trimmed rather than padded, so a row written off by a mark is struck
+through to its last figure and no further. Both of its lines take the
+`abandoned` ink and nothing else takes any — nothing inside a row that has been
+written off gets to argue with the strike.
+
+**`abandoned` is printed only where somebody marked it.** `cellsFor` and the
+block counts both read `reportedOutcome`, never the field: a computed
+`abandoned` reads `open`, which is what a branch nobody has pushed actually is.
+Open is named and counted, and no rate in this view has it in a denominator —
+there is no rate in this view at all.
 
 The notes under the table sit in **two blocks with a blank line between them**:
 what the table does not say, then the money and the two things that qualify it.

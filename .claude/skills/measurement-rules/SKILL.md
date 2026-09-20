@@ -487,9 +487,9 @@ the same refusal that keeps the word `merged` out of that report. It says so on
 its own line rather than dropping it, since a report that printed nothing would
 read as a window in which nothing was wasted.
 
-Views render the absence rather than a nought: an em dash in `week`'s column
-and totals, a note under the table naming how many sessions could not be
-counted, `not measured` in `show --full`'s `no edits` row, and one figure fewer
+Views render the absence rather than a nought: `unknown` in `week`'s `no edits`
+column, a note under the blocks naming how many sessions could not be counted,
+`not measured` in `show --full`'s `no edits` row, and one figure fewer
 in the brief line and in the pull request body — the same rule as
 [A total nobody can work out](#a-total-nobody-can-work-out).
 
@@ -547,7 +547,7 @@ there, because a scanned transcript is a session *because* it has turns in it.
 **`wasMeasured` is the same rule at the grain of one session, and it is turns
 and nothing else.** A session with no turns had no transcript found for it, and
 every counter on it is a nought nobody measured — so it gets no figure on any
-surface: an em dash in `week`, `not captured` in `--md`, no cost rows in `show`,
+surface: `unknown` in `week`, `not captured` in `--md`, no cost rows in `show`,
 a dash on the page. It may well have changed files and been billed for them:
 the diff at `stop` sees those whether or not an adapter saw anything, which is
 why "it changed nothing" is neither the reason nor the test. A session that has
@@ -564,13 +564,14 @@ nothing:
   would have gone. The note below drops its "the cost above covers…" wording
   in this case, since it would point at a figure the document deliberately did
   not print, and says how many sessions and what to do instead.
-- `week` in the terminal puts `NO_PRICE` in the total row and omits the
-  `… spent` line entirely, leaving the `N sessions unpriced: <models>` and
-  `N sessions uncaptured: no turns on the record` lines to say why. A week that
-  genuinely cost nothing totals `$0.00` there, like the rows above it. Every
-  row carrying a dash is counted by one of those two notes: a cell that says
-  nothing under a footer that counts nothing is a hole the reader can see and
-  the table will not admit to.
+- `week` in the terminal puts `NO_PRICE` in its closing line — the one total
+  it has, since its source blocks carry no money — in place of the figure,
+  leaving the `N sessions unpriced: <models>` and `N sessions uncaptured: no
+  turns on the record` lines to say why. A week that genuinely cost nothing
+  closes at `$0.00`, like the rows above it. Every row reading `unknown` in the
+  cost column is counted by one of those two notes: a cell that says nothing
+  under a footer that counts nothing is a hole the reader can see and the view
+  will not admit to.
 - `week --open` leaves the money out of the page's summary rather than
   printing a nought into it — and keeps `$0.00` in the summary for a week that
   genuinely cost nothing, since a page that dropped the figure in both cases
