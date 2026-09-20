@@ -5,8 +5,9 @@ twenty-second version; this is the rest of it, for anyone deciding whether the
 tool's judgement matches theirs.
 
 The invariants these all serve are in [Claude.md](../Claude.md): intent is
-immutable, there is no server, nothing calls a model to judge your work, turns
-that produced nothing are first-class, and nothing assumes Claude Code.
+immutable, [your code and prompts never leave the machine](#what-never-leaves-the-machine),
+nothing calls a model to judge your work, turns that produced nothing are
+first-class, and nothing assumes Claude Code.
 
 ## Contents
 
@@ -22,6 +23,7 @@ that produced nothing are first-class, and nothing assumes Claude Code.
 - [Who the work was for](#who-the-work-was-for) — attribution
 - [The log is tamper-evident](#the-log-is-tamper-evident)
 - [Sharing them with the team](#sharing-them-with-the-team) — sync over git refs
+- [What never leaves the machine](#what-never-leaves-the-machine) — invariant 2, amended for a team layer that sees metadata only
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
 - [What 1.0 means](#what-10-means) — twenty verbs, frozen, and the two exceptions
 - [Rejected](#rejected) — `cochange`, which measured centrality, and `prime`, and the backtest that stopped it
@@ -818,6 +820,52 @@ $ git cat-file -p refs/session/ed25519-32e30104f89848db2616e740fe3a58d9:session.
 That history is the point of committing rather than dropping a blob: what was published and when is itself a record, and a rewrite shows up as a tip that no longer descends from the old one instead of quietly replacing it.
 
 No server, no account, no database — the same as before. Records move by git talking to git, only when you type `push` or `pull`.
+
+## What never leaves the machine
+
+> **Invariant 2 amended, 19 September 2026.** It read: no server, no database,
+> no account, no telemetry. It now reads: source code, prompts and transcripts
+> never leave the machine. An optional hosted team layer may exist and may
+> receive metadata only. Nothing below is built — this is what would be
+> permitted, not what ships.
+
+The old wording banned a mechanism. What the mechanism was protecting is
+narrower than the ban: that nothing you or your agent wrote — the source, the
+prompt you typed, the transcript it produced — ends up somewhere you cannot
+reach, and that a team can try the tool without booking a security review
+first. A blanket ban on servers protects both of those, and also forbids a
+great deal that threatens neither.
+
+It forbids, in particular, the only thing a team could buy. Local-only open
+source has nothing to sell: the tool is on the developer's disk, and the
+figures a lead would pay to see — whose sessions merged, what the week cost,
+which paths keep drifting — are on five different disks with no way to meet.
+So the line moves off the mechanism and onto the thing it guards.
+
+**What may cross:** paths, counts, decisions, outcomes, costs. Path hashing and
+encrypted team storage are available for teams that want the file names opaque
+too. **What may not cross, under any option or flag:** source code, prompts,
+transcripts, diffs. There is no setting that turns the second list into the
+first, which is the whole content of the invariant — an option to send more
+would make this a policy rather than a rule.
+
+**The individual tool is unchanged.** It needs no account, reaches no network
+except the git remote you already push to, and sends nothing. Someone running
+`session start` on their own machine cannot tell whether a team layer exists,
+and that stays true whether or not one is ever built.
+
+**Not yet settled:** which side of the line a declared intent falls on. It is
+the developer's own prose, which reads like a prompt, and it is also the
+decision the whole record is a comparison against — `decisions` in the list
+above is the scope and the outcome, not necessarily the sentence. A team view
+that shows a merge rate needs none of the words. One that shows what people
+said they were doing needs all of them. That question is answered before
+anything is built, not during.
+
+**Built only after the pilot shows repeat use.** An amendment is permission,
+not a plan. Until the same team comes back to the tool week after week without
+being asked, the honest shape of this is one paragraph in a decisions file,
+and the cost of the paragraph is nothing.
 
 ## Finding your way around
 

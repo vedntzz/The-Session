@@ -7,7 +7,7 @@
 ## Invariants — do not violate these
 
 1. **`intent` is immutable.** Written once at `session start`, never edited afterward. A declaration you can revise after seeing the result is a rationalisation. No `--edit-intent` flag, ever.
-2. **No server, no database, no account.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service, and anything needing one is wrong.
+2. **Source code, prompts and transcripts never leave the machine.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service. The tool itself needs no account, reaches no network but that remote, and sends nothing. An [optional hosted team layer](docs/decisions.md#what-never-leaves-the-machine) may take metadata only — paths, counts, decisions, outcomes, costs — and does not exist yet, so anything in this repo reaching for one is wrong. Content never crosses, under any flag.
 3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else.
 4. **Turns that produced nothing are first-class.** Turns that changed no files are counted and displayed, never dropped — and where the record cannot say which turns those were, *that* is displayed rather than a nought. A transcript names the tool a call used, never what it did to the disk, so the question goes to git: `empty.ts` is the one rule, and no view reads `cost.emptyTurns` itself.
 5. **Cross-tool.** Nothing may assume a specific coding tool. Adapters go behind an interface; the core reads a normalised shape.
@@ -98,7 +98,7 @@ type SessionCost = TokenCounts & {
 
 - Don't let `session config` grow past attribution: who the work was for is a fact about the repo and the team, so it lives in a checked-in [`.session.json`](docs/decisions.md#who-the-work-was-for) where everyone spells the client the same way. This replaced a flat "no config files" ban, which held until attribution needed a home a team could share — don't read it as licence for a second config. `~/.session/rates.json` holds prices and nothing else. No user-level config, no `--format`, no default flags file.
 - Don't build a spec language — scope is a list of path prefixes, matched at directory boundaries.
-- Don't add telemetry, a web server, or anything to log into. `session knowledge` is a read-only graph and compact context export derived from existing records, never a second database, an inferred dependency graph, or an LLM summary. A generated file the user opens or sends is not a service.
+- Don't make the CLI phone home, and don't add a web server or anything to log into. Invariant 2 permits a team layer that receives metadata; it does not permit this tool to acquire an account, a network dependency, or a second database. `session knowledge` is a read-only graph and compact context export derived from existing records, never a second database, an inferred dependency graph, or an LLM summary. A generated file the user opens or sends is not a service.
 
 ## The rest
 
