@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `docs/decisions.md` records what a Claude Code `PreToolUse` hook can and
+  cannot show, checked against the hooks reference on 21 September 2026.
+
 ## [2.0.0] — 2026-09-17
 
 Prime has been reopened explicitly after the initial refinement freeze.

@@ -25,6 +25,7 @@ first-class, and nothing assumes Claude Code.
 - [Sharing them with the team](#sharing-them-with-the-team) — sync over git refs
 - [What never leaves the machine](#what-never-leaves-the-machine) — invariant 2, amended for a team layer that sees metadata only
 - [Hook capabilities](#hook-capabilities) — what a PreToolUse hook can show, and what it cannot
+- [Hook capabilities](#hook-capabilities) — what a PreToolUse hook can show, and what it cannot
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
 - [What 1.0 means](#what-10-means) — twenty verbs, frozen, and the two exceptions
 - [Rejected](#rejected) — `cochange`, which measured centrality, and `prime`, and the backtest that stopped it
@@ -867,6 +868,58 @@ anything is built, not during.
 not a plan. Until the same team comes back to the tool week after week without
 being asked, the honest shape of this is one paragraph in a decisions file,
 and the cost of the paragraph is nothing.
+
+## Hook capabilities
+
+> Checked 21 September 2026 against the Claude Code hooks reference,
+> <https://code.claude.com/docs/en/hooks> ("PreToolUse decision control",
+> "JSON output"). Re-check before relying on it; the page changes often.
+
+**Question.** Can a `PreToolUse` hook show the developer a prompt of its own,
+or can it only return allow, deny or ask with a reason?
+
+**Answer: only a decision and a reason.** The hook cannot show anything
+interactive. It returns one of four values in
+`hookSpecificOutput.permissionDecision`, and Claude Code does the showing:
+
+- `allow` skips the permission prompt. It does not override the user's deny
+  or ask rules: "Deny and ask rules are still evaluated regardless of what the
+  hook returns."
+- `deny` blocks the call. `permissionDecisionReason` goes to the agent, not
+  the developer. Exit 2 works the same way, with stderr as the reason.
+- `ask` opens Claude Code's own permission prompt. The reason is "shown to the
+  user but not Claude", and the prompt carries a source label such as
+  `[settings]` or `[plugin:<name>]`. In auto mode, `ask` still forces the
+  prompt.
+- `defer` is honoured only by `claude -p`. In an interactive session it "logs
+  a warning and ignores the hook result".
+
+The hook cannot draw its own UI. "Command hooks run in their own session
+without a controlling terminal. The hook process and any child processes
+can't open `/dev/tty` or send escape sequences directly to the Claude Code
+interface." Stdin carries the event JSON, not keystrokes. The channels that
+reach the developer are these:
+
+- the `ask` reason, inside the stock prompt;
+- `systemMessage`, a one-way "warning message shown to the user";
+- `terminalSequence`, for a bell, a window title or a desktop notification.
+
+`updatedInput` can change the call that the `ask` prompt shows, but it is
+Claude Code's prompt, not ours. `additionalContext` goes to the agent only.
+A custom question-and-answer round trip exists only through `defer` under
+`-p`, where the calling process owns the UI. That is not the interactive
+session this tool records.
+
+**Two more facts for the latency check.** A PreToolUse command hook has a
+default timeout of 600 seconds. "A timed-out … hook doesn't block the tool
+call," so a hook that is slow or stalled lets the edit through. It is not a
+gate.
+
+**What this means for the agreement hook.** An edit outside the agreement or
+on a sensitive path is either a `deny`, where the agent reads the reason, or
+an `ask`, where the developer sees one line of reason in Claude Code's prompt
+and answers yes or no. Any screen richer than that belongs in `session start`,
+before the agent runs, not in the hook.
 
 ## Hook capabilities
 
