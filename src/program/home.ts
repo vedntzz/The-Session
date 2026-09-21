@@ -23,6 +23,9 @@ export function registerHome(program: Command, options: ProgramOptions, palette:
     // arguments but got 1" — a true statement about the parse, and no help at
     // all to somebody who did not think they were passing an argument.
     .argument("[command]", "a command to run; with none, where this repo stands")
+    // Whatever followed it. Taken so `session estimate "x"` is answered about
+    // `estimate` rather than refused for having one argument too many.
+    .argument("[rest...]")
     .action(async (name: string | undefined) => {
       if (name !== undefined) {
         throw new Error(unknownCommand(name, program));

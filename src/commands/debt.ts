@@ -16,7 +16,7 @@ import {
 } from "../store.js";
 
 /**
- * `session debt` reads every repository's log, not just this one's.
+ * `session prime --debt` reads every repository's log, not just this one's.
  *
  * Debt is a fact about a codebase that only shows up over months, and the
  * question it answers — "which files does work keep landing in that nobody

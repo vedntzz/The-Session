@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { debtOf as debtOfSessions } from "../src/debt.js";
 import { proposeScope } from "../src/prime.js";
+import { DEBT_SHOWN, formatPrime } from "../src/render/prime.js";
 import { zeroCost, type Session } from "../src/store.js";
 
 const repo = "path:/repo";
@@ -76,5 +78,45 @@ describe("Prime evidence", () => {
   it("uses the support fraction, not only the count", () => {
     const diluted = [...history, ...[4, 5, 6].map((id) => past(id, { drift: [] }))];
     expect(proposeScope(request, diluted, tracked, repo, before).scope).toEqual([]);
+  });
+});
+
+describe("Prime's preview and debt", () => {
+  const proposal = proposeScope(request, history, tracked, repo, before);
+  const debtOf = (lines: string[]) => lines.filter((line) => line.startsWith("  debt") || line.startsWith("           \""));
+
+  it("prints debt apart from the suggestion, and never records it in the proposal", () => {
+    const debt = debtOfSessions(history, new Map()).repos[0];
+    const lines = formatPrime(proposal, debt);
+    expect(lines).toContain("  debt     1 file keeps drifting outside scope here and was never declared since");
+    expect(lines).toContain('           "db/orders.ts" — outside scope in 3 sessions');
+    expect(proposal).not.toHaveProperty("debt");
+    // Still ends on what the command did and what to type next.
+    expect(lines.at(-1)).toContain("No session started");
+  });
+
+  it("says it could not look rather than that nothing is owed", () => {
+    const lines = formatPrime(proposal, { repo, history: 2 });
+    expect(debtOf(lines)).toEqual(["  debt     not enough history: 2 sessions recorded here, needs 3"]);
+  });
+
+  it("says nothing is owed when the history is long enough and clean", () => {
+    const lines = formatPrime(proposal, { repo, history: 3, files: [] });
+    expect(lines.find((line) => line.startsWith("  debt"))).toMatch(/^ {2}debt {5}none — /);
+  });
+
+  it("names at most five files and sends the rest to --debt", () => {
+    const spend = { usd: 0, unpriced: 0, unpricedModels: [], uncaptured: 0 };
+    const files = Array.from({ length: DEBT_SHOWN + 2 }, (_, index) => ({
+      path: `f${index}.ts`, sessions: 3, lastTouched: before, spend,
+    }));
+    const lines = formatPrime(proposal, { repo, history: 9, files });
+    expect(lines.filter((line) => line.includes("— outside scope in 3 sessions"))).toHaveLength(DEBT_SHOWN);
+    expect(lines).toContain("           2 more: session prime --debt");
+  });
+
+  it("prints no money", () => {
+    const debt = debtOfSessions(history, new Map()).repos[0];
+    expect(formatPrime(proposal, debt).join("\n")).not.toContain("$");
   });
 });

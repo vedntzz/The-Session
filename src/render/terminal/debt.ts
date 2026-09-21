@@ -1,4 +1,4 @@
-// `session debt`: the files work keeps landing in that nobody plans for.
+// `session prime --debt`: the files work keeps landing in that nobody plans for.
 import {
   IGNORED_CLASSES,
   MIN_DRIFTS,
@@ -28,7 +28,7 @@ import { day, figure, INDENT, note, padLeft, padRight, plural, width } from "./t
 const HEADINGS = ["file", "sessions drifted", "last touched", "cost"] as const;
 
 /**
- * What `session debt` found, one repository at a time.
+ * What `session prime --debt` found, one repository at a time.
  *
  * Never a total, and never a figure spanning repos: the report is a list of
  * separate answers that happen to be printed together. The cost column does
@@ -37,7 +37,7 @@ const HEADINGS = ["file", "sessions drifted", "last touched", "cost"] as const;
  * column that would lie.
  *
  * No colour role of its own. The paths are `drift`, because that is what they
- * are and it is the same red `show` and `week` mark drift in; repo names and
+ * are and it is the same red `week` and `week <id>` mark drift in; repo names and
  * every figure's framing are `meta`; the money is left in the terminal's own
  * colour, like every other cost cell.
  */

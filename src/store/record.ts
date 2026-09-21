@@ -142,7 +142,7 @@ export type SessionOutcome = "open" | "merged" | "abandoned" | "empty";
  * separate from both unaided declarations and passive captures.
  *
  * Ordered unaided declaration, assisted declaration, then passive capture,
- * which is the order `estimate` and `survival` print their blocks in.
+ * which is the order `week` and `survival` print their blocks in.
  */
 export const INTENT_SOURCES = ["declared", "primed", "captured"] as const;
 
@@ -296,7 +296,7 @@ export function hasDeclaredScope(session: Pick<Session, "intentSource">): boolea
  * are two palette roles that are both dim for the same reason — the day a
  * source answers these differently is a line here, not an audit of every
  * caller. Views that label authorship ask this one: the marker in the tables,
- * the sentence in `show`, whether `pr` shortens the summary.
+ * the sentence in `week <id>`, whether `pr` shortens the summary.
  */
 const OWN_WORDS: Record<IntentSource, boolean> = {
   declared: true,

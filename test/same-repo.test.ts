@@ -5,7 +5,6 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { debtReport, readAllSessions } from "../src/commands/debt.js";
-import { estimateFor } from "../src/commands/estimate.js";
 import { weekSessions } from "../src/commands/week.js";
 import { verifyLog } from "../src/commands/verify.js";
 import { parseRates, type RateTable } from "../src/pricing.js";
@@ -142,22 +141,6 @@ describe("a repo that gains an origin remote", () => {
       "before the remote",
       "after the remote",
     ]);
-  });
-
-  it("gives estimate the sessions from before the remote", async () => {
-    for (const _ of [1, 2, 3]) {
-      await record();
-    }
-    await git("remote", "add", "origin", REMOTE);
-    for (const _ of [1, 2]) {
-      await record();
-    }
-
-    // Five api sessions, which is the floor — split three and two, neither
-    // half would have reached it and the answer would have been "too few".
-    const estimate = await estimateFor({ intent: "rate limit the /orders endpoint" }, RATES, options);
-    expect(estimate.groups.declared.matched).toBe(5);
-    expect(estimate.groups.declared.figures).toBeDefined();
   });
 
   it("gives debt one repository, not two half-histories", async () => {

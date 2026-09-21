@@ -47,7 +47,7 @@ export const MIN_HISTORY = 3;
  * along with it. Leaving them in would put the same four paths at the top of
  * every repo's list and bury the ones that mean something.
  *
- * Read off `classify.ts`, the same table `week --class` and `estimate` use.
+ * Read off `classify.ts`, the same table `week --class` uses.
  * A repo whose layout keeps landing the wrong file here is fixed by a line in
  * that table, not by a second list of exceptions here.
  */
@@ -121,7 +121,7 @@ export interface RepoDebt {
   files?: DebtFile[];
 }
 
-/** What `session debt` found: one entry per repository, never a total. */
+/** What `session prime --debt` found: one entry per repository, never a total. */
 export interface DebtReport {
   repos: RepoDebt[];
 }

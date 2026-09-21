@@ -26,7 +26,7 @@ import { headOf, INTENT_NOTE, intentOf, NO_SCOPE } from "./terminal/intent.js";
  *
  * So the document is a transcription. Its sentences are the developer's own
  * intent and a handful of file lists, and a reviewer who reads it is reading
- * the log rather than a summary of it. What it adds over `session show` is
+ * the log rather than a summary of it. What it adds over `session week <id>` is
  * only the shape: headings a reviewer expects, in a file `gh pr create` will
  * take on stdin.
  *
@@ -34,7 +34,7 @@ import { headOf, INTENT_NOTE, intentOf, NO_SCOPE } from "./terminal/intent.js";
  * one place this departs from every other view here. There is nowhere for it
  * to have gone yet — the document exists to open the pull request that would
  * land it — so the first line is what the session set out to do, and the
- * outcome is a question for `session show` afterwards.
+ * outcome is a question for `session week <id>` afterwards.
  */
 
 /** The heading over what was declared at `session start`. */
@@ -60,7 +60,7 @@ export const NO_DRIFT = "Nothing went outside the declared scope.";
  *
  * Never `$0.00 · 0 turns · 0 that changed no files`. A row of noughts has the
  * shape of a measurement, and what happened is that no adapter was recording —
- * the same call `show` makes when it drops its figures line entirely rather
+ * the same call `week <id>` makes when it drops its figures line entirely rather
  * than printing zeroes into it.
  */
 export const NOTHING_MEASURED = "No cost recorded — nothing was captured for this session.";
@@ -270,7 +270,7 @@ function hasDrift(session: Session): boolean {
  * Nothing is ever reported as drift for a session that declared no scope, even
  * where the record holds paths: drift is the distance between a declaration
  * and reality, and without a declaration there is no distance — `driftOf` says
- * the same thing at the other end, and `show` says it to the reader. A pull
+ * the same thing at the other end, and `week <id>` says it to the reader. A pull
  * request telling a reviewer that twelve files went outside a plan nobody made
  * would be an accusation the log cannot support.
  */
@@ -334,7 +334,7 @@ function grouped(paths: readonly string[]): string[] {
  * The closing line: what it cost, how many turns that took, and — where the
  * record can say — how many of those changed no files.
  *
- * The figures `show` closes on, in its order and for its reasons. The money is
+ * The figures `week <id>` closes on, in its order and for its reasons. The money is
  * last and unemphasised — the agents meter their own spend, so a document that
  * opened on a dollar figure would answer a question its reader has already had
  * answered.

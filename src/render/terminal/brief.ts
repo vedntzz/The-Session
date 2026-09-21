@@ -1,4 +1,4 @@
-// `session show`: three sentences, then the id and a line of three figures.
+// `session week <id>`: three sentences, then the id and a line of three figures.
 import { formatUsd, priceSession, wasMeasured, type RateTable } from "../../pricing.js";
 import {
   inOwnWords,
@@ -18,14 +18,14 @@ import { flatten, INDENT, plural, shortId, wrapSegments } from "./text.js";
 // --- the brief views -----------------------------------------------------
 
 /**
- * The default `session show`, and the reason `--full` exists.
+ * The default `session week <id>`, and the reason `--full` exists.
  *
  * Three sentences and a line of figures. The labelled layout below says more,
  * and says it in a shape that has to be learned: which column means what, what
  * a bare `!` marks, why `declared` and `changed` are different lines. That is
  * the right trade for somebody studying a session and the wrong one for
  * somebody who has just watched an agent run for forty minutes and wants to
- * know whether it went where they said. So the short answer is what `show`
+ * know whether it went where they said. So the short answer is what `week <id>`
  * gives, and the layout is a flag away.
  *
  * Nothing here is computed differently. The sentences are the same `intent`,
@@ -42,7 +42,7 @@ const FIGURE_GAP = " · ";
  * Read off `outcome`, which by the time a view runs holds what the repository
  * says now rather than what the record was written with — see `withOutcomes`.
  * The full view spends a labelled row on the same fact; here it is a sentence,
- * and it comes first because it is the question the reader opened `show` with.
+ * and it comes first because it is the question the reader opened `week <id>` with.
  *
  * Four ends, four sentences, and each says only what its evidence supports. A
  * session still open has not landed and has not failed to, so it is not told
@@ -60,7 +60,7 @@ const WHERE_IT_WENT: Record<SessionOutcome, string> = {
   empty: "Nothing landed on the default branch.",
 };
 
-/** What `show` says when a session has no scope to have drifted from. */
+/** What `week <id>` says when a session has no scope to have drifted from. */
 const NO_DRIFT_POSSIBLE =
   "Nothing was declared to compare against — run session start --scope to see drift.";
 
@@ -99,7 +99,9 @@ interface AskedFrame {
  * view under a prompt that is already whole is a line that teaches the reader
  * to ignore the line.
  */
-const REST_OF_IT = " Run session show --full for the whole of it.";
+function restOf(session: Session): string {
+  return ` Run session week ${shortId(session.id)} --full for the whole of it.`;
+}
 
 /**
  * The second sentence: what was asked for.
@@ -132,7 +134,7 @@ function askedFor(session: Session): { before: string; intent: string; after: st
   return {
     before: cut ? (frame.begun ?? frame.whole) : frame.whole,
     intent: flatten(head),
-    after: `${frame.after}${cut ? REST_OF_IT : ""}`,
+    after: `${frame.after}${cut ? restOf(session) : ""}`,
   };
 }
 
@@ -204,7 +206,7 @@ function figures(session: Session, rates: RateTable): string | undefined {
  * The id leads it because it is the one part that is always there — a session
  * nothing was captured for has no figures at all, and it is exactly that
  * session somebody may still want to write a pull request body for. It is what
- * `session pr`, `session show` and `session mark` take, at the width `settle`
+ * `session pr`, `session week <id>` and `session mark` take, at the width `settle`
  * and `week` print, so a prefix read off any of them works in all of them.
  *
  * Dim, with the figures, because it is not a measurement: it is the handle on
@@ -218,7 +220,7 @@ function bottomLine(session: Session, rates: RateTable): string {
 }
 
 /**
- * The session as `session show` prints it without `--full`.
+ * The session as `session week <id>` prints it without `--full`.
  *
  * Three sentences now, in the order the questions are asked: where the work
  * went, what was asked for, and what went outside what was declared. Then, dim

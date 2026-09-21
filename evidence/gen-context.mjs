@@ -59,7 +59,7 @@ const values = {
   v_inv: extracts.invariants(ROOT),
   v_layout: extracts.layout(ROOT),
   v_iface: extracts.sessionInterface(ROOT),
-  v_onezero: extracts.whatOneZeroMeans(ROOT),
+  v_boundary: extracts.v1Boundary(ROOT),
   v_skill: extracts.measurementRules(ROOT),
 };
 for (const [name, cmd] of Object.entries(commands)) {

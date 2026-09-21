@@ -1,6 +1,6 @@
 ---
 name: measurement-rules
-description: Load when changing how a session's outcome, class, intent source or cost is decided or displayed — editing outcome.ts, classify.ts, observe.ts, pricing.ts, scan.ts, rates.json, or commands/estimate.ts; changing Prime's proposal rule or evaluation; adding a class rule or a model price; touching a view that prints money, a median, a merge rate, a drift figure, or any total that might have nothing behind it. Also load before "simplifying" a figure, apportioning one counter from another, or making an unpriced total read as zero.
+description: Load when changing how a session's outcome, class, intent source or cost is decided or displayed — editing outcome.ts, classify.ts, observe.ts, pricing.ts, scan.ts, rates.json, or debt.ts; changing Prime's proposal rule or evaluation; adding a class rule or a model price; touching a view that prints money, a median, a merge rate, a drift figure, or any total that might have nothing behind it. Also load before "simplifying" a figure, apportioning one counter from another, or making an unpriced total read as zero.
 ---
 
 # Measurement rules
@@ -19,7 +19,7 @@ well spent.
 
 Rationale and examples: [Did it ship?](../../../docs/decisions.md#did-it-ship).
 
-`outcome` on a stored record is not what any view shows. `show` and `week` run
+`outcome` on a stored record is not what any view shows. `week` and `week <id>` run
 `withOutcomes`, which replaces the field in memory with what the repository says
 right now; the field on disk is only ever what `settle` or `mark` last wrote,
 for the benefit of whoever reads the raw JSONL. Don't "simplify" this by reading
@@ -48,9 +48,8 @@ so an observation saying so would be a copy of a field that cannot disagree
 with it.
 
 Empty sessions are excluded from every figure about work: the unmerged spend
-in `week` (they had no change to land — the money is still in the total), and
-`estimate`'s sample, median, p90, drift and first-time merge rate. They are
-counted and named in both places rather than dropped quietly. What they are
+in `week` (they had no change to land — the money is still in the total). They
+are counted and named there rather than dropped quietly. What they are
 not excluded from is what they cost: that was spent.
 
 Note an empty session is not the same as one that touched files and left no
@@ -81,11 +80,9 @@ depends on the stored field: the rules are pure and `reality` is on the record,
 so a session recorded before the field existed is classified from its paths and
 gets the same answer.
 
-`INTENT_RULES` is the same table over the words of an intent, for `estimate`,
-which is asked before there are any paths. It is the weaker signal and is only
-ever used on a question, never on a session that ran — anything that has
-stopped has `reality`, and paths beat words. Nothing merges the two: a class
-comes from one table or the other, and the command says which.
+There is no table over the words of an intent. `INTENT_RULES` read a class off
+an intent for `estimate`, and went with it — see Estimate, below. Paths are the
+only thing a class is read off.
 
 ## Intent source
 
@@ -112,8 +109,8 @@ as `classOf` — every reader goes through `intentSourceOf`, never the raw
 field, so those records land in `--intent declared` rather than outside the
 groups.
 
-`show` names it, `week` marks the row and filters on it, and `estimate`
-reports all three apart. `INTENT_SOURCES` fixes their order: declared, primed,
+`week <id>` names it, and `week` marks the row, filters on it and prints one
+block per source. `INTENT_SOURCES` fixes their order: declared, primed,
 captured. Source decisions use exhaustive tables or walk that list; a test
 against `captured` alone would silently give a future source the wrong answer.
 `sourceHasScope` and `inOwnWords` are separate questions, even though declared
@@ -230,7 +227,15 @@ Four thresholds, and each is a refusal to say more than the log supports:
   left in they bury every path that means something.
 - **Under three sessions of history, no answer at all.** `RepoDebt.files` is
   *absent*, not empty — "found nothing" and "could not look" are different
-  statements, the same distinction `EstimateGroup.figures` makes.
+  statements.
+
+**Asked from `prime`.** The preview prints this repo's owed files — at most
+`DEBT_SHOWN`, paths and session counts, no money — under the suggestion, and
+says so when the history is too short. `debtHere` in `commands/prime.ts` reads
+this checkout's log only. The list is never part of the proposal and never
+recorded: Prime's rule and the debt rule stay two rules, and neither clears
+the other. `session prime --debt`, on its own, prints the whole report, every
+repo on the machine.
 
 **Per repo, never pooled.** The same path means different things in two
 codebases, and grouping happens in the pure half so no caller can pool by
@@ -324,7 +329,7 @@ Five states, and each is printed rather than collapsed:
 - `unsettled` — merged, but nothing records when.
 
 Both `settle` and the due checks also run **automatically**, once a day per
-repo, from the `SessionEnd` hook and opportunistically from `week`, `show` and
+repo, from the `SessionEnd` hook and opportunistically from `week`, `week <id>` and
 the bare screen — `commands/sweep.ts`. Rules that hold there: silent unless
 something was written; the once-a-day stamp goes down *before* the work, so a
 cancelled sweep waits for tomorrow rather than retrying on every command; it
@@ -336,9 +341,10 @@ gather.
 The rate is over **paths, not sessions** — a session that touched forty files
 is forty files' worth of evidence — while `MIN_SESSIONS` still counts sessions,
 since what has to be numerous enough to generalise from is the work. Below it,
-the count prints and no rate does, exactly as in `estimate`. Declared, primed
-and captured are separate source lines and never a pooled source rate. Every
-source prints even when it holds nothing, for the reasons under Estimate.
+the count prints and no rate does. Declared, primed and captured are separate
+source lines and never a pooled source rate. Every source prints even when it
+holds nothing — dropping one would leave the others reading as the whole
+answer.
 
 `SURVIVAL_BENCHMARK` is one constant, quoted from both ends: churn here is
 exactly the share that did not survive, so 90% survival and 10% churn are the
@@ -346,57 +352,19 @@ same line. Two constants would be two things to keep in step. It is somebody
 else's published figure, not a measurement — it is there so a reader has
 something to sit their own figure against.
 
-## Estimate
+## Estimate — removed, do not reintroduce
 
-Rationale: [What will this one cost?](../../../docs/decisions.md#what-will-this-one-cost).
+Rationale: [What will this one cost?](../../../docs/decisions.md#what-will-this-one-cost)
+and [the v1 boundary](../../../docs/decisions.md#the-v1-boundary).
 
-`session estimate "<intent>"` answers it with past sessions of the same class:
-count, median, p90, how often they merged the first time anyone looked, and the
-paths that kept turning up as drift. The class comes from `--class` if it is
-given, else `--scope` through the path rules, else the intent through the
-keyword rules — and the output names which, so a wrong class is visible rather
-than buried in the figures.
+`session estimate` restated past sessions of a class as a median, p90,
+first-time merge rate and drift, one block per source. Cut on 21 September
+2026 with `src/estimate/`, `render/estimate.ts`, `INTENT_RULES` and
+`classifyIntent`. Every figure it printed is still on the record for `week`.
+`MIN_SESSIONS` survives in `survival.ts`, where the survival rate uses it.
 
-Nothing is projected. Every figure is a restatement of sessions that already
-ran, which is also why the sample is printed above the figures and why fewer
-than five sessions reports the count and nothing else — a median of two looks
-like knowledge and is not.
-
-The answer has one block per `INTENT_SOURCES` entry, currently declared,
-primed and captured, and never a total. Unaided declarations, assisted scope
-selection and passive captures are different evidence; a pooled median would
-move whenever their mix moved. Prime can lower drift mechanically by putting
-historical misses into the accepted scope. Pooling those sessions with unaided
-declarations would disguise that change as better planning.
-
-`MIN_SESSIONS` therefore applies to each block on its own. Samples from
-different sources cannot add up to cross the threshold. Every block prints,
-including primed when it has no sessions — dropping one would leave the others
-reading as the whole answer.
-
-Drift in the declared and primed blocks is measured against accepted scope,
-never against `proposal.scope`. The captured block says outright that there
-was nothing to drift from rather than printing no drift line: a missing line
-there reads as captured sessions never drifting.
-
-`--since` is printed once, above all blocks. Repeating it would suggest the
-groups could have been cut at different dates.
-
-The percentile is nearest-rank: p90 is an amount some session was actually
-billed, not one interpolated between two of them. "First time" means the first
-terminal observation on the record, or the outcome computed now for a session
-nobody has settled — a session abandoned and revived a month later merged, but
-it did not merge the first time.
-
-Sessions that changed no files come out before anything is counted, and the
-count of them is printed beside the sample of the block they came from — how
-often a session comes to nothing is not the same question for an unaided
-declaration, a scope reviewed through Prime, and work the hook happened to
-catch. They are not instances of the work being asked about: they would drag
-the median below anything anyone was billed for doing it, and sit in the merge
-rate's denominator as failures to merge when there was nothing to merge. Note
-they mostly land in `other`, since a session with no paths has nothing to read
-a class off — which is exactly the estimate they would otherwise swamp.
+**The rule.** No view returns that projects a cost from past sessions, and
+nothing reads a class off the words of an intent.
 
 ## Cost in money
 
@@ -489,7 +457,7 @@ read as a window in which nothing was wasted.
 
 Views render the absence rather than a nought: `unknown` in `week`'s `no edits`
 column, a note under the blocks naming how many sessions could not be counted,
-`not measured` in `show --full`'s `no edits` row, and one figure fewer
+`not measured` in `week <id> --full`'s `no edits` row, and one figure fewer
 in the brief line and in the pull request body — the same rule as
 [A total nobody can work out](#a-total-nobody-can-work-out).
 
@@ -547,7 +515,7 @@ there, because a scanned transcript is a session *because* it has turns in it.
 **`wasMeasured` is the same rule at the grain of one session, and it is turns
 and nothing else.** A session with no turns had no transcript found for it, and
 every counter on it is a nought nobody measured — so it gets no figure on any
-surface: `unknown` in `week`, `not captured` in `--md`, no cost rows in `show`,
+surface: `unknown` in `week`, `not captured` in `--md`, no cost rows in `week <id>`,
 a dash on the page. It may well have changed files and been billed for them:
 the diff at `stop` sees those whether or not an adapter saw anything, which is
 why "it changed nothing" is neither the reason nor the test. A session that has
@@ -577,8 +545,6 @@ nothing:
   genuinely cost nothing, since a page that dropped the figure in both cases
   would render the absence and the nought identically and have no way left to
   say which it meant.
-- `estimate` prints `no price for any of these models` in place of the median
-  and p90.
 - `scan` prints the same dash in its `spent` line and omits the waste figure
   with it: a share of a total that does not exist is not a figure either.
 - `--md`'s note about the sessions that changed no files says `costing an

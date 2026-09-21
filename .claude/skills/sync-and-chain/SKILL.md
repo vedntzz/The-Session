@@ -99,7 +99,7 @@ moving, merging or rewriting files on disk.
 **Reading merges them.** `sameRepoLogs` asks the checkout for its origin, and
 where there is one also reads the log keyed on `path:<root>` for the same
 checkout. `readSessions` folds both and relabels the older sessions to the
-current identity, so every view — `show`, `week`, `estimate`, `settle`, `home`
+current identity, so every view — `week`, `week <id>`, `settle`, `home`
 — sees one history. `readLog` is untouched and single-file, which is what
 `verify` and `sync` read: one chain is one key's statement about one file, and
 neither may be handed two.
@@ -116,7 +116,7 @@ looked up at read time, never remembered on the record: `session.repo` says what
 the repo was called when the record was written, and that is a fact about the
 past which is never rewritten on disk.
 
-`debt` applies the same rule machine-wide, where it has no cwd to start from:
+`prime --debt` applies the same rule machine-wide, where it has no cwd to start from:
 it resolves each path-keyed log's own directory and merges only into a remote
 some other log is already keyed on — the resolution is the evidence that two
 logs are one repo, and with nothing to merge into it says nothing worth acting

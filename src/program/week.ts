@@ -1,4 +1,5 @@
-// `session week`, and the three renderings it can end in.
+// `session week`, the three renderings it can end in, and `session week <id>`,
+// one session of it.
 import type { Command } from "commander";
 import { parseClass } from "../classify.js";
 import {
@@ -10,13 +11,14 @@ import {
   writeWeekPage,
   type SessionFilter,
 } from "../commands/week.js";
+import { showSession } from "../commands/show.js";
 import { sweepFirst } from "../commands/sweep.js";
 import { parseOutcome } from "../outcome.js";
 import { loadChecked, loadRates } from "../pricing.js";
 import { renderWeek } from "../render/html.js";
 import { renderMarkdownWeek } from "../render/markdown.js";
 import type { Palette } from "../render/palette.js";
-import { formatWeek, terminalWidth } from "../render/terminal.js";
+import { formatBrief, formatSession, formatWeek, terminalWidth } from "../render/terminal.js";
 import { INTENT_SOURCES, parseIntentSource, storeHome } from "../store.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
@@ -30,6 +32,7 @@ export type WeekFlags = {
   class?: string | boolean;
   intent?: string;
   tokens?: boolean;
+  full?: boolean;
   md?: boolean;
   copy?: boolean;
   open?: boolean;
@@ -38,7 +41,12 @@ export type WeekFlags = {
 export function registerWeek(program: Command, options: ProgramOptions, palette: Palette): void {
   program
     .command("week")
-    .description("Summarize recent sessions, one row each")
+    .description("Summarize recent sessions, or one session by its id")
+    // One command for the window and for a row of it. The id a week row prints
+    // is the id this takes, so reading a row closer is the same verb as reading
+    // the rows. `last` is the most recent closed session — it cannot be the
+    // prefix of an id, since ids are hex.
+    .argument("[id]", "a session id or an unambiguous prefix of one, or last")
     .option("--days <n>", "how many days back to look", String(DEFAULT_DAYS))
     .option("--client <name>", "only sessions recorded for this client")
     .option("--project <name>", "only sessions recorded for this project")
@@ -51,10 +59,76 @@ export function registerWeek(program: Command, options: ProgramOptions, palette:
     // naming the ones that were remembered.
     .option("--intent <source>", `only sessions whose intent was ${INTENT_SOURCES.join(", ")}`)
     .option("--tokens", "show the raw token counts as well as the cost")
+    .option("--full", "with an id: the labelled layout, every path and every counter")
     .option("--md", "emit Markdown, for pasting into notes, Slack, Notion or Confluence")
     .option("--copy", "put that Markdown on the clipboard instead of printing it")
     .option("--open", "write the week as an HTML page and open it")
-    .action((flags: WeekFlags) => emitWeek(flags, options, palette));
+    .action((id: string | undefined, flags: WeekFlags, command: Command) =>
+      id === undefined
+        ? emitWeek(refuseSessionFlags(flags), options, palette)
+        : emitSession(id, refuseWindowFlags(flags, command), options, palette),
+    );
+}
+
+/** What `last` stands for: no id, which `showSession` reads as the last closed one. */
+export const LAST = "last";
+
+/**
+ * `--full` is a layout for one session, and the table has none to lay out.
+ * Refused rather than ignored, so the reader learns where it does apply.
+ */
+function refuseSessionFlags(flags: WeekFlags): WeekFlags {
+  if (flags.full) {
+    throw new Error("--full shows one session. Name it: session week <id> --full, or session week last --full.");
+  }
+  return flags;
+}
+
+/**
+ * The flags that cut or re-render a window mean nothing for one session, and
+ * silently dropping one would leave the reader believing it had applied.
+ * `--days` is only refused when it was typed: commander fills in its default.
+ */
+function refuseWindowFlags(flags: WeekFlags, command: Command): WeekFlags {
+  const windowOnly: (keyof WeekFlags)[] = ["client", "project", "outcome", "class", "intent", "md", "copy", "open"];
+  const typed = windowOnly.filter((name) => flags[name] !== undefined);
+  if (command.getOptionValueSource("days") === "cli") {
+    typed.unshift("days");
+  }
+  if (typed.length > 0) {
+    const named = typed.map((name) => `--${name}`).join(", ");
+    const [verb, them] = typed.length === 1 ? ["applies", "the flag"] : ["apply", "the flags"];
+    throw new Error(`${named} ${verb} to the week, not to one session. Drop the id, or drop ${them}.`);
+  }
+  return flags;
+}
+
+/**
+ * One session: three sentences and a bottom line, or with `--full` the
+ * labelled layout. `--tokens` asks for counters the brief view has no place
+ * for, so it implies `--full` rather than being quietly ignored.
+ */
+async function emitSession(
+  id: string,
+  flags: WeekFlags,
+  options: ProgramOptions,
+  palette: Palette,
+): Promise<void> {
+  // Silent unless it wrote something, and its facts are what this view
+  // resolves the outcome from — see `sweepFirst`.
+  const { notice, facts } = await sweepFirst(options);
+  const session = await showSession(id === LAST ? undefined : id, options, facts);
+  const view = {
+    rates: await loadRates(storeHome(options)),
+    // Only `--tokens` prints it: the brief line and the plain `--full` layout
+    // carry no room for a note about where prices come from.
+    ...(flags.tokens === true ? { checked: await loadChecked() } : {}),
+    tokens: flags.tokens,
+    width: terminalWidth(),
+  };
+  const full = flags.full === true || flags.tokens === true;
+  const render = full ? formatSession : formatBrief;
+  printLines([...notice, ...render(session, palette, view)]);
 }
 
 /** Reads the filtering flags off `week` into the shape the store filters on. */

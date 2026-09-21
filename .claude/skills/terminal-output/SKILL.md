@@ -17,11 +17,11 @@ skill under "A total nobody can work out" — load it before touching a figure.
 
 ## The order every view is in
 
-Three rules, and they hold in `show`, `week`, `scan` and the Markdown document
+Three rules, and they hold in `week <id>`, `week`, `scan` and the Markdown document
 alike. They are what the views are *for*, not a house style:
 
 1. **The first line says where the work went.** How many sessions, how many
-   landed on the default branch, how many did not. `show` says it as a
+   landed on the default branch, how many did not. `week <id>` says it as a
    sentence about one session; `week` and `scan` say it as counts.
 2. **Drift comes before cost.** What went outside what was declared is the
    thing this tool measures that nothing else does. Every column, row and
@@ -30,8 +30,8 @@ alike. They are what the views are *for*, not a house style:
    a heading, never the first figure, never bright, and never in a totals row
    as well — the Markdown table's cost cell in its totals row is deliberately
    empty, `week`'s source blocks carry no money at all, and the line under them
-   is the only total. Per session, cost stays in the detail views: `show`'s
-   figure line, `show --full`'s rows, the cost column of a table.
+   is the only total. Per session, cost stays in the detail views: `week <id>`'s
+   figure line, `week <id> --full`'s rows, the cost column of a table.
 
    `week`'s bottom line is the one figure there over the whole window rather
    than per source. Money is what a week is billed at, not a rate that moves
@@ -64,6 +64,17 @@ Tree coverage is always visible as proposed files over tracked files, with
 omitted by the cap: a short list without either would conceal why it stopped.
 Quote intent and path values so their boundaries remain visible. No confidence
 score, generated explanation or claim that the suggestion is validated.
+
+Under the suggestion, a `debt` line: this repo's owed files, quoted, at most
+`DEBT_SHOWN` with a pointer to `session prime --debt` for the rest, each with
+the number of sessions that drifted onto it. No money — the preview prints
+none. A history too short to judge says `not enough history` with the count,
+never `none`. It is a separate rule's answer printed beside the suggestion,
+not part of it: nothing in the debt line changes what `--start` accepts.
+
+`session prime --debt`, on its own, is the whole debt report (below, under
+Naming a repository). It takes no intent and no other flag, and refuses them
+by name rather than ignoring them.
 
 The preview ends by saying **No session started** and gives the next action:
 repeat with `--start` to accept, or add `--scope` to replace the suggested scope.
@@ -113,7 +124,7 @@ stripping the tags out of the inked render gives back the plain render exactly.
 `repoName` in `store/paths.ts` is the one place that knows `remote:` and
 `path:` are prefixes, beside the `repoIdentity` that puts them on. They are how
 the store tells two kinds of key apart and they are not how anybody refers to a
-repository, so **no view prints them** — `debt` used to, and a reader met
+repository, so **no view prints them** — the debt report used to, and a reader met
 `path:/private/tmp/…/scratchpad/demo` as a heading.
 
 A remote key loses the prefix and nothing else; it is already the name everyone
@@ -121,7 +132,7 @@ uses. A path key keeps its whole path, with the home directory shortened to
 `~`: two checkouts of one project share a last segment, and a report calling
 them both `tool` would be pooling two answers under one name.
 
-`debt` reads every log on the machine, and prints the repo the reader is
+`session prime --debt` reads every log on the machine, and prints the repo the reader is
 standing in **first**, marked `HERE`. Only that one moves. Sorting the rest by
 how much each owes would be a league table across repositories, which `debtOf`
 refuses to build — arriving at it by way of a sort in the view is the same
@@ -179,13 +190,21 @@ difference between `session weke` being answered and being shrugged at. Two
 edits is where a suggestion starts being wrong as often as it is right, and the
 reader tries it before they read the rest of the line.
 
-`session show` is three sentences and a bottom line: where the work ended
+**`week` takes an id.** `session week` is the window; `session week <id>` is
+one session of it, by the id or a prefix the row printed, and `session week
+last` is the most recent closed one — `last` cannot be a prefix, since ids are
+hex. What was `session show`. `--full` and `--tokens` apply to one session;
+`--full` on the window is refused, and so is every flag that only cuts or
+re-renders a window when an id is given, each named. `--days` is refused only
+when typed, since commander fills its default.
+
+`session week <id>` is three sentences and a bottom line: where the work ended
 up, what was asked for, what went outside what was declared, and then the
 session's id, the cost, the turns, and turns that produced nothing — that last one only where the diff can
 say, which is a session that changed nothing. Every view reads it through
 `emptyTurnsOf`, never off `cost.emptyTurns`; see the `measurement-rules` skill
 under "Which turns produced nothing". The brief line simply stops at two
-figures where the third is unknown, while `show --full` spells the absence out
+figures where the third is unknown, while `week <id> --full` spells the absence out
 as `not measured`: a mark in a line read at a glance is a puzzle about the
 tool, and the labelled view is where an absence belongs. `week`'s `no edits`
 column says `unknown` — a word, since the intent no longer competes for the
@@ -216,7 +235,7 @@ much is said at once. Two consequences worth keeping:
   most of them are in. A sentence naming twelve paths is one nobody finishes,
   and the number in front of it is what decides whether to run `--full`.
 - That rule is `summarizePaths` in `render/terminal/paths.ts`, and both views
-  that name files go through it — `show`'s sentence and `stop`'s `changed` and
+  that name files go through it — `week <id>`'s sentence and `stop`'s `changed` and
   `outside` lines. Each supplies its own separator, a comma for prose and two
   spaces for a column; neither owns the threshold. Two copies of it would be
   two chances for a reader to learn the rule in one view and meet a different
@@ -234,12 +253,12 @@ much is said at once. Two consequences worth keeping:
   disagree about where somebody's first sentence ended. A declaration is the
   promise the diff is held to, and a brief view showing half of it would be
   hiding the yardstick; it wraps instead, over as many lines as it needs.
-  `MAX_INTENT` is 500, so before this a captured prompt reached `show` as one
+  `MAX_INTENT` is 500, so before this a captured prompt reached `week <id>` as one
   sentence 568 columns wide, and the three sentences this view promises
   arrived as a wall.
 - Where something **was** left out, the brief view says so and says where the
   rest is: the frame reads `Your first prompt began "…"` rather than `was`, and
-  `REST_OF_IT` points at `session show --full`, which holds every word. A
+  `REST_OF_IT` points at `session week <id> --full`, which holds every word. A
   captured prompt that is already whole keeps `was` and gets no pointer —
   "began" in front of all of it claims there is more, which is the same lie in
   the other direction, and a pointer under a view that left nothing out
@@ -290,12 +309,12 @@ new colour role. Never describe a primed intent as generated or not composed
 by the developer.
 
 Week, Markdown and HTML use the same markers. Their legends name only sources
-actually represented by rows, in `INTENT_SOURCES` order. Estimate and survival
-have a different contract: all three source blocks or lines print, even when
-empty, and their samples stay separate.
+actually represented by rows, in `INTENT_SOURCES` order. Survival and `week`'s
+blocks have a different contract: all three source blocks or lines print, even
+when empty, and their samples stay separate.
 
 The brief view labels Prime's scope assistance while keeping the intent whole.
-`show --full` displays the original `proposed` scope alongside the accepted
+`week <id> --full` displays the original `proposed` scope alongside the accepted
 `declared` scope; an empty original proposal reads `no suggestion`. Never
 replace one list with the other or use the proposal to decide drift. The
 accepted scope is the yardstick; the original suggestion is the record of
@@ -308,10 +327,10 @@ total.** They are different evidence: Prime can lower drift mechanically by
 putting historical misses into the accepted scope, so a figure over all three
 moves whenever their mix moves and describes none of them. The same rule the
 HTML page follows, and the measurement rules behind it are in the
-`measurement-rules` skill under Estimate.
+`measurement-rules` skill under Intent source.
 
 A source holding nothing **still prints its line** — `primed · no sessions` —
-for the reason `estimate` prints an empty block: dropping the empty arm leaves
+because dropping the empty arm leaves
 the others reading as the whole answer, which is the pooled reading the split
 exists to prevent. `blocks` walks `INTENT_SOURCES`, so a source added later is
 printed by this view without anyone remembering to.
@@ -329,7 +348,7 @@ The intent is **not shortened for anybody who composed their own** — a
 declaration is the promise the diff is held to, and a primed intent is the
 developer's words as well, so both wrap over as many lines as they need.
 Only a captured prompt is cut, by `headOf`, the one rule for where somebody's
-first sentence ends, shared with `show` and the pull request body.
+first sentence ends, shared with `week <id>` and the pull request body.
 
 Figures, left to right: `outside`, `turns`, `tokens` (`--tokens` only),
 `no edits`, `cost`. Right-aligned so a column can be scanned, and the headings
@@ -387,9 +406,9 @@ says.
 
 ## The id
 
-`pr [id]`, `show [id]` and `mark <id>` all take one, and every view that prints
+`pr [id]`, `week [id]` and `mark <id>` all take one, and every view that prints
 one prints the same eight characters, through `shortId` — `week`'s first
-column, `show`'s bottom line and its `id` row, `settle`, `mark`, `survival
+column, `week <id>`'s bottom line and its `id` row, `settle`, `mark`, `survival
 --check` and `verify`. One width is the whole point: a prefix read off a week
 row has to be a prefix those commands answer to, and until the column existed
 the only way to write a pull request body for anything but the last session was
@@ -400,7 +419,7 @@ information, not a preference.
 
 Every money figure is quoted at a rate somebody wrote down on a day.
 `pricesChecked` is the one line that says which day: dim, under the figure it
-dates, in `week`'s footer and at the foot of `show --tokens`. It states the
+dates, in `week`'s footer and at the foot of `week <id> --tokens`. It states the
 date the bundled `rates.json` carries and where to override it, and stops
 there — no threshold, no "these may be stale", no colour. Whether a fortnight
 is stale depends on whether a vendor moved a price, which this tool cannot
@@ -474,14 +493,14 @@ money last, unemphasised, on one line.
 - **Primed and captured** intents are labelled in the summary line itself,
   not in a note under it, so the distinction survives into a `--template`
   that asked only for `{{intent}}`. `INTENT_NOTE` is the wording, shared with
-  `show`: primed says the scope was reviewed with Prime, captured says the
+  `week <id>`: primed says the scope was reviewed with Prime, captured says the
   words came from the first prompt.
 - A **captured** intent is also shortened to its first sentence or first line,
   whichever ends sooner, with the whole text folded into a `<details>` block
   under it. **Declared and primed intents are never shortened and never get
   the block** — both keep the developer's words in full. Nothing is dropped and no model
   summarises anything: `headOf` in `render/terminal/intent.ts` is the only
-  place where the head of a prompt is decided, shared with `show` and the bare
+  place where the head of a prompt is decided, shared with `week <id>` and the bare
   screen, and `summarize` is the only place this document spends it. The block
   is fenced, with the fence longer than any run of backticks in the prompt, so
   a `</details>` or a code block somebody pasted cannot break out of it — the
@@ -490,7 +509,7 @@ money last, unemphasised, on one line.
   no block: the author places it.
 - The drift section is **omitted entirely** when nothing went outside, and also
   when no scope was declared — whatever `drift` holds. Same rule `driftOf` and
-  `show` follow: without a declaration there is no distance to measure.
+  `week <id>` follow: without a declaration there is no distance to measure.
 - File lists are **not** capped and must not go through `summarizePaths`: every
   path prints, one per line, grouped by directory and sorted inside each group.
   That cap is for a terminal line, and there is no line here — the file list is

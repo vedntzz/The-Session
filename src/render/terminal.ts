@@ -1,6 +1,6 @@
 // The terminal views, one module per view under `terminal/`.
 //
-// This file is the seam the rest of the tool imports through: `show`, `week`,
+// This file is the seam the rest of the tool imports through: `week <id>`, `week`,
 // `scan`, the bare screen and `help all` are separate readers with separate
 // layouts, and the only thing they share is the text helpers in `terminal/`.
 export {

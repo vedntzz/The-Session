@@ -29,7 +29,7 @@ export const INTENT_MARKER: Record<IntentSource, string> = {
 };
 
 /**
- * What `show` and `pr` say about where an intent came from, where that is
+ * What `week <id>` and `pr` say about where an intent came from, where that is
  * worth saying. A declaration needs no note: it is the case the rest are
  * marked against.
  */
@@ -91,7 +91,7 @@ export function markedIntent(session: Pick<Session, "intent" | "endedAt" | "inte
   return marker === "" ? intent : `${marker} ${intent}`;
 }
 
-/** What `show` says instead of a scope, for a session nobody declared one for. */
+/** What `week <id>` says instead of a scope, for a session nobody declared one for. */
 export const NO_SCOPE = "no scope — nothing was declared to drift from";
 
 /** Where a reader who wants drift is sent. */
@@ -162,8 +162,8 @@ function lineEnd(text: string): number {
  * Shortens a prompt to the one line a view has room for.
  *
  * The one rule, shared. `render/pr.ts` spends it on a summary line with the
- * whole prompt folded into a block underneath; `show` and the bare screen
- * spend it on a sentence with `session show --full` underneath. Two copies of
+ * whole prompt folded into a block underneath; `week <id>` and the bare screen
+ * spend it on a sentence with `session week <id> --full` underneath. Two copies of
  * it would be two chances for the pull request body and the terminal to
  * disagree about where somebody's first sentence ended.
  *

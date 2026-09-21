@@ -19,7 +19,7 @@ import { checkSurvival } from "./survival.js";
  *
  * So they run themselves: once a day per repository, off the back of whatever
  * the developer was already doing — the editor hook that closes a session, or
- * a `week`, `show` or bare `session` typed for another reason. Neither command
+ * a `week`, `week <id>` or bare `session` typed for another reason. Neither command
  * changes; this runs them.
  *
  * Three rules make that tolerable rather than intrusive:

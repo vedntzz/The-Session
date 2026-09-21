@@ -1,10 +1,10 @@
 // `session survival`: how much of what merged is still there.
-import { MIN_SESSIONS } from "../../estimate/figures.js";
 import type { Checked, CheckResult } from "../../commands/survival.js";
 import {
   CHECK_GRACE_DAYS,
   countFates,
   meetsBenchmark,
+  MIN_SESSIONS,
   SURVIVAL_BENCHMARK,
   type SurvivalReport,
   type SurvivalSample,
@@ -23,8 +23,7 @@ import { figure, INDENT, padRight, percent, plural, shortId, width } from "./tex
  * and there is no money in this view at all, because none of these questions
  * is about money.
  *
- * Declared and captured are two lines, never a total. Same rule as `estimate`,
- * for the same reason: a commitment made before the work and a transcript of a
+ * Declared, primed and captured are separate lines, never a total. A commitment made before the work and a transcript of a
  * prompt are different evidence, and a pooled figure describes neither while
  * moving whenever the mix moves.
  *
@@ -88,8 +87,7 @@ function windowLines(report: WindowReport, palette: Palette): string[] {
  * A group's headline figure: the rate, or why there is not one.
  *
  * A sample under the floor says how many sessions it has and stops. A rate
- * over two sessions is a number that looks like knowledge and is not — the
- * same floor `estimate` prints its sample under, and the same reason.
+ * over two sessions is a number that looks like knowledge and is not.
  */
 function rateText(sample: SurvivalSample, palette: Palette): string {
   const { figures } = sample;

@@ -1,4 +1,4 @@
-// `session show --full`: the labelled layout.
+// `session week <id> --full`: the labelled layout.
 import { classOf } from "../../classify.js";
 import { attributionEntries } from "../../config.js";
 import {
@@ -38,7 +38,7 @@ import {
 } from "./text.js";
 
 /**
- * The session as `session show --full` prints it.
+ * The session as `session week <id> --full` prints it.
  *
  * `outcome` is the first labelled row: where the work ended up is the question
  * the reader came with, and it used to be the last thing they found. The
@@ -86,7 +86,7 @@ export function formatSession(
 /**
  * The id, in the footer with the rest of the bookkeeping.
  *
- * It is what `session pr`, `session show` and `session mark` take, and until
+ * It is what `session pr`, `session week <id>` and `session mark` take, and until
  * this row existed no view printed one — the id was in the JSONL and nowhere
  * else. Eight characters, the width `settle` and `week` print, which is enough
  * of a prefix for any of those commands to find the session again.
@@ -102,7 +102,7 @@ function idLine(session: Session, palette: Palette): string {
 /**
  * The intent, with the times it ran between out in the gutter.
  *
- * **This is the one view that holds a whole prompt**, and it is where `show`
+ * **This is the one view that holds a whole prompt**, and it is where `week <id>`
  * and the bare screen send the reader who wanted the rest of one they
  * shortened. So nothing here is ever cut — a captured prompt runs to
  * `MAX_INTENT` and prints to `MAX_INTENT` — but it is flattened and wrapped,

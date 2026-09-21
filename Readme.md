@@ -3,7 +3,7 @@
 **A black box recorder for AI coding sessions.** You declare what you are about to do; it records what the agent actually changed, how far that went outside what you declared, and whether any of it landed on the default branch.
 
 ```
-$ session show
+$ session week last
 
   The work landed on the default branch.
   You asked for "add rate limiting to /orders".
@@ -49,7 +49,7 @@ declared.
 
 Without a declaration there is one entry in the ledger — what the machine produced — and no way to tell whether it was what anyone wanted. With one there are two, and the gap between them becomes visible. That gap is where nearly every agent bug lives, which is why `intent` is written once at `session start` and can never be edited afterwards.
 
-One session's gap is an anecdote. **Intent debt** is the accumulated gap between what was planned and what was touched, counted per file: the paths work keeps landing in that nobody ever declared. One file drifting once is an accident; the same file, session after session, with nobody ever writing it into a scope, is a fact about the repository rather than about any of those sessions. `session debt` is what lists it.
+One session's gap is an anecdote. **Intent debt** is the accumulated gap between what was planned and what was touched, counted per file: the paths work keeps landing in that nobody ever declared. One file drifting once is an accident; the same file, session after session, with nobody ever writing it into a scope, is a fact about the repository rather than about any of those sessions. `session prime` prints this repo's share of it under every suggestion, and `session prime --debt` lists all of it.
 
 ## Commands
 
@@ -75,14 +75,13 @@ recorded. Thin evidence produces no suggestion. [Prime workflow and limits](docs
 |---|---|
 | `session scan` | What the sessions already on this machine did, last 30 days. No setup, and no record written. `--open` writes the page instead of printing it. |
 | `session start "<intent>"` | Open a session by hand. Records HEAD and the scope you declare with `--scope`. |
-| `session show` | The last session: where it landed, what was asked, what drifted. `--full` for every path and counter. |
 | `session week` | The last 7 days, one row each: where the work went and what drifted. `--md` writes it for Slack, Notion or a meeting. |
-| `session estimate "<intent>"` | What sessions like this one have cost before, from your own history. |
-| `session debt` | Files that keep drifting outside the plan and were never declared since, per repo. |
+| `session week <id>` | One session: where it landed, what was asked, what drifted. `last` for the most recent; `--full` for every path and counter. |
+| `session prime --debt` | Files that keep drifting outside the plan and were never declared since, per repo. |
 | `session survival` | How much of what merged is still there at 14 and 30 days. `--check` records the checks that are due. |
 | `session pr [id]` | A pull request body, written from the record. Pipes into `gh pr create --body-file -`; `--copy`, `--out <path>`, `--template <path>`. |
 
-`session settle` and the due survival checks also run themselves — once a day per repo, off the back of the editor hook or the next `week`, `show` or bare `session` you type. Silent unless something was written, and both commands still work by hand.
+`session settle` and the due survival checks also run themselves — once a day per repo, off the back of the editor hook or the next `week` or bare `session` you type. Silent unless something was written, and both commands still work by hand.
 
 `session help all` lists the other twelve — `stop`, `settle`, `mark`, `verify`, `push`, `pull`, `peers`, `config`, `key`, `hook`, `intent`, `help`.
 

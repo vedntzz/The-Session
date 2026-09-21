@@ -153,7 +153,7 @@ export async function stopIfOpen(options: StopOptions = {}): Promise<Session | u
  * The tokens, and the model where no rate covers it.
  *
  * `stop` reports tokens rather than money — it is the line printed the moment
- * an agent finishes, and the money is what `show` and `week` are for. What it
+ * an agent finishes, and the money is what `week` and `week <id>` are for. What it
  * owes the reader is the model, in the same words `week` and `scan` use, so a
  * session that turns up unpriced in the week is recognisable here.
  *
@@ -170,7 +170,7 @@ function tokensSpent(cost: SessionCost, rates?: RateTable): string {
 }
 
 export function formatStopped(session: Session, rates?: RateTable): string[] {
-  // Capped the same way `show` caps its sentence, by the same function: a
+  // Capped the same way `week <id>` caps its sentence, by the same function: a
   // reader who learned the rule in one view should not meet a different
   // answer in the other. Two spaces, because this is a column and not prose.
   const changed =

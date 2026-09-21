@@ -76,7 +76,7 @@ No. A migration might need 30 files. Session can report that some were outside t
 | Capture transcript usage | Claude Code adapter implemented |
 | Add other coding tools | Adapter interface exists; additional adapters require implementation |
 | Suggest scope before work | Prime, using deterministic history rules |
-| Weekly, debt, estimate, survival reports | Implemented, subject to measurement limits |
+| Weekly, debt, survival reports | Implemented, subject to measurement limits |
 | Signed logs and sharing over Git | Implemented |
 | Live terminal control room | Proposed; the conversation mockup is not CLI code |
 | Pause an out-of-scope edit | Proposed; current hooks record lifecycle events |
@@ -160,7 +160,7 @@ Use this one example throughout the guide:
 session start "Fix login timeout" --scope src/auth/ test/auth/
 # The developer and agent do their work.
 session stop
-session show --full
+session week last --full
 ```
 
 These commands run inside a Git repository with at least one commit.
@@ -533,23 +533,13 @@ The calculation indexes recorded drift occurrences; do not describe it as a full
 
 Associated spend is the cost of the sessions involving that path, not money attributed to the path itself. Two paths can share those sessions. Adding all path rows would double-count overlapping spend.
 
+`session prime` prints the current repository's owed paths under its suggestion, without money; `session prime --debt` prints the full report for every repository on the machine.
+
 **Source:** [debt.ts](../src/debt.ts).
 
-### Estimate: “What happened on roughly similar work?”
+### Estimate: removed
 
-The classifier is a label sorter. Paths match ordered patterns such as tests, API, or UI. A session's dominant path category wins, with deterministic tie-breaking. Before work, an explicit class or scope can guide the estimate; otherwise intent keywords supply a weaker signal.
-
-Estimate groups comparable closed sessions by class and intent source. Empty sessions are reported separately. A group needs at least five matched nonempty sessions for figures; priced coverage still matters within that group.
-
-**Median:** sort the bills and take the middle; average the two middle values when needed.
-
-**p90:** use the nearest-rank value at 90%. With ten sorted bills, this selects the ninth. It describes past data, not a guarantee about your next bill.
-
-**First-look merge rate:** use the first recorded terminal outcome when available. Open outcomes do not become failures just to fill a denominator.
-
-Declared, captured, and primed groups stay separate. Different work selection can explain differences between them; the report does not establish that declaring intent causes better outcomes.
-
-**Source:** [estimate figures](../src/estimate/figures.ts), [classify.ts](../src/classify.ts).
+`session estimate` was cut on 21 September 2026. The figures it restated — cost, drift and first-look outcome of past sessions by class and intent source — are still on the record, and `week --class` still files each session under a class read off its paths. See [the v1 boundary](decisions.md#the-v1-boundary).
 
 ### Survival: “Was the recorded content still there when we checked?”
 
@@ -602,11 +592,10 @@ Hash checks on peer data are not signature authentication without the appropriat
 | Suggest scope | `prime` | `prime.ts`, `commands/prime.ts` |
 | Capture first passive prompt | `intent --from-prompt` | `commands/intent.ts` |
 | Finish recording | `stop` | `commands/stop.ts` |
-| Inspect a session | `show --full` | `commands/show.ts` |
+| Inspect a session | `week <id> --full` | `commands/show.ts` |
 | Summarise recent work | `week` | `commands/week.ts` |
 | Examine existing transcripts | `scan` | `commands/scan.ts`, `scan.ts` |
-| Report planning misses | `debt` | `debt.ts` |
-| Compare historical work | `estimate` | `estimate/figures.ts` |
+| Report planning misses | `prime --debt` | `debt.ts` |
 | Record destinations | `settle`, `mark` | `commands/settle.ts` |
 | Check later persistence | `survival --check` | `commands/survival.ts` |
 | Produce a PR description | `pr` | `commands/pr.ts`, `render/pr.ts` |

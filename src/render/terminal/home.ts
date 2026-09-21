@@ -81,7 +81,7 @@ interface HomeText {
  * with an ellipsis to say so. This is a state screen: one sentence, and a
  * paragraph of somebody's prompt is not one sentence. There is no `--full` to
  * send them to, because the session has not finished; `session stop` is right
- * underneath and the whole of it is in `show` after that.
+ * underneath and the whole of it is in `week <id>` after that.
  */
 function whileRecording(running: Session): HomeText {
   const since = clock(running.startedAt);
@@ -112,7 +112,7 @@ function afterLastSession(last: Session, rates: RateTable): HomeText {
   return {
     sentence: `Nothing is recording. The last session ended${ended}${cost}.`,
     suggestions: [
-      { command: "session show", why: "what that session asked for and changed" },
+      { command: "session week last", why: "what that session asked for and changed" },
       { command: 'session start "…"', why: "declare the next one before the agent runs" },
     ],
   };
