@@ -90,5 +90,5 @@ There is no generated summary and no truncation of retained intents.
 The export omits costs, transcripts, end-state blobs, observations, survival,
 attribution, and chain signatures. It is a navigation/context artifact, not a
 backup, synchronization format, or independent proof of integrity. Keep the
-original signed log. Use `session show <id> --full` for additional detail and
+original signed log. Use `session week <id> --full` for additional detail and
 `session verify` to verify the original records.

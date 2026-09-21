@@ -28,9 +28,9 @@ const BLOCKS: ReadonlyArray<{ what: string; source: string; extract: (root: stri
     extract: extracts.sessionInterface,
   },
   {
-    what: "what 1.0 means",
+    what: "the v1 boundary",
     source: "docs/decisions.md",
-    extract: extracts.whatOneZeroMeans,
+    extract: extracts.v1Boundary,
   },
   {
     what: "the measurement rules",

@@ -137,7 +137,7 @@ describe("session", () => {
     // that take an id accept, without opening the JSONL to find a longer one.
     const [recorded] = await readSessions(store);
     expect((recorded as Session).id.startsWith(id)).toBe(true);
-    expect((await run("show", id)).join("\n")).toContain("the first thing");
+    expect((await run("week", id)).join("\n")).toContain("the first thing");
   });
 
   it("prints the same id in show, so the last session can be handed on", async () => {
@@ -147,8 +147,8 @@ describe("session", () => {
     const [recorded] = await readSessions(store);
     const short = (recorded as Session).id.slice(0, 8);
 
-    expect((await run("show")).at(-1)).toContain(short);
-    expect((await run("show", "--full")).join("\n")).toContain(`id          ${short}`);
+    expect((await run("week", "last")).at(-1)).toContain(short);
+    expect((await run("week", "last", "--full")).join("\n")).toContain(`id          ${short}`);
   });
 
   it("keeps the date out of week --md, which is a document about a week", async () => {
@@ -225,7 +225,7 @@ describe("session", () => {
     await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
     await run("stop");
 
-    const lines = await run("show", "--full");
+    const lines = await run("week", "last", "--full");
 
     expect(lines[1]).toMatch(/^ {2}touch a\.txt {2,}\d{2}:\d{2} → \d{2}:\d{2}$/);
     expect(lines).toContain("  declared    a.txt");
@@ -238,7 +238,7 @@ describe("session", () => {
     await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
     await run("stop");
 
-    const lines = await run("show");
+    const lines = await run("week", "last");
 
     expect(lines[1]).toBe("  The work has not landed on the default branch yet.");
     expect(lines[2]).toBe('  You asked for "touch a.txt".');
@@ -254,7 +254,7 @@ describe("session", () => {
     await writeFile(path.join(store.cwd as string, "undeclared.txt"), "surprise", "utf8");
     await run("stop");
 
-    const lines = await run("show");
+    const lines = await run("week", "last");
 
     expect(lines[3]).toBe("  1 file changed outside what you declared: undeclared.txt.");
   });
@@ -265,7 +265,7 @@ describe("session", () => {
     await writeFile(path.join(store.cwd as string, "undeclared.txt"), "surprise", "utf8");
     await run("stop");
 
-    const outside = (await run("show", "--full")).find((line) => line.includes("outside")) as string;
+    const outside = (await run("week", "last", "--full")).find((line) => line.includes("outside")) as string;
 
     expect(outside).toContain("! undeclared.txt");
     expect(outside).toContain("← you did not declare this");
@@ -278,14 +278,14 @@ describe("session", () => {
     await run("stop");
 
     const [first] = await readSessions(store);
-    const lines = await run("show", (first as Session).id);
+    const lines = await run("week", (first as Session).id);
 
     expect(lines[2]).toContain("the first thing");
     expect(lines[2]).toBe('  You asked for "the first thing".');
   });
 
   it("show surfaces a refusal when no session has closed", async () => {
-    await expect(run("show")).rejects.toThrow(/No closed sessions yet/);
+    await expect(run("week", "last")).rejects.toThrow(/No closed sessions yet/);
   });
 
   it("start prints a two-line confirmation", async () => {
@@ -378,46 +378,27 @@ describe("session", () => {
     expect(process.exitCode).toBeUndefined();
   });
 
+  it("week <id> refuses the flags that only cut or re-render a window", async () => {
+    await run("start", "the thing");
+    await run("stop");
+    await expect(run("week", "last", "--md")).rejects.toThrow("--md applies to the week, not to one session");
+    await expect(run("week", "last", "--days", "3", "--intent", "declared")).rejects.toThrow(
+      "--days, --intent apply to the week",
+    );
+    await expect(run("week", "--full")).rejects.toThrow("--full shows one session");
+  });
+
+  it("week last is the last closed session, and an id is that session", async () => {
+    await run("start", "the only thing");
+    await run("stop");
+    const [only] = await readSessions(store);
+    const byId = await run("week", (only as Session).id.slice(0, 8));
+    expect(await run("week", "last")).toEqual(byId);
+    expect(byId.join("\n")).toContain("the only thing");
+  });
+
   it("stop surfaces a refusal as a rejection when nothing is open", async () => {
     await expect(run("stop")).rejects.toThrow(/No session is open/);
-  });
-
-  it("estimate reads the class off the intent and says so", async () => {
-    const lines = await run("estimate", "rate limit the /orders endpoint");
-
-    expect(lines[1]).toBe("  estimate  rate limit the /orders endpoint");
-    expect(lines[2]).toBe("  class     api         from the intent");
-    // Both blocks, both empty. Neither is dropped: a missing block would leave
-    // the other reading as the whole answer.
-    expect(lines).toContain("  declared  none — nothing like this was declared before it ran");
-    expect(lines).toContain("  captured  none — the hook recorded nothing like this");
-  });
-
-  it("estimate prefers --scope over the words of the intent", async () => {
-    const lines = await run("estimate", "clean up the orders table code", "--scope", "src/ui/");
-
-    expect(lines[2]).toBe("  class     ui          from --scope");
-  });
-
-  it("estimate says nothing numeric until there are enough sessions", async () => {
-    await run("start", "touch a.txt", "--scope", "a.txt");
-    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
-    await run("stop");
-
-    // a.txt is docs by the path rules, which is why --class says so here.
-    const lines = await run("estimate", "touch it again", "--class", "docs");
-
-    expect(lines).toContain("  declared  1 session   intent written at session start");
-    expect(lines.join("\n")).toContain("fewer than 5 sessions");
-    expect(lines.join("\n")).not.toContain("median");
-  });
-
-  it("estimate refuses a --since it cannot read", async () => {
-    await expect(run("estimate", "x", "--since", "last tuesday")).rejects.toThrow(/--since takes/);
-  });
-
-  it("estimate refuses a class that is not one", async () => {
-    await expect(run("estimate", "x", "--class", "frontend")).rejects.toThrow(/not a class/);
   });
 
   it("push refuses when the repo has no origin to publish to", async () => {
@@ -466,7 +447,7 @@ describe("session", () => {
     expect(lines[1]).toMatch(/^ {2}Nothing is recording\. The last session ended at \d{2}:\d{2}/);
     const said = lines.filter((line) => line.trim() !== "");
     expect(said).toHaveLength(3);
-    expect(said[1]).toContain("session show");
+    expect(said[1]).toContain("session week last");
     expect(said[2]).toContain('session start "…"');
   });
 
@@ -477,6 +458,19 @@ describe("session", () => {
     await expect(run("wek")).rejects.toThrow(
       "No command wek. Did you mean session week? Run session help all for every command.",
     );
+  });
+
+  it.each([
+    ["show", [], "No command show — use week <id>. session week last is the most recent closed session."],
+    ["show", ["3f2a"], "No command show — use week <id>."],
+    ["debt", [], "No command debt — use prime --debt."],
+    ["estimate", ["rate limit /orders"], "No command estimate — removed; see week."],
+  ])("says where retired %s went, whatever follows it", async (name, rest, said) => {
+    await expect(run(name, ...rest)).rejects.toThrow(said);
+  });
+
+  it("answers a mistyped command with arguments after it, not with an arity error", async () => {
+    await expect(run("wek", "3f2a")).rejects.toThrow("No command wek. Did you mean session week?");
   });
 
   it("offers the nearest command for the mistakes fingers actually make", () => {
@@ -520,7 +514,7 @@ describe("session", () => {
       .filter((line) => line.startsWith("  "))
       .map((line) => line.trim().split(/ {2,}/)[0]);
 
-    expect(commands).toEqual(["session", "start [options] [intent]", "week [options]", "help all"]);
+    expect(commands).toEqual(["session", "start [options] [intent]", "week [options] [id]", "help all"]);
   });
 
   it("--help says where the rest of the commands went", () => {
@@ -585,7 +579,7 @@ describe("session", () => {
 
     // Every top-level command, and the subcommands under the three that have
     // them. Nothing is hidden here; that is the whole job of this command.
-    for (const name of ["start", "stop", "show", "estimate", "verify", "settle", "push", "peers"]) {
+    for (const name of ["start", "stop", "week", "prime", "verify", "settle", "push", "peers"]) {
       expect(listed).toContain(name);
     }
     expect(listed).toContain("config set");
@@ -700,7 +694,7 @@ describe("session", () => {
     await landASession();
     await nextDay();
 
-    expect((await run("show"))[0]).toBe("  recorded 1 outcome");
+    expect((await run("week", "last"))[0]).toBe("  recorded 1 outcome");
 
     // Already swept today, so the bare screen says nothing about it.
     expect((await run()).join("\n")).not.toContain("recorded");
@@ -728,8 +722,6 @@ describe("session", () => {
       .sort();
     expect(names).toEqual([
       "config",
-      "debt",
-      "estimate",
       "help",
       "hook",
       "intent",
@@ -743,7 +735,6 @@ describe("session", () => {
       "push",
       "scan",
       "settle",
-      "show",
       "start",
       "stop",
       "survival",
@@ -1144,7 +1135,7 @@ describe("session, priced", () => {
 
   it("show --full leads with the dollar figure and keeps tokens back", async () => {
     await spent();
-    const lines = await run("show", "--full");
+    const lines = await run("week", "last", "--full");
 
     expect(lines.find((line) => line.includes("cost"))).toContain("$15.00");
     // This session changed a file. What that cost is known; which of its turns
@@ -1156,7 +1147,7 @@ describe("session, priced", () => {
 
   it("show --full prices the waste when the session produced nothing at all", async () => {
     await spentOnNothing();
-    const lines = await run("show", "--full");
+    const lines = await run("week", "last", "--full");
 
     // Every turn was empty, so every dollar was spent on one. A measurement,
     // and the whole of the session's own total rather than a share of it.
@@ -1166,14 +1157,14 @@ describe("session, priced", () => {
 
   it("show puts the cost and the turns on one line for a session that wrote files", async () => {
     await spent();
-    const lines = await run("show");
+    const lines = await run("week", "last");
 
     expect(lines.at(-1)).toMatch(/^ {2}[0-9a-f]{8} · \$15\.00 · \d+ turns?$/);
   });
 
   it("show adds the empty turns to that line when the diff can say", async () => {
     await spentOnNothing();
-    const lines = await run("show");
+    const lines = await run("week", "last");
 
     expect(lines.at(-1)).toMatch(
       /^ {2}[0-9a-f]{8} · \$15\.00 · \d+ turns? · \d+ produced nothing$/,
@@ -1182,7 +1173,7 @@ describe("session, priced", () => {
 
   it("show --tokens spells the counters out as well, and implies --full", async () => {
     await spent();
-    const lines = await run("show", "--tokens");
+    const lines = await run("week", "last", "--tokens");
 
     expect(lines.find((line) => line.includes("tokens"))).toContain("1,000,000 in");
     expect(lines.find((line) => line.includes("cost"))).toContain("$15.00");
@@ -1457,7 +1448,7 @@ describe("passive capture, end to end", () => {
     await prompt("why does /orders 500");
     await run("stop", "--if-open");
 
-    const lines = await run("show", "--full");
+    const lines = await run("week", "last", "--full");
 
     expect(lines.some((text) => text.includes("captured from the first prompt"))).toBe(true);
     expect(lines.some((text) => text.includes("makes drift visible"))).toBe(true);
@@ -1472,7 +1463,7 @@ describe("passive capture, end to end", () => {
     await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
     await run("stop", "--if-open");
 
-    const lines = await run("show");
+    const lines = await run("week", "last");
 
     expect(lines[2]).toBe(
       '  Your first prompt was "why does /orders 500", and you declared nothing up front.',
@@ -1517,26 +1508,6 @@ describe("passive capture, end to end", () => {
     await expect(run("week", "--intent", "hook")).rejects.toThrow(
       /Use one of: declared, primed, captured/,
     );
-  });
-
-  it("estimate reports the two apart rather than pooling them", async () => {
-    await run("start", "touch a.txt", "--scope", "a.txt");
-    await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
-    await run("stop");
-
-    // A different file, because a.txt is still dirty from the session above and
-    // would land in this one's baseline rather than its reality.
-    await run("start", "--passive");
-    await prompt("touch b.txt as well");
-    await writeFile(path.join(store.cwd as string, "b.txt"), "written", "utf8");
-    await run("stop", "--if-open");
-
-    // a.txt is docs by the path rules, so both sessions land in the same class
-    // — which is exactly where pooling them would have gone unnoticed.
-    const lines = await run("estimate", "touch it again", "--class", "docs");
-
-    expect(lines).toContain("  declared  1 session   intent written at session start");
-    expect(lines).toContain("  captured  1 session   intent taken from the first prompt");
   });
 
   it("start with neither an intent nor --passive still says what to type", async () => {

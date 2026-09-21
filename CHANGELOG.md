@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Three commands cut, one boundary drawn. See
+[The v1 boundary](docs/decisions.md#the-v1-boundary).
+
+### Removed
+
+- **`session estimate` is gone**, with `INTENT_RULES` and `classifyIntent`,
+  the one place the tool read a class off the words of an intent. Everything
+  it restated is still on the record; `week --class` still classifies by
+  path. Breaking for anything that called it.
+- **`session show` is gone as a command.** It is `session week <id>` now —
+  see Changed. Breaking for scripts that called `session show`.
+- **`session debt` is gone as a command.** It is `session prime --debt` now —
+  see Changed.
+
+### Changed
+
+- **`session week <id>` shows one session**, by id or unambiguous prefix, the
+  view `show` printed. `session week last` is the most recent closed session.
+  `--full` and `--tokens` behave as they did. With an id, the flags that only
+  cut or re-render a window (`--days`, `--md`, `--intent` and the rest) are
+  refused by name; `--full` without an id is refused too. Every pointer the
+  tool printed to `session show` — the bare screen, a shortened prompt's
+  "the whole of it", the knowledge export — now names `session week`.
+- **`session prime` shows this repo's debt under its suggestion**: the files
+  that keep drifting outside scope and were never declared since, at most
+  five, with session counts and no money. It is printed beside the proposal
+  and never recorded in it. `session prime --debt`, on its own, prints the
+  full report `session debt` printed, every repo on the machine. `prime`'s
+  intent is now optional only so that `--debt` can stand alone; without
+  either it says what to type.
+- **The freeze is retired.** `docs/decisions.md` replaces "What 1.0 means"
+  with the v1 boundary, and invariant 3 in `CLAUDE.md` now says models may
+  propose — a scope, an agreement — for the developer to accept, and never
+  judge. Nothing in this release calls a model.
+
 ## [2.0.0] — 2026-09-17
 
 Prime has been reopened explicitly after the initial refinement freeze.
@@ -82,7 +117,7 @@ there clearer. Two exceptions are named in advance, a GitHub Action that posts
 the record on a pull request and a team view over the peer records `pull`
 already fetches; neither is a new measurement. The reasoning, and why a freeze
 written down is worth more than one that is remembered, is in
-[What 1.0 means](docs/decisions.md#what-10-means).
+[The freeze, as it was](docs/decisions.md#the-freeze-as-it-was).
 
 ### Removed
 

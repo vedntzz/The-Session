@@ -54,9 +54,9 @@ export const layout = (root) =>
 export const sessionInterface = (root) =>
   declaration(read(root, "src/store/record.ts"), "export interface Session {", "interface Session");
 
-/** The surface freeze. */
-export const whatOneZeroMeans = (root) =>
-  between(read(root, "docs/decisions.md"), "## What 1.0 means\n", "\n## Rejected", "what 1.0 means");
+/** The v1 boundary, and the freeze it retired. */
+export const v1Boundary = (root) =>
+  between(read(root, "docs/decisions.md"), "## The v1 boundary\n", "\n## Rejected", "the v1 boundary");
 
 /**
  * The measurement rules, with the two transforms `context.md` documents:
@@ -86,6 +86,6 @@ export const extracts = {
   invariants,
   layout,
   sessionInterface,
-  whatOneZeroMeans,
+  v1Boundary,
   measurementRules,
 };

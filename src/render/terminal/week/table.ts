@@ -244,7 +244,7 @@ export function headingRow(widths: Widths, show: Columns): string {
  * A declaration is the promise the diff is held to and a primed intent is the
  * developer's words as well, so both print in full and wrap. Only a captured
  * prompt is shortened, by `headOf` — the one rule for where somebody's first
- * sentence ends, shared with `show` and the pull request body.
+ * sentence ends, shared with `week <id>` and the pull request body.
  */
 export function intentText(session: Session): string {
   if (inOwnWords(session)) {

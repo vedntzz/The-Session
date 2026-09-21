@@ -1,5 +1,5 @@
 // How a line names the files it is about. One rule, because two views print
-// this and a reader who learned it in `show` should not meet a different
+// this and a reader who learned it in `week <id>` should not meet a different
 // answer in `stop`.
 
 /**

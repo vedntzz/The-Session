@@ -16,17 +16,16 @@ first-class, and nothing assumes Claude Code.
 - [What it cost](#what-it-cost) — why money leads, and where the prices come from
 - [Did it ship?](#did-it-ship) — outcomes decided on content, not commit shas
 - [Did it stick?](#did-it-stick) — survival at 14 and 30 days
-- [What will this one cost?](#what-will-this-one-cost) — the class rules and `estimate`
-- [The files nobody plans for](#the-files-nobody-plans-for) — `debt`
+- [What will this one cost?](#what-will-this-one-cost) — the class rules, and why `estimate` went
+- [The files nobody plans for](#the-files-nobody-plans-for) — debt, in Prime's preview and `prime --debt`
 - [Handing the week to someone else](#handing-the-week-to-someone-else) — `--md`
 - [The pull request writes itself](#the-pull-request-writes-itself) — `pr`
 - [Who the work was for](#who-the-work-was-for) — attribution
 - [The log is tamper-evident](#the-log-is-tamper-evident)
 - [Sharing them with the team](#sharing-them-with-the-team) — sync over git refs
 - [What never leaves the machine](#what-never-leaves-the-machine) — invariant 2, amended for a team layer that sees metadata only
-- [Hook capabilities](#hook-capabilities) — what a PreToolUse hook can show, and what it cannot
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
-- [What 1.0 means](#what-10-means) — twenty verbs, frozen, and the two exceptions
+- [The v1 boundary](#the-v1-boundary) — the freeze retired, what v1 is, and models that propose but never judge
 - [Rejected](#rejected) — `cochange`, which measured centrality, and `prime`, and the backtest that stopped it
 
 ---
@@ -55,9 +54,9 @@ Records are filed per repository, and a repository is identified by its origin r
 
 Nothing on disk is moved to fix that. The two logs are two hash chains, signed at different times, and appending to the older one or splicing them into a single file would fork a chain `session verify` is entitled to walk line by line. Writing stays on the current log; the join happens in memory, at read time, where nothing is at stake.
 
-So reading asks the checkout what its origin is now, and reads the log it used to be keyed under as well. `week`, `estimate`, `show` and `settle` all see one history, and a session created before the remote and settled after it — its creating record in one file, its outcome in the other — is folded back into one record rather than losing the half that arrived late.
+So reading asks the checkout what its origin is now, and reads the log it used to be keyed under as well. `week`, `week <id>` and `settle` all see one history, and a session created before the remote and settled after it — its creating record in one file, its outcome in the other — is folded back into one record rather than losing the half that arrived late.
 
-`session debt` does the same thing without a checkout to start from: it resolves each path-keyed log's own directory to whatever origin it has today, and merges only where some other log is already keyed on that remote. The resolution is the evidence that two logs are one repo; with nothing to merge into, there is nothing to say. A directory that has been deleted, is no longer a repo, or still has no remote gives no answer, and its log stays where it is.
+`session prime --debt` does the same thing without a checkout to start from: it resolves each path-keyed log's own directory to whatever origin it has today, and merges only where some other log is already keyed on that remote. The resolution is the evidence that two logs are one repo; with nothing to merge into, there is nothing to say. A directory that has been deleted, is no longer a repo, or still has no remote gives no answer, and its log stays where it is.
 
 Only that direction resolves. A checkout with a remote can always be asked what it used to be called, because its root is a fact about where it is; a remote-keyed log names no directory to go and ask. And the lookup is never written down: `repo` on a record says what the repository was called when the record was written, which is a fact about the past, and facts about the past are not edited here.
 
@@ -75,11 +74,11 @@ It is a third value, **primed**. Not `declared` with a `primed: true` flag besid
 
 **Because `declared` already means something narrower than "a human agreed to it".** The field records where the words came from: typed at `session start`, or taken off the first prompt. A primed intent keeps the timing and loses the authorship — the words were the tool's, and your part was to not disagree. Widening `declared` to cover that redefines a value every record already on disk was written under, and each one becomes ambiguous after the fact: typed, or accepted? A third value leaves all of them meaning exactly what they meant. `intentSourceOf` already leans on that stability — an absent field reads as `declared` because nothing but `session start` could have written an intent then, and that inference holds only while `declared` keeps its current meaning.
 
-**Because the tool would be grading its own proposal.** A primed scope is assembled from the paths that have historically drifted, and drift is `reality` minus `scope`. Priming will therefore lower drift mechanically, for the arithmetic reason that the scope was built from the paths most likely to turn up in `reality`. Filed as `declared`, that lands in the same arm as your unaided prediction, and the declared arm's drift rate, median and merge rate will move as priming spreads with nothing in the output to say that is what changed. That is precisely the defect `estimate`'s two blocks exist to prevent, reproduced one level down inside one of them. Declared and captured are kept apart because they are different evidence. Primed is a third kind, and putting it in `declared` is pooling.
+**Because the tool would be grading its own proposal.** A primed scope is assembled from the paths that have historically drifted, and drift is `reality` minus `scope`. Priming will therefore lower drift mechanically, for the arithmetic reason that the scope was built from the paths most likely to turn up in `reality`. Filed as `declared`, that lands in the same arm as your unaided prediction, and the declared arm's drift rate, median and merge rate will move as priming spreads with nothing in the output to say that is what changed. That is precisely the defect `week`'s separate source blocks exist to prevent, reproduced one level down inside one of them. Declared and captured are kept apart because they are different evidence. Primed is a third kind, and putting it in `declared` is pooling.
 
 **Because a flag beside the field is invisible to the compiler everywhere.** A third member of `IntentSource` breaks `GROUPS` and `NONE` in `render/estimate.ts` immediately — both are exhaustive `Record<IntentSource, string>`, which is the type asking the question out loud. It does not break everything: `survival.ts` and `commands/estimate.ts` build their two arms as named fields rather than as a map over the union, and `parseIntentSource` matches two literals, so those three keep compiling while answering for two arms out of three. Those are the sites to change by hand, and the type is what leads you to them. A `primed?: boolean` breaks nothing anywhere and is found by remembering. The three-way split the flag was meant to enable stays optional, and on an append-only record "later" only ever reaches sessions not yet written — the ones already filed under `declared` are the evidence, and they stay filed there.
 
-The cost is a third block in `estimate` and a third line in `survival`. Those blocks print when empty on purpose, so no arm can be mistaken for the whole answer — but that rule protects a category that could have members. A log holding no primed session has no such category, so the primed block appears once the log holds one and not before: the same distinction `debt` and `cochange` draw between finding nothing and having nothing to look in.
+The cost was a third block in `estimate`, since removed, and is a third line in `survival`. Those blocks print when empty on purpose, so no arm can be mistaken for the whole answer — but that rule protects a category that could have members. A log holding no primed session has no such category, so the primed block appears once the log holds one and not before: the same distinction `debt` and `cochange` draw between finding nothing and having nothing to look in.
 
 What the record keeps of the proposal itself is settled below, because it has to be: the log is append-only, and a field not written when the session opened is a field that can never be filled in for it.
 
@@ -129,7 +128,7 @@ A session that primed, kept the words and dropped one of the two proposed paths,
 
 ### Colour
 
-`show` and `week` use colour to say a few specific things and nothing else:
+`week`, with or without an id, uses colour to say a few specific things and nothing else:
 the intent in your terminal's own colour, brightened; drift paths and the
 money spent on turns that changed no files in red, and only when that figure
 is not zero; declared paths, labels, times and counts dimmed; merged in green;
@@ -183,10 +182,10 @@ $ session week
 
 Two figures, because they are two different failures. **Turns that changed no files** is money spent going nowhere inside a session. **Changes that never merged** is money spent on whole sessions that did not land — the abandoned ones, and the ones still in flight, which have not paid for themselves yet either.
 
-The four counters bill at four different rates, so they are priced separately and never summed first: cache reads cost a tenth of fresh input, cache writes a quarter more, and a long session is mostly cache reads. `--tokens` puts the raw counts back, on both `show` and `week`:
+The four counters bill at four different rates, so they are priced separately and never summed first: cache reads cost a tenth of fresh input, cache writes a quarter more, and a long session is mostly cache reads. `--tokens` puts the raw counts back, on the week and on one session:
 
 ```
-$ session show --tokens
+$ session week last --tokens
 
   cost        $4.04                                     14 turns
   no edits    not measured                              96 api calls
@@ -221,7 +220,7 @@ A `rates.json` ships with the package: dollars per million tokens, per model, pe
 
 That file is merged over the bundled one **entry by entry**, so adding one model does not mean copying the whole table and inheriting its staleness.
 
-The bundled file also states the date its prices were last checked, and every view that quotes them says so: one dim line under the figure, in `week` and at the foot of `session show --tokens`.
+The bundled file also states the date its prices were last checked, and every view that quotes them says so: one dim line under the figure, in `week` and at the foot of `session week <id> --tokens`.
 
 ```
   $9.00 spent, $2.81 of it on changes that never merged
@@ -257,7 +256,7 @@ The tokens are still there under `--tokens`, and the total says how much of itse
 
 ## Did it ship?
 
-The last question about a session is the one nobody writes down: did any of it survive. `session show` and `session week` answer it by looking, every time they run.
+The last question about a session is the one nobody writes down: did any of it survive. `session week` answers it by looking, every time it runs, for the window and for one session alike.
 
 ```
 $ session week
@@ -300,7 +299,7 @@ Nothing was written between those two runs. The default branch comes from `origi
 
 A session that landed some files and still has the rest in your tree is **open**: the rest has not gone in yet. Once nothing is left in the tree, a partial landing is **merged** — the remainder was dropped in review, which is what review is for.
 
-**Empty is not abandoned.** A session that read the code, answered a question and wrote nothing did not abandon anything, because nothing was attempted. Calling it abandoned puts every one of those sessions into the figures about work that was thrown away — and there are a lot of them. So they are named for what they are and left out of what they are not: the unmerged spend in `week`, and the sample, median, p90, drift and first-time merge rate in `estimate`. Both say how many they left out. What an empty session cost stays in the total, because it was spent.
+**Empty is not abandoned.** A session that read the code, answered a question and wrote nothing did not abandon anything, because nothing was attempted. Calling it abandoned puts every one of those sessions into the figures about work that was thrown away — and there are a lot of them. So they are named for what they are and left out of what they are not: the unmerged spend in `week`, which says how many it left out. What an empty session cost stays in the total, because it was spent.
 
 It is read off what the session changed, so it needs no repository to decide and nothing later can revise it. `session mark` refuses these: where no work was done, there is nothing a person can know better about — and if it did change files, it is the record of what it changed that is wrong, which a mark cannot fix.
 
@@ -362,7 +361,7 @@ Four things it will not do:
 
 **It is dated from when the merge was observed, not when it happened.** Nothing on disk records the latter and nothing can: a squash merge writes a new commit with its own dates and keeps none of the originals. What the log holds is the day somebody looked and found the work there, so a session settled late has late windows. Merged sessions nobody has settled have no date at all, and are counted as `unsettled` with a pointer at `session settle`.
 
-**Declared and captured are never pooled**, and neither is anything below five sessions. Same rules as `estimate`, for the same reasons — a commitment made before the work and a transcript of a prompt are different evidence, and a rate over two sessions looks like knowledge and is not.
+**Declared and captured are never pooled**, and neither is anything below five sessions. Same rules as `week`'s source blocks, for the same reasons — a commitment made before the work and a transcript of a prompt are different evidence, and a rate over two sessions looks like knowledge and is not.
 
 The 90% is somebody else's figure, not a measurement this tool made; churn is exactly the share that did not survive, so 90% survival and 10% churn are one line quoted from both ends. It is one constant in `src/survival.ts`, so disagreeing with it is a one-line change.
 
@@ -370,7 +369,7 @@ The 90% is somebody else's figure, not a measurement this tool made; churn is ex
 
 `session settle` and `session survival --check` both write down answers that stop being available if nobody asks in time. A survival window closes for good a week after it opens. An outcome computed a year late is computed against a branch that has moved. Leaving both to be typed by hand means a log full of questions that were answerable once, which is the failure this whole tool exists to avoid.
 
-So they run themselves, once a day per repository, off the back of whatever you were already doing: the editor hook that closes a session, or the next `week`, `show` or bare `session` you type for some other reason. Both commands still work by hand, unchanged, and `session survival --check` remains the way to force one.
+So they run themselves, once a day per repository, off the back of whatever you were already doing: the editor hook that closes a session, or the next `week` or bare `session` you type for some other reason. Both commands still work by hand, unchanged, and `session survival --check` remains the way to force one.
 
 ```
 $ session week
@@ -423,61 +422,21 @@ $ session week --class
   prices checked 2026-08-23 — override in ~/.session/rates.json
 ```
 
-Which makes the question you actually have before starting answerable from your own history:
-
-```
-$ session estimate "rate limit the /orders endpoint"
-
-  estimate  rate limit the /orders endpoint
-  class     api         from the intent
-
-  declared  9 sessions  intent written at session start
-  median    $7.43
-  p90       $14.85
-  merged    6 of 8 first time (75%), 1 still open
-  drift     src/store.ts  5 of 9
-            rates.json    2 of 9
-  unpriced  1 session ran on a model with no rate; the money above is the other 8
-
-  captured  6 sessions  intent taken from the first prompt
-  median    $2.25
-  p90       $9.00
-  merged    1 of 5 first time (20%), 1 still open
-  drift     nothing was declared to drift from, so none is counted
-```
-
-**Two blocks, never a total.** A session you declared is a commitment you made before the agent ran; one the hook caught is a transcript of a prompt. They are not the same kind of evidence, and on most logs they do not cost the same or land at the same rate — look at the two medians and the two merge rates above. Pooled, those fifteen sessions would report one median somewhere in the gap, describing neither side, and it would move whenever the mix moved with nothing on the page to say that was what changed. Teams that adopt the hook record far more captured sessions than declared ones, so the pooled figure drifts towards whatever the hook happened to catch.
-
-The five-session floor applies to each block on its own, for the same reason: six declared and six captured sessions are not twelve of anything. A block with nothing in it still prints, so the other one is never mistaken for the whole answer.
-
-*First time* is the first time anyone looked: the first observation `settle` wrote, or the answer computed now for a session nobody has settled yet. A session that was abandoned, picked up again and landed a month later merged — but it did not merge the first time, and a rate that pretended otherwise would flatter every class in the table.
-
-The class is read off the words unless you say better: `--scope src/api/` classifies on the paths you expect, which is the more reliable signal, and `--class api` settles it outright. Narrow the history with `--since 30d` or `--since 2026-05-20`.
-
-Nothing here is a projection. It is sessions that already ran, restated — which is why a block with fewer than five of them prints the count and no figures at all:
-
-```
-$ session estimate "restyle the header component"
-
-  estimate  restyle the header component
-  class     ui          from the intent
-
-  declared  3 sessions  intent written at session start
-  too few   nothing is estimated from fewer than 5 sessions
-
-  captured  none — the hook recorded nothing like this
-
-            widen --since, or say --class if these were the wrong ones
-```
-
-A median of two is a number that looks like knowledge. The drift column is the part worth reading twice: those are the files your api sessions keep wandering into, and they are the ones to put in `--scope` this time.
+> **`session estimate` removed, 21 September 2026**, in the cut that drew
+> the [v1 boundary](#the-v1-boundary). What it printed was a restatement of
+> sessions that already ran — median, p90, first-time merge rate and drift,
+> one block per intent source, nothing under five sessions — and every one of
+> those figures is still on the record for `week` to show. It was also the one
+> place the tool classified *words* rather than paths: `INTENT_RULES` read a
+> class off the intent before anything had changed, and went with it. The
+> path table above stays; it is what `week --class` files a session under.
 
 ## The files nobody plans for
 
 One session drifting onto a file is an accident. The same file, session after session, with nobody ever writing it into a scope, is a fact about the repository rather than about any of those sessions:
 
 ```
-$ session debt
+$ session prime --debt
 
   remote:github.com/acme/tool
   2 files drifted into 3 or more times and never declared since · 24 sessions of history
@@ -506,6 +465,8 @@ Four rules make it worth reading:
 **Below three sessions, no answer at all.** A repo with two sessions in it has no pattern to have. It gets a sentence saying the history is too short, not an empty list — "we found nothing" and "we could not look" are different statements, and printing the first when the second is true is an all-clear nobody checked.
 
 The report is per repository and never adds up across them. The same path means different things in two codebases, and a file three repos each drifted onto once is not a file three sessions drifted onto. The command reads every log under `~/.session` rather than only the one for the checkout you are standing in, because the pattern takes months to appear and "which repo should I run this in" is the question the report is meant to answer.
+
+**Where it is asked.** Debt used to be its own command. It is now two places in `prime`, because the moment it is worth knowing is the moment a scope is being chosen. The preview prints this repository's owed files under the suggestion, at most five, with the count of sessions that drifted onto each and no money — a preview is before any work, and it prints no cost. Too short a history says so there too. The list is not part of the proposal and is never recorded with it: the suggestion is Prime's rule, debt is a different rule over the same log, and which of those paths to declare stays the developer's choice. `session prime --debt`, on its own, prints the whole report above, every repository on the machine.
 
 The cost column is the only figure here that needs care. It is the whole cost of every session that touched the file, not a share of it — there is no way to divide a session's tokens between the files it changed, and inventing one would put a made-up number beside measured ones. So a session that drifted onto four files appears in four rows, the column does not add up, and the line under the table says so rather than leaving somebody to sum it. A file whose sessions ran on models with no rate reads `—`, never `$0.00`, like every other total in the tool.
 
@@ -551,7 +512,7 @@ Three things it will not do. It will not print a total that quietly omits sessio
 No cost could be worked out: 2 sessions ran on a model with no rate (mystery-9). Add one to ~/.session/rates.json.
 ```
 
-A week that genuinely cost nothing still reads `$0.00`, because that is a figure somebody measured — sessions that ran, on models with rates, whose tokens came to nothing. It reads that way in every view, so a dash never appears over a column of noughts. The rule holds in the other views too: the terminal table puts a dash in its total and leaves the spend line out, the HTML page omits the money from its summary, and `estimate` says so in place of the median. All four ask the same function, so they cannot come to disagree about what a week cost.
+A week that genuinely cost nothing still reads `$0.00`, because that is a figure somebody measured — sessions that ran, on models with rates, whose tokens came to nothing. It reads that way in every view, so a dash never appears over a column of noughts. The rule holds in the other views too: the terminal table puts a dash in its total and leaves the spend line out, and the HTML page omits the money from its summary. All three ask the same function, so they cannot come to disagree about what a week cost.
 
 **A session with no turns is the other absence, and it is not a nought either.** `session start` and `session stop` record what the diff says whether or not any transcript was found, so a log holds sessions that changed files, took an hour and had nothing captured for them. Printing `$0.00` there says the work was free; what happened is that nobody knows what it cost. Those rows read `—` in the terminal and `not captured` in the document, and the note under the table counts them apart from the unpriced ones — a missing rate is somebody's next five minutes, and this is not:
 
@@ -625,7 +586,7 @@ In a template, `{{intent}}` is that same shortened line and `{{intent_full}}` is
 
 The drift section is dropped entirely when nothing went outside — a heading over "none" teaches a reviewer to skip the section, and the one time it matters is the one time they will not read it. It is dropped for a session that declared no scope too, whatever the record holds: drift is the distance between a declaration and reality, and a pull request telling a reviewer that twelve files went outside a plan nobody made is an accusation the log cannot support.
 
-Every path is listed, one per line — the one view here that does not cap. `show`'s cap exists because a terminal line has a width and a sentence naming twelve files is one nobody finishes; a pull request body has neither problem, and the list of files is not context around the point but the thing being reviewed. `40 files, mostly in src/` tells a reviewer to go and find out what they are, which is the work this document exists to have already done.
+Every path is listed, one per line — the one view here that does not cap. `week <id>`'s cap exists because a terminal line has a width and a sentence naming twelve files is one nobody finishes; a pull request body has neither problem, and the list of files is not context around the point but the thing being reviewed. `40 files, mostly in src/` tells a reviewer to go and find out what they are, which is the work this document exists to have already done.
 
 They are grouped by directory and sorted inside each group, because sorting alone does not group: `src/a.ts`, `src/api/orders.ts` and `src/b.ts` sort in that order, dropping a file from another directory into the middle of `src/`. Over forty paths that reads as no order at all, and a reviewer checking whether anything unexpected was touched is scanning directories rather than filenames. Paths stay whole rather than becoming filenames under a directory heading — a path in a pull request gets copied into a `git log` or a search box, and half of one is no use there.
 
@@ -868,58 +829,6 @@ not a plan. Until the same team comes back to the tool week after week without
 being asked, the honest shape of this is one paragraph in a decisions file,
 and the cost of the paragraph is nothing.
 
-## Hook capabilities
-
-> Checked 21 September 2026 against the Claude Code hooks reference,
-> <https://code.claude.com/docs/en/hooks> ("PreToolUse decision control",
-> "JSON output"). Re-check before relying on it; the page changes often.
-
-**Question.** Can a `PreToolUse` hook show the developer a prompt of its own,
-or can it only return allow, deny or ask with a reason?
-
-**Answer: only a decision and a reason.** The hook cannot show anything
-interactive. It returns one of four values in
-`hookSpecificOutput.permissionDecision`, and Claude Code does the showing:
-
-- `allow` skips the permission prompt. It does not override the user's deny
-  or ask rules: "Deny and ask rules are still evaluated regardless of what the
-  hook returns."
-- `deny` blocks the call. `permissionDecisionReason` goes to the agent, not
-  the developer. Exit 2 works the same way, with stderr as the reason.
-- `ask` opens Claude Code's own permission prompt. The reason is "shown to the
-  user but not Claude", and the prompt carries a source label such as
-  `[settings]` or `[plugin:<name>]`. In auto mode, `ask` still forces the
-  prompt.
-- `defer` is honoured only by `claude -p`. In an interactive session it "logs
-  a warning and ignores the hook result".
-
-The hook cannot draw its own UI. "Command hooks run in their own session
-without a controlling terminal. The hook process and any child processes
-can't open `/dev/tty` or send escape sequences directly to the Claude Code
-interface." Stdin carries the event JSON, not keystrokes. The channels that
-reach the developer are these:
-
-- the `ask` reason, inside the stock prompt;
-- `systemMessage`, a one-way "warning message shown to the user";
-- `terminalSequence`, for a bell, a window title or a desktop notification.
-
-`updatedInput` can change the call that the `ask` prompt shows, but it is
-Claude Code's prompt, not ours. `additionalContext` goes to the agent only.
-A custom question-and-answer round trip exists only through `defer` under
-`-p`, where the calling process owns the UI. That is not the interactive
-session this tool records.
-
-**Two more facts for the latency check.** A PreToolUse command hook has a
-default timeout of 600 seconds. "A timed-out … hook doesn't block the tool
-call," so a hook that is slow or stalled lets the edit through. It is not a
-gate.
-
-**What this means for the agreement hook.** An edit outside the agreement or
-on a sensitive path is either a `deny`, where the agent reads the reason, or
-an `ask`, where the developer sees one line of reason in Claude Code's prompt
-and answers yes or no. Any screen richer than that belongs in `session start`,
-before the agent runs, not in the hook.
-
 ## Finding your way around
 
 Type `session` on its own and it tells you where you are, not what it can do:
@@ -949,7 +858,28 @@ Commands:
 
 Nothing is removed by this. Every command below still runs, and `session help all` lists all of them with their descriptions. The short list is a decision about what a first reader can use, not a claim about what exists — a help screen with fifteen entries is one nobody finishes, and the commands that get lost in it are the ones a newcomer most needs.
 
-## What 1.0 means
+## The v1 boundary
+
+> **The freeze is retired, 21 September 2026.** It read: the surface is frozen
+> at twenty verbs, refinement only, with named exceptions. It had three
+> exceptions and a reopening by then, and a rule that is argued around every
+> month is a rule that describes last month. What replaces it is a boundary
+> on what the tool is for, and a smaller surface inside it. The old text is
+> kept under [the freeze, as it was](#the-freeze-as-it-was).
+
+**v1 is the record: what was declared, what changed, and what became of it.** Declare what the work is before an agent runs, record what it actually did, and hold the two against each other — deterministically, on the developer's disk. Anything that serves that loop is inside. Anything that measures something other than the distance between a declaration and a diff is outside, however useful, and the two cuts that taught this are in [Rejected](#rejected).
+
+**Cut on the way in.** Three commands went in the same change, because each was a second door onto something another command already shows:
+
+- **`estimate`** — sessions like this one, restated as a median. See [What will this one cost?](#what-will-this-one-cost).
+- **`show`** — one session. It is now `session week <id>`, with `last` for the most recent closed one and `--full` and `--tokens` as before. The id a week row prints is the id it takes, so reading a row closer is the same verb as reading the rows.
+- **`debt`** — the files nobody plans for. It is now part of `prime`: the owed files of this repo in the preview, and `session prime --debt` for the whole report. See [The files nobody plans for](#the-files-nobody-plans-for).
+
+The short `--help` is unchanged: the bare screen, `start`, `week` and `help all`.
+
+**Models may propose; they never judge.** [Invariant 3](../Claude.md) still holds in full: no model is asked whether code is good, whether scope was met, whether work shipped, or what a session meant, and no model writes prose about any of it. What it now permits is a *proposal* — a scope, an agreement, a list of sensitive paths — put in front of the developer to accept, edit or reject before the work starts. The line between the two is the one Prime already draws: a proposal is recorded whole and apart from what was accepted, it is labelled for what it is, it records its proposer — `prime` for Prime's rule, `external` for anything else that suggested it (field lands with the agreement record; records without it read as prime) — and only what the developer accepted is ever measured against. A proposal that could clear drift, settle an outcome or colour a figure would be a judgement arriving by another door. This tool never calls a model.
+
+### The freeze, as it was
 
 > **Prime reopened, September 2026.** The user explicitly requested completing
 > Prime after the freeze. The current [Prime workflow](prime.md) uses exact
@@ -967,7 +897,7 @@ Three exceptions, named here so that nothing else can be argued into the same sh
 
 None of the three is a new measurement. All are a surface onto what the tool already records.
 
-**Why `ui` passes the same test as the other two.** It reads through `weekSessions`, so its rows are the rows `week` prints and its outcomes come through `withOutcomes` like everything else; it writes nothing, creates nothing, and asks the repository no question `week` does not already ask. Every figure on it comes from `pricing.ts`, `empty.ts` and `scope.ts` — there is no arithmetic in `render/tui/` that exists nowhere else. What it adds is reach: `week` fits a session to one row and a page to eighty columns, so the paths, the proposal and the observations behind a row have nowhere to go, and `show` reaches them one session at a time. A timeline you can move through answers "which of these went wrong" without printing twenty sessions at full depth.
+**Why `ui` passes the same test as the other two.** It reads through `weekSessions`, so its rows are the rows `week` prints and its outcomes come through `withOutcomes` like everything else; it writes nothing, creates nothing, and asks the repository no question `week` does not already ask. Every figure on it comes from `pricing.ts`, `empty.ts` and `scope.ts` — there is no arithmetic in `render/tui/` that exists nowhere else. What it adds is reach: `week` fits a session to one row and a page to eighty columns, so the paths, the proposal and the observations behind a row have nowhere to go, and `week <id>` reaches them one session at a time. A timeline you can move through answers "which of these went wrong" without printing twenty sessions at full depth.
 
 **What it cost to say yes.** A verb, and the admission that the freeze now has three exceptions rather than two — which is the shape the freeze was written to resist, and the reason this paragraph exists rather than a quiet edit to the list above. The line that has not moved is the one about measurement: a fourth exception that computes something is a different argument and does not get to cite this one.
 

@@ -10,7 +10,6 @@ import { readSessions, updateSession, foldLog, readLog, type SessionPatch } from
 import { verifyLog, verifyFailed } from "../src/commands/verify.js";
 import { formatSession } from "../src/render/terminal/session.js";
 import { renderPr } from "../src/render/pr.js";
-import { estimateFor } from "../src/commands/estimate.js";
 
 const exec = promisify(execFile);
 let root: string;
@@ -50,9 +49,9 @@ describe("Prime workflow", () => {
     expect(formatSession(session).join("\n")).toContain('"orders.ts"');
     expect(renderPr(session, new Map())).toContain("scope reviewed with Prime");
     await updateSession(session.id, { endedAt: new Date().toISOString(), reality: ["new.ts"] }, options);
-    const estimate = await estimateFor({ intent: request.intent, class: "other" }, new Map(), options);
-    expect(estimate.groups.primed.matched).toBe(1);
-    expect(estimate.groups.declared.matched).toBe(0);
+    const [closed] = await readSessions(options);
+    expect(closed?.intentSource).toBe("primed");
+    expect(closed?.proposal?.scope).toEqual(["orders.ts"]);
   });
   it("rejects proposal edits and ignores later proposals while folding", async () => {
     const proposal = await primeFor(request, options);
@@ -83,5 +82,22 @@ describe("Prime workflow", () => {
     expect(await readSessions(options)).toEqual([]);
     await buildProgram(options).exitOverride().parseAsync(["node", "session", "prime", request.intent, "--seed", "orders.ts", "--start", "--scope", "new.ts"]);
     expect((await readSessions(options))[0]).toMatchObject({ intentSource: "primed", scope: ["new.ts"], proposal: { scope: ["orders.ts"] } });
+  });
+  it("puts this repo's debt in the preview, and nothing about it in the record", async () => {
+    const output: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((line) => { output.push(String(line)); });
+    await buildProgram(options).exitOverride().parseAsync(["node", "session", "prime", request.intent, "--seed", "orders.ts"]);
+    expect(output).toContain("  debt     not enough history: 0 sessions recorded here, needs 3");
+    await expect(readdir(options.home)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it("prints the machine-wide debt report under --debt, and only on its own", async () => {
+    const output: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((line) => { output.push(String(line)); });
+    await buildProgram(options).exitOverride().parseAsync(["node", "session", "prime", "--debt"]);
+    expect(output.join("\n")).toContain("No sessions recorded on this machine");
+    await expect(buildProgram(options).exitOverride().parseAsync(["node", "session", "prime", "--debt", request.intent]))
+      .rejects.toThrow("--debt takes no intent");
+    await expect(buildProgram(options).exitOverride().parseAsync(["node", "session", "prime"]))
+      .rejects.toThrow("No intent given");
   });
 });

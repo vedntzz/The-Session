@@ -27,7 +27,7 @@ export async function homeState(
   }
 
   // The outcome is resolved for the one session the screen names, the same way
-  // `show` resolves it: the field on disk is only what `settle` last wrote.
+  // `week <id>` resolves it: the field on disk is only what `settle` last wrote.
   const [resolved] = await withOutcomes([last], options.cwd ?? process.cwd(), gathered);
   return { ...(running ? { running } : {}), last: resolved ?? last };
 }

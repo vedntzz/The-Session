@@ -26,7 +26,7 @@ export interface StartOptions extends StoreOptions {
  * they typed was lost, most often a shell that expanded `--scope "$paths"` to
  * a single empty string. Writing `[]` there puts a session in the log that
  * says no scope was declared when one was, and every view downstream then
- * tells the truth about a record that is wrong: `show` says nothing was
+ * tells the truth about a record that is wrong: `week <id>` says nothing was
  * declared to drift from, `debt` counts the paths as never declared and starts
  * building a case against files the developer did declare. The record is
  * append-only and signed, so it is also the one mistake here that cannot be

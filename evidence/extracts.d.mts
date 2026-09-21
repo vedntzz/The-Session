@@ -8,7 +8,7 @@ type Root = string;
 export declare const invariants: (root: Root) => string;
 export declare const layout: (root: Root) => string;
 export declare const sessionInterface: (root: Root) => string;
-export declare const whatOneZeroMeans: (root: Root) => string;
+export declare const v1Boundary: (root: Root) => string;
 export declare const measurementRules: (root: Root) => string;
 
 export declare const extracts: Readonly<Record<string, (root: Root) => string>>;

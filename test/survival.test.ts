@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { MIN_SESSIONS } from "../src/estimate/figures.js";
 import type { Observation } from "../src/outcome.js";
 import {
   CHECK_GRACE_DAYS,
@@ -7,6 +6,7 @@ import {
   fateOf,
   meetsBenchmark,
   mergedAt,
+  MIN_SESSIONS,
   rateOf,
   sample,
   stateOf,

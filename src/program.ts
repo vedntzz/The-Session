@@ -6,8 +6,6 @@ import { Command } from "commander";
 import { paletteFor, type Palette } from "./render/palette.js";
 import { configureHelp, registerHelp } from "./program/help.js";
 import { registerConfig } from "./program/config.js";
-import { registerDebt } from "./program/debt.js";
-import { registerEstimate } from "./program/estimate.js";
 import { registerHome } from "./program/home.js";
 import { registerHook } from "./program/hook.js";
 import { registerIntent } from "./program/intent.js";
@@ -16,7 +14,6 @@ import { registerPr } from "./program/pr.js";
 import { registerPrime } from "./program/prime.js";
 import { registerScan } from "./program/scan.js";
 import { registerSettle } from "./program/settle.js";
-import { registerShow } from "./program/show.js";
 import { registerStart } from "./program/start.js";
 import { registerStop } from "./program/stop.js";
 import { registerSurvival } from "./program/survival.js";
@@ -90,17 +87,14 @@ export function buildProgram(options: ProgramOptions = {}): Command {
  */
 function registerCommands(program: Command, options: ProgramOptions, palette: Palette): void {
   registerStart(program, options);
-  registerPrime(program, options);
+  registerPrime(program, options, palette);
   registerIntent(program, options);
   registerStop(program, options);
-  registerShow(program, options, palette);
   registerWeek(program, options, palette);
   registerUi(program, options, palette);
   registerKnowledge(program, options);
   registerPr(program, options);
   registerScan(program, options, palette);
-  registerDebt(program, options, palette);
-  registerEstimate(program, options);
   registerVerify(program, options);
   registerSettle(program, options);
   registerSurvival(program, options, palette);

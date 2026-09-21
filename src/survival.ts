@@ -1,9 +1,15 @@
 // Whether merged work is still there weeks later. Pure: sessions in, figures
 // out. Reading the repository happens in `commands/survival.ts`.
 import { classOf, SESSION_CLASSES, type SessionClass } from "./classify.js";
-import { MIN_SESSIONS } from "./estimate/figures.js";
 import { observations } from "./outcome.js";
 import { intentSourceOf, type IntentSource, type Session } from "./store.js";
+
+/**
+ * How many measured sessions it takes before a survival rate is printed. Below
+ * it the count prints and no rate does: a rate over two sessions looks like
+ * knowledge and is not.
+ */
+export const MIN_SESSIONS = 5;
 
 /**
  * Merging is not the end of the question.
@@ -235,7 +241,7 @@ export interface SurvivalSample {
   /**
    * Absent below `MIN_SESSIONS` measured sessions, and absent when they hold
    * no paths between them. A rate over two sessions looks like knowledge and
-   * is not — the same floor `estimate` prints its sample under.
+   * is not.
    */
   figures?: SurvivalFigures;
 }

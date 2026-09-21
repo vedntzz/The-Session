@@ -21,7 +21,6 @@ import {
   intentLegends,
   markedIntent,
 } from "../src/render/terminal/intent.js";
-import { GROUPS, NONE } from "../src/render/estimate.js";
 
 function session(overrides: Partial<Session> = {}): Session {
   return {
@@ -70,8 +69,6 @@ describe("every table answers for every source", () => {
     INTENT_MARKER,
     INTENT_NOTE,
     INTENT_LEGEND,
-    GROUPS,
-    NONE,
   };
 
   for (const [name, table] of Object.entries(tables)) {

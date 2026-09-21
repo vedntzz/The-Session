@@ -86,7 +86,7 @@ export const KNOWLEDGE_CLIENT = String.raw`
       list('DECLARED SCOPE',row[6]);list('CHANGED PATHS',row[7]);list('OUTSIDE SCOPE',row[8],true);
       if(row[10]!==null)list('ORIGINAL PRIME PROPOSAL',row[10]);
       text('h3','EVIDENCE');text('p','ID '+row[0]+'\nStarted '+row[1]+'\nEnded '+(row[2]||'still running')+'\nStart commit '+row[9],'muted');
-      text('p','More detail: session show '+row[0]+' --full','muted');
+      text('p','More detail: session week '+row[0]+' --full','muted');
       if(row[2]===null)text('p','Changed paths are recorded at stop, not a live working-tree diff.','muted');
     } else {
       text('h2',data.paths[node.ref]);

@@ -23,7 +23,7 @@ import { findSession } from "./show.js";
 /**
  * Recording where the work went.
  *
- * `show` and `week` work the outcome out afresh every time, which is right for
+ * `week` and `week <id>` work the outcome out afresh every time, which is right for
  * a screen and wrong for a dataset: the answer depends on a branch that moves,
  * and a question asked next year against a rewritten history gets a different
  * answer with no way to tell that it changed. `settle` writes the answer down

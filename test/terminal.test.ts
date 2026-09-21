@@ -1677,7 +1677,7 @@ describe("an intent too long for the view it is in", () => {
 
     const asked = lines.find((line) => line.includes("first prompt")) as string;
     expect(asked).toContain('Your first prompt began "Prepare 1.0.0."');
-    expect(lines.join(" ")).toContain("session show --full");
+    expect(lines.join(" ")).toMatch(/session\s+week\s+[0-9a-f]{8}\s+--full/);
     expect(lines.join(" ")).not.toContain("Removed section");
   });
 

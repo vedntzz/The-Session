@@ -56,7 +56,7 @@ $v_inv
 
 ## The surface
 
-The original twenty verbs plus the explicitly reopened Prime workflow. Read from the real `commander` registration tree by
+The v1 surface, after `estimate` was cut, `show` became `week <id>` and `debt` became `prime --debt`. Read from the real `commander` registration tree by
 walking `buildProgram().commands` — not from `--help`, which is a filtered view
 of it, and not from the Readme, which is prose.
 
@@ -68,13 +68,13 @@ can use, not a claim about what exists. `session help all` lists every one, and
 is built by walking this same tree, so a command renamed cannot fall off it.
 
 The count is pinned by a test, not only by this document: `test/program.test.ts`
-asserts the original command set plus Prime against a sorted list of names.
+asserts the v1 command set against a sorted list of names.
 
-### What 1.0 means
+### The v1 boundary
 
 Verbatim from `docs/decisions.md`:
 
-$v_onezero
+$v_boundary
 
 ## The record
 
@@ -184,7 +184,7 @@ $c_skills
 
 Each covers one area and is loaded when that area is what is being changed:
 `measurement-rules` (outcome, class, intent source, scan, debt, survival,
-estimate, money), `sync-and-chain` (the line on disk, verify, refs),
+Prime, money), `sync-and-chain` (the line on disk, verify, refs),
 `terminal-output` (CLI surface, colour, Markdown, the pull request body).
 
 ## Regenerating this file
@@ -205,7 +205,7 @@ rule both the generator and the test read them through:
 Claude.md                                   invariants, layout
 .claude/skills/measurement-rules/SKILL.md   measurement rules
 src/store/record.ts                         interface Session
-docs/decisions.md                           what 1.0 means, the rejected list
+docs/decisions.md                           the v1 boundary, the rejected list
 evidence/verbs.mjs                          the command surface
 evidence/extracts.mjs                       how each block above is cut out
 ```

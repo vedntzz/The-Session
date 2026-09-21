@@ -18,13 +18,13 @@ export function findSession(sessions: readonly Session[], id: string): Session {
     throw new Error(`${wanted} matches ${matches.length} sessions. Use more of the id.`);
   }
   if (matches.length === 0) {
-    throw new Error(`No session with id ${wanted}. Run session show with no id for the last one.`);
+    throw new Error(`No session with id ${wanted}. Run session week last for the last one.`);
   }
   return matches[0] as Session;
 }
 
 /**
- * Picks the session `session show` should print, with its outcome worked out
+ * Picks the session `session week <id>` should print, with its outcome worked out
  * now rather than read off the record.
  *
  * With no id, the most recent session that has stopped: an open session has no

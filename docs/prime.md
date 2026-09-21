@@ -64,8 +64,8 @@ New primed records require a reader that supports Prime; older binaries do
 not understand the added intent source.
 
 The intent is still your own text. `primed` distinguishes assisted scope
-selection from unaided declarations. Reports mark it with `+`; estimate and
-survival keep its samples apart. `show --full` displays the original proposed
+selection from unaided declarations. Reports mark it with `+`; week and
+survival keep its samples apart. `week <id> --full` displays the original proposed
 scope alongside the accepted scope. Only the accepted scope participates in
 drift and debt. Prime suggestions alone never clear debt.
 

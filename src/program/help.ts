@@ -243,6 +243,17 @@ export function didYouMean(typed: string, names: readonly string[]): string | un
 }
 
 /**
+ * Commands cut at the v1 boundary, and where their work went. Answered before
+ * any guess: `show` is two edits from `stop`, and a reader with the old habit
+ * offered `session stop` would end a session they meant to look at.
+ */
+export const RETIRED: Readonly<Record<string, string>> = {
+  show: "use week <id>. session week last is the most recent closed session.",
+  debt: "use prime --debt.",
+  estimate: "removed; see week.",
+};
+
+/**
  * What `session wek` says.
  *
  * Commander's own answer here is "error: too many arguments. Expected 0
@@ -258,6 +269,10 @@ export function didYouMean(typed: string, names: readonly string[]): string | un
  * it before they read the rest of the line.
  */
 export function unknownCommand(typed: string, program: Command): string {
+  const retired = RETIRED[typed.toLowerCase()];
+  if (retired !== undefined) {
+    return `No command ${typed} — ${retired}`;
+  }
   const names = program.commands.map((command) => command.name());
   const meant = didYouMean(typed, names);
   const guess = meant === undefined ? "" : ` Did you mean session ${meant}?`;

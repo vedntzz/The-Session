@@ -223,7 +223,7 @@ export function flatten(text: string): string {
  * those words can run to paragraphs — a prompt the editor hook captured is
  * whatever was typed at the agent, up to `MAX_INTENT`. Printed straight that
  * is one line hundreds of columns wide, which the terminal wraps at an
- * arbitrary point with no indent, and the three sentences `show` promises
+ * arbitrary point with no indent, and the three sentences `week <id>` promises
  * arrive as a wall.
  *
  * Wrapped rather than cut. A declaration is the promise the diff is held to,
