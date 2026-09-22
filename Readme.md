@@ -71,6 +71,12 @@ start from; `--start` accepts this run's proposal and opens an assisted session.
 Use `--scope <paths...>` with `--start` to replace the suggestion before it is
 recorded. Thin evidence produces no suggestion. [Prime workflow and limits](docs/prime.md).
 
+Add `--review` to `session start` or `session prime --start` to inspect and edit
+an agreement before starting: accepted paths, actions, sensitive paths and
+policy. Type `accept` to save it, or `cancel` to leave without a record.
+This step records policy only; enforcement is not yet implemented.
+[Agreement review and record](docs/agreements.md).
+
 | | |
 |---|---|
 | `session scan` | What the sessions already on this machine did, last 30 days. No setup, and no record written. `--open` writes the page instead of printing it. |

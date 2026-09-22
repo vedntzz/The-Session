@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `224fd81 Merge pull request #3 from vedntzz/feat/cut-commands` (`v1.0.0-21-g224fd81`).
+Derived at `d7346f4 immutable agreement record` (`v1.0.0-22-gd7346f4`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -58,14 +58,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     108
-   16651
+     110
+   16853
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      45
-   17117
+      46
+   17374
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -96,9 +96,9 @@ top-level verbs:        20
 including subcommands:  26
 
 start [intent]            Begin a new session
-                          --scope <paths...>  --passive
+                          --scope <paths...>  --review  --passive
 prime [intent]            Suggest specific scope paths from previous planning misses, and show what keeps drifting
-                          --seed <paths...>  --start  --scope <paths...>  --debt
+                          --seed <paths...>  --start  --review  --scope <paths...>  --debt
 intent                    For the editor hook: record the first prompt as an undeclared session's intent
                           --from-prompt
 stop                      End the active session
@@ -973,10 +973,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  44 passed (44)
-      Tests  1476 passed (1476)
-   Start at  13:02:20
-   Duration  225.89s (transform 1.97s, setup 0ms, collect 7.86s, tests 1026.47s, environment 6ms, prepare 2.63s)
+ Test Files  45 passed (45)
+      Tests  1497 passed (1497)
+   Start at  13:31:57
+   Duration  216.64s (transform 1.72s, setup 0ms, collect 7.42s, tests 1030.63s, environment 6ms, prepare 2.54s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

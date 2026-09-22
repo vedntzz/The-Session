@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Three commands cut, one boundary drawn. See
 [The v1 boundary](docs/decisions.md#the-v1-boundary).
 
+### Added
+
+- **Interactive agreement review** with `session start --review` and
+  `session prime --start --review`. Review and edit accepted paths, actions,
+  sensitive paths and policy before typing `accept`. Original Prime proposals
+  remain separate. Cancellation writes nothing; scripted starts are unchanged.
+  Policy is recorded only; enforcement is not yet implemented.
+
 ### Removed
 
 - **`session estimate` is gone**, with `INTENT_RULES` and `classifyIntent`,

@@ -5,6 +5,7 @@ import type { ScanOptions } from "../commands/scan.js";
 import type { StopOptions } from "../commands/stop.js";
 import type { WeekOptions } from "../commands/week.js";
 import type { Palette } from "../render/palette.js";
+import type { ReviewOptions } from "../commands/review.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
 export type ProgramOptions = StopOptions &
@@ -22,7 +23,7 @@ export type ProgramOptions = StopOptions &
      * over without a pipe.
      */
     stdin?: AsyncIterable<Buffer | string>;
-  };
+  } & ReviewOptions;
 
 /**
  * Reads a flag written out in words: `--passive=false` as well as `--passive`.

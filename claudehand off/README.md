@@ -1,104 +1,116 @@
 # Sprint handoff
 
-Updated: 22 September 2026. Work happens one small feature at a time, followed
-by tests and a stop for Vedant to review and commit. Codex must not commit.
+Updated: 22 September 2026. Work one feature at a time, test it, then stop for
+Vedant to review and commit. Codex does not commit or start the next feature
+until Vedant asks.
 
-## Current step: immutable agreement record
+## Current step: agreement review screen
 
 **Complete and tested; waiting for Vedant to review and commit.**
 
-Added accepted paths, actions (`create`, `edit`, `delete`), sensitive
-paths and policy (`record`, `ask`, `deny`) to the session's creating record.
-Reuse the existing signature and hash chain. Preserve the original proposal
-apart from accepted terms; label new Prime proposals with their proposer and
-read older proposals as `prime` without changing their bytes.
+The preceding immutable-record step is committed as `d7346f4`.
+[Its complete handoff and failure history](01-agreement-record.md).
 
-Agreement paths supply the existing measurement scope. Reject mismatches and
-later agreement/scope changes. Legacy sessions retain their existing behavior.
-No CLI screen, enforcement hook or external-proposal import in this step.
+### Solved in this step
 
-### Changes in this step
+- `session start "<intent>" --scope <paths...> --review`: explicit agreement
+  review before starting.
+- `session prime "<intent>" --seed <paths...> --start --review`: display the
+  proposal's evidence and original scope, then review accepted terms. A
+  replacement `--scope` changes only the accepted list.
+- A line-oriented screen shows intent, original proposal when present, accepted
+  paths, actions, sensitive paths and policy. All paths remain visible.
+- Edit each field before acceptance. Lists use JSON to preserve spaces and
+  commas in paths. Empty input keeps a field; `[]` clears a list. Invalid
+  edits retain the last valid draft.
+- Only typing `accept` starts. Enter, `yes` and unknown choices do not.
+  Cancel, EOF or interruption writes no record and creates no signing key.
+- New drafts visibly start with create/edit actions, no sensitive paths, and
+  record policy; nothing is accepted until the explicit acceptance choice.
+- Prime abstentions require a nonempty replacement scope before acceptance.
+- Check start conditions before prompting, and again after acceptance. Capture
+  HEAD and the dirty baseline after review, so changes during the review are
+  correctly recorded as pre-existing work.
+- Interactive input and output are required. Reject incompatible passive/debt
+  flags and `prime --review` without `--start`.
+- Existing noninteractive starts and passive hooks retain their behavior.
+- Reuse semantic colours and safe record-text rendering. Release signal/input
+  listeners when review ends. No raw terminal mode or cursor codes added.
 
-- `src/agreement.ts`: pure accepted-term types and validation, scope consistency,
-  and the legacy proposer fallback. See `docs/agreements.md` for field semantics.
-- `src/store/record.ts`: optional agreement and exclusion from session patches.
-- `src/store/read.ts`: copy validated terms into the creating record; preserve
-  agreement and its scope when folding subsequent records, including forged
-  attempts to insert an agreement into an older session.
-- `src/store/append.ts`: refuse agreement patches and scope patches on agreed
-  sessions. Ordinary closing/outcome updates still work.
-- `src/commands/start.ts`: accept explicit agreement terms through the API;
-  populate measurement scope from accepted paths and reject disagreement.
-- `src/prime.ts`: label newly generated proposals `prime`. Existing proposals
-  without the field retain their original signed representation.
-- `test/agreement.test.ts`: validation, signed round-trip, immutability,
-  compatibility, original-versus-accepted scope and tamper-detection coverage.
-- `test/start.test.ts`: start API integration and scope mismatch coverage.
-- `docs/context.md`: regenerated from the current source using the repository
-  generator; includes the new session field and actual test results.
+### Files changed
 
-No dependency added, record-version bump, data migration, signing-algorithm
-change, user settings change, commit, push, PR or worktree cleanup.
+- `src/commands/review.ts`: review controller, terminal lifecycle, validation
+  and the start-at-acceptance workflow.
+- `src/render/agreement.ts`: pure review renderer with every accepted term.
+- `src/commands/start.ts`: shared start preflight and agreement confirmation.
+- `src/program/start.ts`, `src/program/prime.ts`, `src/program/options.ts`:
+  interactive flag wiring and an injectable terminal for tests.
+- `src/render/prime.ts`: reuse existing evidence output without telling a
+  developer already reviewing to rerun the command.
+- `test/review.test.ts`: review, cancellation, input validation, terminal
+  safety, Prime acceptance, signed storage and changes while reviewing.
+- `Readme.md`, `docs/agreements.md`, `CHANGELOG.md`: usage and limitations.
+- `docs/context.md`: refreshed with the existing generator and its test run.
 
-### Completed validation
+### Checks, failures and results
 
-- Accepted terms round-trip through the signed log.
-- Invalid inputs write no record.
-- Later patches cannot add, replace or remove an agreement or change its scope.
-- Existing records and signatures still work without an agreement/proposer.
-- Tampering with accepted terms or proposer breaks verification.
-- Build, typecheck and automated regression tests.
+- First typecheck and focused screen/Prime tests: passed (36 tests).
+- After adding acceptance-time race/baseline coverage: build and typecheck
+  passed; 79 focused tests passed across review, start, Prime workflow and Prime.
+- Real terminal smoke test in an isolated temporary repository: edited paths
+  (including a filename with a comma and space), changed policy to ask, accepted
+  and started. `session verify` confirmed the record's hash and signature.
+- Generator's regression suite: **1,497 passed across 45 files**, recorded in
+  the refreshed `docs/context.md`.
+- Context checks after generation: **8 passed**. The process handle was no
+  longer available when this conversation resumed, so the context checks were
+  explicitly rerun rather than assuming the generator's final exit status.
+- **Final total: 1,505 passing tests across 46 files**, including 21 new review
+  tests. Build and source/test typecheck passed.
+- Staged and unstaged whitespace checks passed (`git diff --check` and
+  `git diff --cached --check`).
+- No implementation or test failure encountered in this step. Verification is
+  complete; no outstanding failure remains.
 
-### Results and failures
+All feature changes remain uncommitted on `master`. `CHANGELOG.md` was already
+staged when verification resumed; that staging was preserved. Codex stops here
+for Vedant to review and commit, then explicitly request the next feature.
 
-Build and typecheck passed. All 47 agreement tests pass. The first focused
-run had 226 passing tests and one normalization failure:
-`./` was rejected instead of accepting the explicitly named repository root.
-Fixed by preserving `./` as `.` before validation, then reran the agreement
-tests successfully. The other six focused suites (start, store, Prime workflow,
-Prime rule, chain, verification) passed on their first run.
+### Deliberate limits
 
-The first full run finished with **1,483 passed / 1 failed** (45 test files).
-The sole failure was the generated `docs/context.md` still carrying the old
-`Session` interface. Fixed with `node evidence/gen-context.mjs`, the project's
-required generator.
+Policy is **recorded only** in this version. This screen does not install a
+hook or enforce permissions. It says this before acceptance and in the start
+confirmation. The next feature implements enforcement.
 
-Final verification:
+External proposal ingestion remains unexposed; this review refuses external
+proposals rather than mislabelling them as Prime. The record already has
+proposer metadata, but external terms need a separate input/review design
+before they can be exposed. No model is called.
 
-- `npm run build`: passed.
-- `npm run typecheck`: passed (source and test TypeScript).
-- `npx vitest run test/agreement.test.ts`: 47 passed.
-- Generator's non-context suite: 1,476 passed across 44 files.
-- Generator's post-write context check: 8 passed.
-- **Final total: 1,484 tests passed across 45 files** (the generator checks
-  the behavioral and context suites separately). This step adds 49 tests.
-- `git diff --check`: passed.
+No dependency, user configuration or storage migration was added. No project
+commit, push, PR or worktree cleanup was performed.
 
-Both failures encountered are resolved. No outstanding failure in this step.
-Everything is uncommitted on the existing `master` checkout. Codex stops here;
-Vedant reviews and commits, then explicitly asks to begin the next step.
+## What is left
 
-## Remaining sprint work
+After Vedant commits this screen, two main build
+milestones remain:
 
-The agreement record is the first of the four remaining build milestones
-completed. **Three build milestones remain**, plus the prototype and earlier
-integration/housekeeping items below. No completion percentage is claimed for
-the whole sprint because the prototype has not been located.
+1. Opt-in PreToolUse enforcement for Edit, Write and MultiEdit. Map tool input
+   to accepted actions and paths; test policy, malformed input, path resolution,
+   sensitive paths and timeout behavior. Update the screen's recorded-only
+   wording once the actual enforcement capability exists.
+2. End-to-end flow, hook latency measurement, final review and retrospective.
 
-1. Agreement review screen in `session start`, including accepting/replacing
-   Prime's suggestion. Decide the external-proposal input and truthful labels
-   before exposing external suggestions through a user workflow.
-2. Opt-in PreToolUse enforcement for Edit, Write and MultiEdit; map tool input
-   to the tool-independent accepted actions and paths. Test policy decisions,
-   malformed input, path resolution and timeout behavior.
-3. End-to-end flow, hook latency measurement, final review and retrospective.
-4. Locate the Saturday three-screen prototype or build it if still missing.
-5. Review/integrate Claude's resize fix and changelog changes from
-   `/Users/vedant/dev-session-ui` (uncommitted at the initial check).
-6. Review/integrate Claude's hook research from `docs/hook-capabilities`
-   (`2a06865`, separate worktree `/Users/vedant/dev-session-hook`).
+Other sprint items still need verification or integration:
+
+- Locate the Saturday three-screen prototype, or build it if still missing.
+- Review/integrate Claude's resize fix and changelog work in
+  `/Users/vedant/dev-session-ui`.
+- Review/integrate hook research from `docs/hook-capabilities` (`2a06865`,
+  `/Users/vedant/dev-session-hook`).
+- Vedant owns commits. PRs and stale worktree/branch cleanup remain separate
+  from the current feature; existing worktrees are preserved.
 
 Monday's command consolidation and v1 boundary are already on master at
-`224fd81` (PR #3). Prototype completion is unverified. Existing worktrees and
-branches are preserved. Commits are Vedant's responsibility; PRs and cleanup
-are not performed as part of this record step.
+`224fd81` (PR #3). Prototype completion is unverified, so no overall sprint
+completion percentage is claimed.

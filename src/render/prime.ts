@@ -5,6 +5,11 @@ import type { PrimeProposal } from "../prime.js";
 export const DEBT_SHOWN = 5;
 
 export function formatPrime(proposal: PrimeProposal, debt?: RepoDebt): string[] {
+  return [...formatPrimeDetails(proposal, debt), "", "  No session started. Repeat with --start to accept; add --scope to replace the suggested scope."];
+}
+
+/** The same evidence before an interactive review, without a repeat-command hint. */
+export function formatPrimeDetails(proposal: PrimeProposal, debt?: RepoDebt): string[] {
   const lines = [
     "",
     `  prime    ${JSON.stringify(proposal.intent)}`,
@@ -20,7 +25,6 @@ export function formatPrime(proposal: PrimeProposal, debt?: RepoDebt): string[] 
   lines.push(`  covers   ${proposal.scope.length}/${proposal.tracked} tracked files; exact paths only`);
   if (proposal.omitted) lines.push(`  omitted  ${proposal.omitted} further candidates`);
   if (debt) lines.push(...debtLines(debt));
-  lines.push("", "  No session started. Repeat with --start to accept; add --scope to replace the suggested scope.");
   return lines;
 }
 

@@ -2,6 +2,7 @@ import { attributionValues, hasAttribution, readConfig } from "../config.js";
 import type { PrimeProposal } from "../prime.js";
 import { parseAgreement, scopeForAgreement, type Agreement } from "../agreement.js";
 import { changedFilesSince, currentCommit, isRepo } from "../git.js";
+import { safeText } from "../render/tui/text.js";
 import {
   appendSession,
   getOpenSession,
@@ -108,7 +109,7 @@ export async function startSession(intent: string, options: StartOptions = {}): 
   const scope = agreement
     ? scopeForAgreement(agreement, options.scope)
     : normalizeScope(options.scope);
-  await refuseUnlessStartable(declared, cwd, options);
+  await assertCanStart(declared, options);
 
   return appendSession(
     {
@@ -124,11 +125,11 @@ export async function startSession(intent: string, options: StartOptions = {}): 
 }
 
 /** Each refusal names what is wrong and the command that fixes it. */
-async function refuseUnlessStartable(
+export async function assertCanStart(
   declared: string,
-  cwd: string,
   options: StartOptions,
 ): Promise<void> {
+  const cwd = options.cwd ?? process.cwd();
   if (declared === "") {
     throw new Error('No intent given. Run: session start "what you are about to do"');
   }
@@ -212,10 +213,13 @@ export function formatStarted(session: Session): string[] {
   if (session.proposal) {
     lines.push("  primed   suggested and accepted scopes recorded separately");
   }
+  if (session.agreement) {
+    lines.push(`  agreement  saved; policy ${session.agreement.policy} (recorded only)`);
+  }
 
   const declared = attributionValues(session.attribution);
   if (declared.length > 0) {
     lines.push(`  for      ${declared.join("  ")}`);
   }
-  return lines;
+  return session.agreement ? lines.map(safeText) : lines;
 }

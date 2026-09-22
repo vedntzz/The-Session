@@ -4,9 +4,48 @@ An agreement records accepted terms before work starts. It is optional on a
 session and is signed inside the existing creating record. Its absence means
 no agreement was recorded; it never implies acceptance of default terms.
 
-The current step supplies the data model and the `startSession` API. The CLI
-review screen and the enforcement hook are subsequent steps. No policy is
-enforced by this change.
+## Review before starting
+
+```sh
+session start "fix parser" --scope src/parser.ts test/ --review
+session prime "fix parser" --seed src/parser.ts --start --review
+```
+
+`--review` opens an interactive, line-oriented agreement screen. It shows the
+intent, accepted paths, actions, sensitive paths and policy. Prime's evidence
+appears first, and its original suggested scope remains visible alongside the
+editable accepted paths. A replacement `--scope` seeds the accepted list without
+changing the original proposal.
+
+Type `paths`, `actions`, `sensitive` or `policy` to replace a field. Lists use
+JSON, such as `["src/", "test/a file.ts"]`, so commas and spaces inside filenames
+stay unambiguous. `[]` explicitly clears a list; a blank answer keeps it.
+Policies are `record`, `ask` or `deny`. Invalid edits leave the draft unchanged.
+
+The initial draft takes paths from `--scope` or Prime's suggestion, actions
+`create` and `edit`, no sensitive paths, and policy `record`. These are visible
+draft values, not terms silently accepted. Only typing `accept` writes them
+into the signed record and starts the session. Enter, `yes`, or an unknown
+choice never starts anything. `cancel`, end-of-input and interruption discard
+the draft without creating a record or signing key.
+
+A Prime review requires a nonempty accepted scope; when Prime abstains, supply
+one using `paths` before accepting. A plain `start --review` can explicitly
+accept empty paths or actions. Intent cannot be edited in this screen: cancel
+and invoke the command with different words if needed.
+
+Both input and output must be interactive terminals. `--review` is incompatible
+with `--passive`, with `prime --debt`, or with `prime` without `--start`. Existing
+starts without `--review` retain their noninteractive behavior and create no
+agreement. Opening facts and the baseline are gathered after acceptance; a
+session opened elsewhere while the review waits prevents a second start.
+
+**Policy is only recorded in this version.** The enforcement hook is the next
+step; this screen does not install hooks or enforce the policy. External
+proposal ingestion is not exposed, and this review refuses an external proposal
+rather than labelling it as Prime's.
+
+## Stored terms
 
 ```ts
 agreement: {
