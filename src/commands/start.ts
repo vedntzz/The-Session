@@ -1,5 +1,6 @@
 import { attributionValues, hasAttribution, readConfig } from "../config.js";
 import type { PrimeProposal } from "../prime.js";
+import { parseAgreement, scopeForAgreement, type Agreement } from "../agreement.js";
 import { changedFilesSince, currentCommit, isRepo } from "../git.js";
 import {
   appendSession,
@@ -14,6 +15,8 @@ export interface StartOptions extends StoreOptions {
   /** Paths the developer expects to change. */
   scope?: string[];
   proposal?: PrimeProposal;
+  /** Explicitly accepted terms; no agreement is inferred when absent. */
+  agreement?: Agreement;
 }
 
 /**
@@ -101,7 +104,10 @@ export async function startSession(intent: string, options: StartOptions = {}): 
   // Before anything is read or written: what is wrong with the arguments is
   // wrong whatever the repository turns out to look like, and this is the one
   // check that costs nothing to make.
-  const scope = normalizeScope(options.scope);
+  const agreement = options.agreement === undefined ? undefined : parseAgreement(options.agreement);
+  const scope = agreement
+    ? scopeForAgreement(agreement, options.scope)
+    : normalizeScope(options.scope);
   await refuseUnlessStartable(declared, cwd, options);
 
   return appendSession(
@@ -109,6 +115,7 @@ export async function startSession(intent: string, options: StartOptions = {}): 
       intent: declared,
       intentSource: options.proposal ? "primed" : "declared",
       ...(options.proposal ? { proposal: options.proposal } : {}),
+      ...(agreement ? { agreement } : {}),
       scope,
       ...(await openingFacts(cwd)),
     },

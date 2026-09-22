@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `853cf58 decision log cahnges before sprint` (`v1.0.0-19-g853cf58`).
+Derived at `224fd81 Merge pull request #3 from vedntzz/feat/cut-commands` (`v1.0.0-21-g224fd81`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -58,14 +58,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     107
-   16537
+     108
+   16651
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      44
-   16903
+      45
+   17117
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -222,6 +222,8 @@ Verbatim from `src/store/record.ts`:
 
 ```ts
 export interface Session {
+  /** Accepted terms, written only in the creating record; absent before agreements. */
+  agreement?: import("../agreement.js").Agreement;
   /** Prime's original suggestion, immutable and separate from accepted scope. */
   proposal?: import("../prime.js").PrimeProposal;
   id: string;
@@ -971,10 +973,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  43 passed (43)
-      Tests  1427 passed (1427)
-   Start at  15:44:59
-   Duration  231.72s (transform 2.14s, setup 0ms, collect 6.95s, tests 923.78s, environment 6ms, prepare 2.61s)
+ Test Files  44 passed (44)
+      Tests  1476 passed (1476)
+   Start at  13:02:20
+   Duration  225.89s (transform 1.97s, setup 0ms, collect 7.86s, tests 1026.47s, environment 6ms, prepare 2.63s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

@@ -221,16 +221,22 @@ export async function updateSession(
     throw new Error(`no session with id ${id}`);
   }
 
+  if (current.agreement && "scope" in patch) {
+    throw new Error("Scope is fixed by the agreement at start and cannot be edited. Start a new session for different terms.");
+  }
   await writeRecord(id, patch, options);
   return { ...current, ...patch, id };
 }
 
 /**
- * The three fields decided before the work and never revised, and the two that
+ * The fields decided before the work and never revised, and the two that
  * must still be timestamps. Refused here rather than at the call sites so a new
  * caller cannot quietly become the one that edits an intent.
  */
 function refusePatch(patch: SessionPatch): void {
+  if ("agreement" in patch) {
+    throw new Error("Agreement is written at start and cannot be added or edited later. Start a new session for different terms.");
+  }
   if ("proposal" in patch) {
     throw new Error("proposal is written at start and cannot be edited");
   }

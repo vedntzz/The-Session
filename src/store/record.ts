@@ -168,6 +168,8 @@ export function parseIntentSource(value: string): IntentSource {
 }
 
 export interface Session {
+  /** Accepted terms, written only in the creating record; absent before agreements. */
+  agreement?: import("../agreement.js").Agreement;
   /** Prime's original suggestion, immutable and separate from accepted scope. */
   proposal?: import("../prime.js").PrimeProposal;
   id: string;
@@ -312,16 +314,18 @@ export function inOwnWords(session: Pick<Session, "intentSource">): boolean {
 export type RecordFields = Partial<Omit<Session, "id">>;
 
 /**
- * Fields `updateSession` may set. Four are absent by design: intent is written
+ * Fields `updateSession` may set. Declaration fields are absent by design: intent is written
  * once — at `start`, or from the first prompt of a passive session, which is
  * what `captureIntent` is for and the only way it is ever written twice —
  * `intentSource` says which of those happened and so is fixed when the session
  * opens, repo is derived from where the store lives, and attribution is
  * captured at start so that who was billed cannot be decided after the fact.
+ * The proposal and accepted agreement also stay fixed. Scope remains patchable
+ * for legacy sessions; the writer refuses it when an agreement fixed the scope.
  */
 export type SessionPatch = Omit<
   RecordFields,
-  "intent" | "intentSource" | "repo" | "attribution" | "proposal"
+  "intent" | "intentSource" | "repo" | "attribution" | "proposal" | "agreement"
 >;
 
 /**

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { hasAttribution } from "../config.js";
+import { parseAgreement, scopeForAgreement } from "../agreement.js";
 import {
   RECORD_VERSION,
   zeroCost,
@@ -179,6 +180,10 @@ export async function readLogFile(file: string): Promise<RawLog> {
  */
 export function intentSourceFor(input: NewSession): IntentSource {
   const source = input.intentSource ?? (input.intent === null ? "captured" : "declared");
+  if (input.proposal?.proposer !== undefined &&
+    input.proposal.proposer !== "prime" && input.proposal.proposer !== "external") {
+    throw new Error("Proposal proposer must be prime or external. Identify who suggested it before starting.");
+  }
   if ((source === "primed") !== (input.proposal !== undefined)) {
     throw new Error("A primed session must carry its original proposal; other sources cannot carry one.");
   }
@@ -190,13 +195,18 @@ export function intentSourceFor(input: NewSession): IntentSource {
 
 /** The record as it goes on disk, with every optional field defaulted. */
 export function sessionFrom(input: NewSession, repo: string, intentSource: IntentSource): Session {
+  const agreement = input.agreement === undefined ? undefined : parseAgreement(input.agreement);
+  if (agreement && (intentSource === "captured" || input.intent === null || input.intent.trim() === "")) {
+    throw new Error("An agreement needs a declared intent before work starts. Run session start with your intent.");
+  }
   return {
     id: input.id ?? randomUUID(),
     repo,
     intent: input.intent,
     intentSource,
     ...(input.proposal ? { proposal: input.proposal } : {}),
-    scope: input.scope ?? [],
+    ...(agreement ? { agreement } : {}),
+    scope: agreement ? scopeForAgreement(agreement, input.scope) : input.scope ?? [],
     baseline: input.baseline ?? [],
     reality: input.reality ?? [],
     drift: input.drift ?? [],
@@ -306,7 +316,11 @@ export function foldRecord(
     ...existing, ...record.set, ...keptIntent(existing, record),
     // Neither assistance nor its original suggestion may be added or revised
     // after the creating record, including on logs that predate Prime.
-    ...(existing ? { proposal: existing.proposal, intentSource: existing.intentSource } : {}),
+    ...(existing ? {
+      proposal: existing.proposal, intentSource: existing.intentSource,
+      agreement: existing.agreement,
+      ...(existing.agreement ? { scope: existing.scope } : {}),
+    } : {}),
   };
   if (!isComplete(merged)) {
     // A patch whose creating record is missing: nothing to anchor it to.

@@ -42,6 +42,26 @@ afterEach(async () => {
 });
 
 describe("startSession", () => {
+  it("records explicitly accepted agreement terms at start, using their paths as scope", async () => {
+    await commit("a.txt");
+    const session = await startSession("touch the api", {
+      ...options,
+      agreement: { paths: ["api/"], actions: ["edit"], sensitivePaths: ["api/keys/"], policy: "ask" },
+    });
+    expect(session.scope).toEqual(["api"]);
+    expect(session.agreement).toEqual({ paths: ["api"], actions: ["edit"], sensitivePaths: ["api/keys"], policy: "ask" });
+    expect(await readSessions(options)).toEqual([session]);
+  });
+
+  it("refuses scope that disagrees with accepted terms without opening a session", async () => {
+    await commit("a.txt");
+    await expect(startSession("touch the api", {
+      ...options, scope: ["other"],
+      agreement: { paths: ["api"], actions: ["edit"], sensitivePaths: [], policy: "deny" },
+    })).rejects.toThrow(/must match/);
+    expect(await readSessions(options)).toEqual([]);
+  });
+
   it("records intent, HEAD, a start time and an empty scope", async () => {
     const head = await commit("a.txt");
     const before = Date.now();
@@ -51,6 +71,7 @@ describe("startSession", () => {
     expect(session.intent).toBe("add rate limiting to /orders");
     expect(session.startCommit).toBe(head);
     expect(session.scope).toEqual([]);
+    expect(session.agreement).toBeUndefined();
     expect(session.endedAt).toBeNull();
     expect(session.outcome).toBe("open");
     expect(Date.parse(session.startedAt)).toBeGreaterThanOrEqual(before);

@@ -1,5 +1,6 @@
 // Scope suggestions from past planning misses. No coupling or directory roll-up.
 import { inScope, normalizeEntry } from "./scope.js";
+import type { ProposalProposer } from "./agreement.js";
 import { intentSourceOf, type Session } from "./store.js";
 
 export const PRIME_LIMIT = 5;
@@ -20,6 +21,8 @@ export interface PrimeCandidate {
 
 /** Kept whole at start, alongside the scope the person actually accepted. */
 export interface PrimeProposal {
+  /** Absent on older records, which read as prime through proposerOf. */
+  proposer?: ProposalProposer;
   rule: typeof PRIME_RULE;
   intent: string;
   scope: string[];
@@ -72,6 +75,7 @@ export function proposeScope(
   const comparable = history.filter((s) => similarIntent(intent, s.intent ?? "") ||
     seeds.some((seed) => s.scope.some((scope) => normalizeEntry(scope) === seed)));
   const base: PrimeProposal = {
+    proposer: "prime",
     rule: PRIME_RULE, intent, scope: [], candidates: [], history: history.length,
     comparable: comparable.length, tracked: tracked.length, omitted: 0,
   };
