@@ -47,6 +47,19 @@ rather than labelling it as Prime's.
 
 ## Stored terms
 
+The pure decision function in `src/agreement-decision.ts` checks an attempted
+file write against accepted terms. It reports every mismatch: outside accepted
+paths, unaccepted action, and sensitive path. No mismatch (or no agreement)
+returns `defer`, leaving the editor's own permissions in charge. A mismatch
+returns `ask` or `deny` according to policy; `record` returns `defer` while
+retaining the mismatch list. It neither writes a record nor claims a file changed.
+
+This function is not wired to an editor hook yet. Its adapter must supply a
+resolved, canonical repo-relative file and a known operation. Ambiguous paths
+and malformed terms throw; an adapter must handle those failures explicitly,
+never treat them as permission. Filesystem resolution, symlinks, outside-repo
+targets, tool parsing and hook responses remain the next integration step.
+
 ```ts
 agreement: {
   paths: ["src/parser.ts", "test/"],
