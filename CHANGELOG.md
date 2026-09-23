@@ -26,6 +26,8 @@ Three commands cut, one boundary drawn. See
   5-second deadline, and one that fails unexpectedly exits 2, because the host
   lets a timed-out or crashed hook through. A `session` the editor cannot find
   on `PATH` still lets writes through.
+- `docs/decisions.md` records what a Claude Code `PreToolUse` hook can and
+  cannot show, checked against the hooks reference on 21 and 22 September 2026.
 
 ### Removed
 
