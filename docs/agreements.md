@@ -193,6 +193,23 @@ create versus edit. Only the output path is returned, never the output content.
 Like the other shell parsers this is not wired into the check. Syntax grounding:
 [Bash redirections](https://www.gnu.org/s/bash/manual/html_node/Redirections.html).
 
+`teeWrites` in `src/shell/tee.ts` recognizes a standalone `tee` with one or more
+literal file operands. It includes every named output for overwrite or append,
+deduplicating exact names. Supported options before operands are `-a`, `-i`,
+their short combinations, `--append` and `--ignore-interrupts`; `--` before
+operands allows names beginning with a dash. Options after operands are unknown
+because option permutation varies between implementations. Long options may
+not be available on every implementation; recognizing targets does not promise
+successful execution.
+
+Bare `tee`, empty operands, the version-dependent `-` operand, `/dev` targets,
+unknown flags, expansions, redirections and entire pipelines stay unknown.
+In particular, a pipeline ending in `tee` is not reduced to tee's outputs:
+earlier commands can write other files. The inherited stdout destination,
+executable identity, aliases/functions, and path resolution are not established
+by this parser. Nothing is executed or wired to the hook. Source:
+[GNU tee invocation](https://www.gnu.org/s/coreutils/manual/html_node/tee-invocation.html).
+
 #### When the check cannot answer
 
 Claude Code lets a PreToolUse write through when the hook times out, exits
