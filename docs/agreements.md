@@ -177,6 +177,22 @@ Argument and backup behavior were checked against the
 [GNU sed manual](https://www.gnu.org/software/sed/manual/html_node/Command_002dLine-Options.html)
 and [FreeBSD sed reference](https://man.freebsd.org/cgi/man.cgi?query=sed&sektion=1&manpath=FreeBSD+14.0-RELEASE+and+Ports).
 
+`redirectWrites` in `src/shell/redirect.ts` recognizes one trailing stdout `>`
+with a literal target, for a bare redirect, `echo`, or `:` only. Quoted `>`
+characters remain literal; adjacent syntax such as `echo text>file` is supported.
+The shared `simpleWords` tokenizer remains unchanged and still refuses redirects.
+An arbitrary program with a redirect stays unknown: its output target is not a
+complete account of what the program might write. This assumes ordinary shell
+builtins, not aliases or replacement functions; executable identity and shell
+environment remain an integration obligation.
+
+Append/clobber operators, descriptors, multiple redirects, input redirects,
+expansions, chains, pipes, malformed quotes and `/dev` targets are unknown.
+Paths remain unresolved; the parser neither creates/truncates files nor decides
+create versus edit. Only the output path is returned, never the output content.
+Like the other shell parsers this is not wired into the check. Syntax grounding:
+[Bash redirections](https://www.gnu.org/s/bash/manual/html_node/Redirections.html).
+
 #### When the check cannot answer
 
 Claude Code lets a PreToolUse write through when the hook times out, exits
