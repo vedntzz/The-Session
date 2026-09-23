@@ -101,6 +101,11 @@ answers `writes` with a list of paths, or `unknown` — and unknown is never
   and yarn to the manifest and lockfile only. `node_modules`, caches and
   whatever a dependency's install script does are not in the answer and
   cannot be — don't claim otherwise in output or docs.
+- **The read-only list is a grant in waiting.** Once wired, anything
+  `readOnlyWrites` accepts passes without a question. Add a program only when
+  no option of it can write a file, run a program or name an output; a
+  program with one such option is listed with that option refused, like
+  `find` and `git`, or not at all, like `sort` and `uniq`.
 - **Unknown flags are unknown.** Each manager has an explicit flag list; a
   global install, another directory, a workspace or anything unlisted is
   unknown, not ignored.

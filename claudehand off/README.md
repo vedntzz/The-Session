@@ -3,47 +3,50 @@
 Updated: 23 September 2026. One bounded milestone, tests, handoff, then stop
 for Vedant's review and commit. Never stage, commit or push automatically.
 
-## Current milestone: Sprint 2 — rm recognition and resolution
+## Current milestone: Sprint 2 — the read-only allowlist
 
-Complete and tested; waiting for review and commit. The cp step was committed
-as `a859c6c`; its handoff is archived in [20-copy.md](20-copy.md).
+Complete and tested; waiting for review and commit. The rm step was committed
+as `daa2e65`; its handoff is archived in [21-remove.md](21-remove.md). This
+closes Sunday 27's items: every parseable writer plus the allowlist.
 
 ### Solved
 
-- `src/shell/remove.ts`: pure `parseRemove`. One `rm`, one or more literal
-  operands, optionally one `-f` or `-i`, optional `--`. Unknown: `-r`, `-R`,
-  `-rf`, `--recursive`, `-d`, combined or long options, options after
-  operands, empty operands, `/dev` targets, and anything `simpleWords` refuses.
-- `src/commands/resolve-remove.ts`: read-only `resolveRemove`. Every operand
-  becomes `delete`, parent aliases kept, deduplicated. A missing operand is
-  still a `delete` (it may exist when the command runs; `-f` only silences
-  the error). Leaf symlinks are blocked (`symlink-operand`): rm removes the
-  link, not the target. Directories, hard links, escapes and unresolved paths
-  are blocked by `resolveFileWrite`; one blocked operand blocks the command.
-- Docs: rm paragraphs in `docs/agreements.md`. The `Claude.md`/`AGENTS.md`
-  layout now lists all shell files — sed, redirect, tee, move, copy and remove
-  had not been added by the previous steps. `docs/context.md` regenerated.
+- `src/shell/read-only.ts`: pure `readOnlyWrites(command)` → `writes []` or
+  `unknown`, the same `ShellWrites` shape the package-manager step returns.
+- Listed with any arguments (no option writes, runs a program or names an
+  output): cat, head, tail, wc, ls, pwd, echo, true, false, grep, egrep, fgrep,
+  diff, cmp, stat, du, df, which, basename, dirname, realpath, readlink,
+  whoami, uname.
+- Listed with conditions: `find` without -delete, -exec, -execdir, -ok,
+  -okdir, -fprint, -fprint0, -fprintf, -fls. `git` status, log, diff, show,
+  blame, ls-files, rev-parse, describe, shortlog; branch and remote only in
+  listing forms; no global option before the subcommand; `--output` and
+  `--ext-diff` anywhere make it unknown.
+- Deliberately unlisted: sort, uniq, tree, file, rg, env, xargs, date.
+- Found while testing: the shared tokenizer refuses `~` anywhere, so
+  `git diff HEAD~1` is unknown. Left as is (widening the tokenizer affects every
+  shell parser); pinned by a test and parked.
+- Parked for before wiring: whether the Bash tool runs commands in zsh, whose
+  `=cmd` expansion `simpleWords` would not see.
+- Docs: allowlist section in `docs/agreements.md`, a skill rule ("the read-only
+  list is a grant in waiting", both copies), layout line, two parking-lot
+  entries, `docs/context.md` regenerated.
 
 ### Checks
 
-- 43 new tests (`test/remove.test.ts`): parser cases, and resolution against
-  temporary files including aliases, links, hard links, a directory, an escape,
-  and the decision each deletion produces. Passed on first run.
+- 73 new tests (`test/read-only.test.ts`). First run: 1 failure, the `HEAD~1`
+  case above; the case was moved to the unknown list with its reason.
 - Build and source/test type checks passed.
-- Full suite via the context generator: **2,040 passed across 58 files**, plus
-  8 context tests (2,048 total; 2,005 before).
-
-### Limits
-
-Regular files only; directories are never enumerated. Not wired to the hook.
+- Full suite via the context generator: **2,113 passed across 59 files**, plus
+  8 context tests (2,121 total; 2,048 before).
 
 ## Remaining Sprint 2 work — separate milestones
 
-1. The read-only allowlist (Sun 27): commands known to write nothing tracked.
-2. Shell-check integration (Mon 28): unknown non-read-only commands ask
+1. Verify which shell the Bash tool uses (parking lot), then shell-check
+   integration (Mon 28): unknown non-read-only commands ask
    "Can't tell what this writes." Grants scoped to one operation.
-3. Starting-tree snapshot and per-call PostToolUse diff (Tue 29, Wed 30).
-4. The npm install / sed / node -e walkthrough (Thu 1); fixes and retro (Fri 2).
+2. Starting-tree snapshot and per-call PostToolUse diff (Tue 29, Wed 30).
+3. The npm install / sed / node -e walkthrough (Thu 1); fixes and retro (Fri 2).
 
 Sprint 1 still owed (Vedant): retrospective, three-screen prototype,
 interactive two-minute ask check.

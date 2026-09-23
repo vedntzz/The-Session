@@ -273,6 +273,30 @@ escapes and unresolved paths are blocked, and one blocked operand blocks the
 whole command rather than yielding a partial answer. No file is removed or
 read. Hook integration remains unchanged.
 
+`readOnlyWrites` in `src/shell/read-only.ts` is the read-only allowlist: one
+simple command known to write no file answers `writes` with no paths, and
+anything else is unknown. Once the shell check is wired in, a listed command
+passes without a question, so a program is listed only when none of its
+options can write a file, run another program or name an output: `cat`,
+`head`, `tail`, `wc`, `ls`, `pwd`, `echo`, `true`, `false`, `grep` (and
+`egrep`, `fgrep`), `diff`, `cmp`, `stat`, `du`, `df`, `which`, `basename`,
+`dirname`, `realpath`, `readlink`, `whoami` and `uname`.
+
+Two programs are listed with conditions. `find` is read-only unless it has
+`-delete`, `-exec`, `-execdir`, `-ok`, `-okdir` or `-fprint`, `-fprint0`,
+`-fprintf`, `-fls`. `git` is read-only for `status`, `log`, `diff`, `show`,
+`blame`, `ls-files`, `rev-parse`, `describe` and `shortlog`, and for `branch`
+and `remote` in their listing forms only; no global option may precede the
+subcommand (`-C`, `-c`, `--git-dir`), and `--output` or `--ext-diff` anywhere
+makes it unknown. The index refresh `git status` may do is under `.git`, which
+no agreement path or diff covers.
+
+Deliberately not listed, because an option writes or runs something: `sort`
+(`-o`, `-T`, `--compress-program`), `uniq` (a second operand is an output),
+`tree` (`-o`), `file` (`-C`), `rg` (`--pre`), `env` and `xargs` (they run a
+command), and `date` (`-s`). A `~` anywhere in a word is refused by the shared
+tokenizer, so `git diff HEAD~1` is unknown too.
+
 #### When the check cannot answer
 
 Claude Code lets a PreToolUse write through when the hook times out, exits
