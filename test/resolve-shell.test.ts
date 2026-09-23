@@ -1,0 +1,76 @@
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { platformSedDialect, resolveShellCommand } from "../src/commands/resolve-shell.js";
+
+let temp: string;
+let root: string;
+beforeEach(async () => {
+  temp = await realpath(await mkdtemp(path.join(tmpdir(), "session-shell-")));
+  root = path.join(temp, "repo");
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src/a"), "a");
+  await writeFile(path.join(root, "package.json"), "{}");
+  await writeFile(path.join(root, ".env"), "secret");
+});
+afterEach(async () => { await rm(temp, { recursive: true, force: true }); });
+
+const resolve = (command: string, cwd = root) => resolveShellCommand(command, cwd, root, "macos");
+const resolved = (...writes: [string, string][]) =>
+  ({ kind: "resolved", writes: writes.map(([p, action]) => ({ path: p, action })) });
+
+describe("resolveShellCommand", () => {
+  it.each([
+    ["a reader writes nothing", "cat src/a", resolved()],
+    ["a frozen install writes no tracked file", "npm ci", resolved()],
+    ["an install edits the manifest and creates the lockfile", "npm install lodash",
+      resolved(["package.json", "edit"], ["package-lock.json", "create"])],
+    ["sed -i edits in place", "sed -i '' 's/a/b/' src/a", resolved(["src/a", "edit"])],
+    ["a redirect creates its target", "echo hi > src/new", resolved(["src/new", "create"])],
+    ["tee writes its operands", "tee src/a src/log", resolved(["src/a", "edit"], ["src/log", "create"])],
+    ["a move deletes and creates", "mv src/a src/b", resolved(["src/a", "delete"], ["src/b", "create"])],
+    ["a copy creates only the destination", "cp src/a src/c", resolved(["src/c", "create"])],
+    ["rm deletes", "rm src/a .env", resolved(["src/a", "delete"], [".env", "delete"])],
+  ])("%s", async (_, command, expected) => {
+    expect(await resolve(command)).toEqual(expected);
+  });
+
+  it("resolves a command's paths from its own directory", async () => {
+    expect(await resolve("npm install", path.join(root, "src"))).toEqual(resolved(["src/package-lock.json", "create"]));
+  });
+
+  it.each([
+    "touch src/a", "node -e 1", "python script.py", "make", "npm run build",
+    "ls && rm src/a", "cat src/a | tee src/b", "rm -rf src", "sort -o out src/a", "",
+  ])("cannot tell what %j writes", async (command) => {
+    expect(await resolve(command)).toEqual({ kind: "unknown" });
+  });
+
+  it("does not read a GNU sed command as macOS's, or the reverse", async () => {
+    expect(await resolveShellCommand("sed -i 's/a/b/' src/a", root, root, "macos")).toEqual({ kind: "unknown" });
+    expect(await resolveShellCommand("sed -i 's/a/b/' src/a", root, root, "gnu")).toEqual(resolved(["src/a", "edit"]));
+  });
+
+  it.each([
+    ["a target outside the repository", "echo x > ../out"],
+    ["a directory", "rm src"],
+    ["a copy from outside the repository", "cp ../x src/b"],
+  ])("blocks %s rather than reading it as no writes", async (_, command) => {
+    expect((await resolve(command)).kind).toBe("blocked");
+  });
+
+  it("writes nothing and reads no contents while resolving", async () => {
+    for (const command of ["echo hi > src/new", "rm src/a", "mv src/a src/b", "npm install lodash"]) await resolve(command);
+    expect((await readdir(path.join(root, "src"))).sort()).toEqual(["a"]);
+    expect(await readFile(path.join(root, "src/a"), "utf8")).toBe("a");
+    expect((await readdir(root)).sort()).toEqual([".env", "package.json", "src"]);
+  });
+});
+
+describe("platformSedDialect", () => {
+  it("reads macOS as BSD sed and everything else as GNU", () => {
+    expect(platformSedDialect("darwin")).toBe("macos");
+    expect(platformSedDialect("linux")).toBe("gnu");
+  });
+});

@@ -53,6 +53,7 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       sed.ts redirect.ts tee.ts → paths written; move.ts copy.ts remove.ts →
       requests, resolved read-only by commands/resolve-{move,copy,remove}.ts
       read-only.ts the short list of commands known to write no file
+      commands/resolve-shell.ts one command → the writes to check, or unknown
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 

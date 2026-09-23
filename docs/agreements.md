@@ -306,6 +306,18 @@ Deliberately not listed, because an option writes or runs something: `sort`
 command), and `date` (`-s`). A `~` anywhere in a word is refused by the shared
 tokenizer, so `git diff HEAD~1` is unknown too.
 
+`resolveShellCommand` in `src/commands/resolve-shell.ts` joins the pieces: it
+asks every recognizer above and requires **exactly one** to claim the command.
+None is unknown ("can't tell what this writes"); two would be two readings of
+one command, so that is unknown too rather than a guess. Paths a recognizer
+names are resolved from the command's own directory through the same
+`resolveFileWrite` the Edit/Write check uses; moves, copies and removals go
+through their resolvers. The answer is the list of writes (empty for a known
+reader or a frozen install), unknown, or blocked — and blocked is never read
+as "writes nothing". `sed -i` is read in macOS syntax on macOS and GNU syntax
+elsewhere; a GNU sed earlier on `PATH` is the stated `PATH` limit. Metadata
+only: no command runs and no file content is read. Not yet wired to the hook.
+
 #### When the check cannot answer
 
 Claude Code lets a PreToolUse write through when the hook times out, exits
