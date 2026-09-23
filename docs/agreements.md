@@ -160,6 +160,22 @@ installed where the editor can run it. When several PreToolUse hooks match,
 the host runs them in parallel; its documentation does not say how
 conflicting decisions from different hooks are combined.
 
+#### Measured
+
+`node evidence/enforce-e2e.mjs` reproduces this in a temporary repository with
+its own `SESSION_HOME`. Run on 22 September 2026 with Claude Code 2.1.280 and
+Haiku, under a deny agreement accepting only edits under `src/`: the agent's
+Edit to `src/a.ts` went through, its Write of `notes.txt` was blocked with the
+check's reason, and the file was never created. The user-level `SessionEnd`
+hook then closed the session with everything inside scope, and `session
+verify` found the chain intact. `--no-agent` skips the paid step.
+
+One check takes about 190 ms at p95 on an Apple-silicon Mac, allowed or denied:
+roughly 30 ms of Node starting, 45 ms of loading the CLI, and the rest the git
+calls and log read that pick the checkout and session. That is 4% of the
+5-second deadline. An `ask` policy was not exercised: `claude -p` has no one to
+ask, so it needs an interactive session.
+
 New records capture optional immutable `checkout` metadata from Git's root and
 filesystem realpath at creation, independent of caller-supplied record fields.
 Root aliases and subdirectories resolve to the same binding. If Git cannot
@@ -178,8 +194,7 @@ in one checkout share its one agreement. Moving/reusing checkout paths requires
 closing old sessions and starting new ones; the path is not a machine identity.
 Existing start/stop lifecycle selection is unchanged and remains repository-wide.
 The reader still tolerates a truncated final log line and does not verify
-signatures on every read, so this is not an integrity guarantee. Real
-editor tests, timeout behavior and latency remain pending.
+signatures on every read, so this is not an integrity guarantee.
 
 ```ts
 agreement: {
