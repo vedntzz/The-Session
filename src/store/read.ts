@@ -208,6 +208,7 @@ export function sessionFrom(input: NewSession, repo: string, intentSource: Inten
     ...(agreement ? { agreement } : {}),
     scope: agreement ? scopeForAgreement(agreement, input.scope) : input.scope ?? [],
     baseline: input.baseline ?? [],
+    ...(input.baselineState ? { baselineState: input.baselineState } : {}),
     reality: input.reality ?? [],
     drift: input.drift ?? [],
     cost: input.cost ?? zeroCost(),
@@ -320,6 +321,7 @@ export function foldRecord(
       proposal: existing.proposal, intentSource: existing.intentSource,
       agreement: existing.agreement,
       checkout: existing.checkout,
+      baselineState: existing.baselineState,
       ...(existing.agreement ? { scope: existing.scope } : {}),
     } : {}),
   };

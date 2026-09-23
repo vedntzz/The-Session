@@ -77,6 +77,9 @@ type Session = {
   scope: string[]              // accepted scope, may be empty; separate from proposal;
                                // equals agreement.paths and is fixed when one exists
   baseline: string[]           // dirty at start, subtracted from reality
+  baselineState?: Record<string, string | null>  // blob id per baseline path at
+                               // start, null = not a file; {} = clean; creating record
+                               // only. Lets a later edit to an already-dirty file show
   reality: string[]            // observed from git diff, less baseline
   drift: string[]              // reality minus scope
   class?: SessionClass         // absent is derived from reality, never guessed

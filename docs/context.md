@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `9205285 shell: resolve one command to the writes to check, or unknown` (`v1.0.0-46-g9205285`).
+Derived at `e6a1759 session hook check: check shell commands, and ask when it can't tell` (`v1.0.0-47-ge6a1759`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -59,13 +59,13 @@ bundler, no monorepo.
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
      131
-   18094
+   18115
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      61
-   18951
+      62
+   19049
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -256,6 +256,18 @@ export interface Session {
    * so a session is not blamed for work that was sitting there before it.
    */
   baseline: string[];
+  /**
+   * The blob id of every `baseline` path at the instant the session opened;
+   * `null` where the path was not a regular file (deleted, or a directory).
+   * `{}` when nothing was dirty. Written only in the creating record.
+   *
+   * `baseline` alone subtracts a file that was dirty at start from everything
+   * after, so a session that edits a file the developer had already changed
+   * leaves no trace. With the blob at start, a later reading can tell whether
+   * the session changed it. Hashes only, like `endState`: no content is kept.
+   * Absent on sessions opened before it existed — never backfilled.
+   */
+  baselineState?: Record<string, string | null>;
   /** The paths that actually changed, observed from git. */
   reality: string[];
   /** `reality` minus `scope` — recorded, never blocked. */
@@ -992,10 +1004,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  60 passed (60)
-      Tests  2152 passed (2152)
-   Start at  10:32:01
-   Duration  229.00s (transform 1.90s, setup 0ms, collect 8.68s, tests 1121.73s, environment 7ms, prepare 3.42s)
+ Test Files  61 passed (61)
+      Tests  2161 passed (2161)
+   Start at  10:41:48
+   Duration  169.52s (transform 1.69s, setup 0ms, collect 7.40s, tests 887.84s, environment 6ms, prepare 2.40s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

@@ -200,6 +200,18 @@ export interface Session {
    * so a session is not blamed for work that was sitting there before it.
    */
   baseline: string[];
+  /**
+   * The blob id of every `baseline` path at the instant the session opened;
+   * `null` where the path was not a regular file (deleted, or a directory).
+   * `{}` when nothing was dirty. Written only in the creating record.
+   *
+   * `baseline` alone subtracts a file that was dirty at start from everything
+   * after, so a session that edits a file the developer had already changed
+   * leaves no trace. With the blob at start, a later reading can tell whether
+   * the session changed it. Hashes only, like `endState`: no content is kept.
+   * Absent on sessions opened before it existed — never backfilled.
+   */
+  baselineState?: Record<string, string | null>;
   /** The paths that actually changed, observed from git. */
   reality: string[];
   /** `reality` minus `scope` — recorded, never blocked. */
@@ -327,7 +339,7 @@ export type RecordFields = Partial<Omit<Session, "id">>;
  */
 export type SessionPatch = Omit<
   RecordFields,
-  "intent" | "intentSource" | "repo" | "attribution" | "proposal" | "agreement" | "checkout"
+  "intent" | "intentSource" | "repo" | "attribution" | "proposal" | "agreement" | "checkout" | "baselineState"
 >;
 
 /**

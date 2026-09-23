@@ -239,6 +239,9 @@ export async function updateSession(
  * caller cannot quietly become the one that edits an intent.
  */
 function refusePatch(patch: SessionPatch): void {
+  if ("baselineState" in patch) {
+    throw new Error("The starting snapshot is taken at start and cannot be added or edited later.");
+  }
   if ("checkout" in patch) {
     throw new Error("Checkout is captured at start and cannot be added or edited later. Start a new session in the intended checkout.");
   }

@@ -1,7 +1,7 @@
 import { attributionValues, hasAttribution, readConfig } from "../config.js";
 import type { PrimeProposal } from "../prime.js";
 import { parseAgreement, scopeForAgreement, type Agreement } from "../agreement.js";
-import { changedFilesSince, currentCommit, isRepo } from "../git.js";
+import { changedFilesSince, currentCommit, endStateOf, isRepo } from "../git.js";
 import { safeText } from "../render/tui/text.js";
 import {
   appendSession,
@@ -66,7 +66,7 @@ function normalizeScope(scope: readonly string[] | undefined): string[] {
  * a person opened it or the hook did. Shared so the two cannot come to differ
  * about what a session's baseline is.
  */
-async function openingFacts(cwd: string): Promise<Pick<NewSession, "startedAt" | "startCommit" | "baseline" | "attribution">> {
+async function openingFacts(cwd: string): Promise<Pick<NewSession, "startedAt" | "startCommit" | "baseline" | "baselineState" | "attribution">> {
   // Recorded now so `stop` can diff against it. An unborn HEAD has nothing to
   // diff against, so it is better to say so than to store an empty base.
   const startCommit = await currentCommit(cwd);
@@ -77,6 +77,9 @@ async function openingFacts(cwd: string): Promise<Pick<NewSession, "startedAt" |
   // Whatever is already dirty is not this session's doing. Recording it now
   // is what lets `stop` subtract it back out.
   const baseline = await changedFilesSince(startCommit, cwd);
+  // And what each of those files held, hashed the way stop hashes reality, so
+  // a later edit to an already-dirty file is not lost in the subtraction.
+  const baselineState = await endStateOf(baseline, cwd);
 
   // Read once, here, and copied into the record. A session says who it was for
   // at the time it ran, so editing `.session.json` today cannot change who
@@ -87,6 +90,7 @@ async function openingFacts(cwd: string): Promise<Pick<NewSession, "startedAt" |
     startedAt: new Date().toISOString(),
     startCommit,
     baseline,
+    baselineState,
     ...(hasAttribution(attribution) ? { attribution } : {}),
   };
 }

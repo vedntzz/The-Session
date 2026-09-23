@@ -53,7 +53,7 @@ verifier already had. It cannot catch a wholesale rewrite under a new key —
 see [What it does not do](../../../docs/decisions.md#what-it-does-not-do).
 
 **Some fields exist only in the creating record.** `proposal`, `agreement`,
-`checkout`, `intentSource` and `attribution` are written in the first record
+`checkout`, `baselineState`, `intentSource` and `attribution` are written in the first record
 for a session and nowhere after (`intent` is the one exception: a passive
 session's arrives once, from its first prompt, through `captureIntent`). The
 writer refuses a patch that carries any of them,
@@ -63,6 +63,10 @@ a session that began without one. The signature proves the bytes were not
 edited; this rule is what stops a validly signed *later* line from revising
 what was accepted. Both are needed — don't drop either because the other
 exists.
+
+`baselineState` is the blob id of each dirty path at start, hashed by the same
+`workingBlobs` that gives `endState`; hashes only, never content. `{}` means
+the tree was clean, absent means the record predates it.
 
 `checkout` is captured from git's root and the filesystem realpath at creation,
 never taken from the caller's fields, and is absent rather than guessed when
