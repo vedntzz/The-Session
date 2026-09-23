@@ -8,7 +8,18 @@ import { readSessions, type StoreOptions } from "../store.js";
 import { selectWriteSession, WriteSessionSelectionError } from "../write-session.js";
 import { resolveFileWrite } from "./resolve-write.js";
 
-export type CheckWriteOptions = StoreOptions & { stdin?: AsyncIterable<Buffer | string> };
+export type CheckWriteOptions = StoreOptions & {
+  stdin?: AsyncIterable<Buffer | string>;
+  /** How long the check may take before it denies. Defaults to CHECK_DEADLINE_MS. */
+  deadlineMs?: number;
+};
+
+/**
+ * Half the hook's registered timeout. The host lets a timed-out PreToolUse hook
+ * through, so a check that stalls must answer for itself before the host stops
+ * waiting — a denial it can give, where silence from a killed process is an allow.
+ */
+export const CHECK_DEADLINE_MS = 5_000;
 
 /** Empty output leaves the editor's own permissions intact; never emit allow. */
 function response(decision: "ask" | "deny", reason: string): string {
@@ -30,11 +41,29 @@ async function payloadFrom(input: AsyncIterable<Buffer | string>): Promise<strin
 }
 
 /**
- * The process cwd selects the checkout, never the untrusted payload cwd.
- * Caught failures produce a denial, not an exit-1 that the host may ignore.
- * Installation and host timeout behavior are deliberately separate concerns.
+ * The check, bounded in time. Whichever finishes first answers: the check, or
+ * a denial at the deadline. Work still in flight is abandoned, not trusted.
  */
 export async function checkWrite(options: CheckWriteOptions = {}): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<string>((resolve) => {
+    timer = setTimeout(
+      () => resolve(response("deny", "Write check did not finish in time. Check the repository and session log, then retry.")),
+      options.deadlineMs ?? CHECK_DEADLINE_MS,
+    );
+  });
+  try {
+    return await Promise.race([evaluate(options), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The process cwd selects the checkout, never the untrusted payload cwd.
+ * Caught failures produce a denial, not an exit-1 that the host may ignore.
+ */
+async function evaluate(options: CheckWriteOptions): Promise<string> {
   try {
     const payload = await payloadFrom(options.stdin ?? process.stdin);
     if (payload === undefined) return response("deny", "Write check input exceeds 2 MiB. Reduce the tool payload and retry.");

@@ -140,6 +140,26 @@ which pauses noninteractive runs. See the official
 Responses never grant `allow` or replace tool input. Record-only does not log
 attempts; ordinary stop-time diff measurement remains separate.
 
+#### When the check cannot answer
+
+Claude Code lets a PreToolUse write through when the hook times out, exits
+non-zero without JSON, or cannot start; only exit 2 or a JSON `deny` blocks.
+Checked against the [hooks reference](https://code.claude.com/docs/en/hooks)
+on 22 September 2026; re-check before relying on it. The check closes the
+cases it can reach:
+
+| Failure | What happens |
+|---|---|
+| A step is slow or stdin never closes | Denied at the 5-second internal deadline (`CHECK_DEADLINE_MS`), inside the registered 10-second timeout; the process exits without waiting on stdin |
+| A caught error in the check | A static JSON denial, exit 0 |
+| An error escaping the check (e.g. stdout fails) | A static stderr reason, exit 2, which blocks |
+| `session` is not on the editor's `PATH`, Node cannot start, or the process is killed | **The write goes through.** Nothing inside the check can answer for a process that never ran |
+
+Enforcement is therefore only as reliable as the `session` command being
+installed where the editor can run it. When several PreToolUse hooks match,
+the host runs them in parallel; its documentation does not say how
+conflicting decisions from different hooks are combined.
+
 New records capture optional immutable `checkout` metadata from Git's root and
 filesystem realpath at creation, independent of caller-supplied record fields.
 Root aliases and subdirectories resolve to the same binding. If Git cannot

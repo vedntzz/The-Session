@@ -115,8 +115,10 @@ export const HOOKS: readonly HookSpec[] = [STOP_HOOK, OPEN_HOOK, PROMPT_HOOK];
  *
  * The matcher names the tools `parseClaudeWrite` understands and no others, so
  * a shell command never waits on a Node start it has nothing to learn from.
- * Ten seconds covers that start on a slow machine many times over; what the
- * editor does when a handler outlives it is a host behaviour, not a promise.
+ * Ten seconds, twice the check's own deadline (`CHECK_DEADLINE_MS`): the host
+ * lets a timed-out PreToolUse hook through, so the check has to deny on its
+ * own clock before the host's runs out. A process that cannot start at all, or
+ * is killed, is still let through — no setting here can change that.
  */
 export const CHECK_HOOK: HookSpec = {
   event: "PreToolUse",

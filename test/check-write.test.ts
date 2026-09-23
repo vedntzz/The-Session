@@ -4,7 +4,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agreement } from "../src/agreement.js";
 import { MAX_WRITE_PAYLOAD_BYTES } from "../src/capture/adapters/claude-write.js";
-import { checkWrite } from "../src/commands/check-write.js";
+import { CHECK_DEADLINE_MS, checkWrite } from "../src/commands/check-write.js";
+import { CHECK_HOOK } from "../src/capture/hook.js";
 import { runGit } from "../src/git.js";
 import { buildProgram } from "../src/program.js";
 import { appendSession, foldLog, readLog, readSessions, resolveStoreFile, updateSession, type SessionPatch } from "../src/store.js";
@@ -181,5 +182,44 @@ describe("PreToolUse command", () => {
     log.mockClear();
     await buildProgram({ cwd, home, stdin: input(payload()) }).parseAsync(["node", "session", "hook", "check"]);
     expect(log).not.toHaveBeenCalled();
+  });
+});
+
+describe("when the check cannot answer in time or at all", () => {
+  it("denies on its own clock, well inside the hook's registered timeout", () => {
+    // The host lets a timed-out hook through; the check must answer first.
+    expect(CHECK_DEADLINE_MS).toBeLessThanOrEqual((CHECK_HOOK.timeout * 1000) / 2);
+  });
+
+  it("denies a stalled input at the deadline, without echoing anything", async () => {
+    async function* stalled() { yield "{"; await new Promise(() => {}); }
+    const started = Date.now();
+    const result = await checkWrite({ cwd, home, deadlineMs: 50, stdin: stalled() });
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(decision(result)).toBe("deny");
+    expect(result).toContain("did not finish in time");
+    expect(result).not.toContain(cwd);
+  });
+
+  it("does not cut a quick answer short", async () => {
+    await accept();
+    expect(await checkWrite({ cwd, home, deadlineMs: 5_000, stdin: input(payload()) })).toBe("");
+    expect(decision(await checkWrite({ cwd, home, deadlineMs: 5_000, stdin: input(payload("outside")) }))).toBe("deny");
+  });
+
+  it("exits 2 with a static reason when anything escapes the check", async () => {
+    await accept();
+    const previous = process.exitCode;
+    vi.spyOn(console, "log").mockImplementation(() => { throw new Error("PRIVATE CONTENT"); });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await buildProgram({ cwd, home, stdin: input(payload("outside")) }).parseAsync(["node", "session", "hook", "check"]);
+      expect(process.exitCode).toBe(2);
+      const written = stderr.mock.calls.map((call) => String(call[0])).join("");
+      expect(written).toContain("Write check failed unexpectedly");
+      expect(written).not.toContain("PRIVATE CONTENT");
+    } finally {
+      process.exitCode = previous;
+    }
   });
 });

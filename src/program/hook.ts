@@ -12,8 +12,18 @@ export function registerHook(program: Command, options: ProgramOptions): void {
   hook.command("check")
     .description("Check a PreToolUse write against the open session's agreement")
     .action(async () => {
-      const result = await checkWrite(options);
-      if (result !== "") console.log(result);
+      try {
+        const result = await checkWrite(options);
+        if (result !== "") console.log(result);
+      } catch {
+        // Anything that escapes the check would otherwise exit 1, which the host
+        // reads as a non-blocking error and lets the write through. Exit 2 blocks.
+        process.stderr.write("Write check failed unexpectedly. Run session hook check by hand to see why, then retry.\n");
+        process.exitCode = 2;
+      } finally {
+        // An answer given at the deadline must not wait on a stdin that never closed.
+        if (options.stdin === undefined) process.stdin.destroy();
+      }
     });
 
   hook

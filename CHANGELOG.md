@@ -22,7 +22,10 @@ Three commands cut, one boundary drawn. See
   only. User-level settings are never touched, and other settings and hooks in
   the file are kept. An `ask` or `deny` policy is checked from then on in that
   repository; shell commands are not checked. `--enforce --uninstall` takes
-  only the check back out of that file.
+  only the check back out of that file. A check that stalls denies at its own
+  5-second deadline, and one that fails unexpectedly exits 2, because the host
+  lets a timed-out or crashed hook through. A `session` the editor cannot find
+  on `PATH` still lets writes through.
 
 ### Removed
 

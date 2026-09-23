@@ -111,7 +111,11 @@ because the spelling decides which terms apply.
   checkout share one agreement.
 - The reader tolerates a truncated last line and does not verify signatures on
   each read. This is not an integrity guarantee.
-- A process crash or host timeout cannot be made fail-closed from inside.
+- A process that never starts (`session` not on the editor's `PATH`) or is
+  killed is let through by the host. The check covers what it can: a denial
+  at `CHECK_DEADLINE_MS`, inside `CHECK_HOOK.timeout`, and exit 2 for anything
+  that escapes it — never exit 1, which the host reads as "carry on". Keep the
+  deadline under the timeout; a test pins it.
 
 Outside a git repository a supported write is denied. That is why the check
 is never registered as a global hook: `session hook install --enforce` writes
