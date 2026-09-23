@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { startPassiveSession, startSession } from "../src/commands/start.js";
+import { baselineChanges, stopSession } from "../src/commands/stop.js";
 import { verifyLog } from "../src/commands/verify.js";
 import { appendSession, foldLog, readLog, readSessions, updateSession, type SessionPatch } from "../src/store.js";
 
@@ -94,5 +95,66 @@ describe("the starting snapshot", () => {
     await startSession("work", options);
     expect(JSON.parse((await readLog(options)).lines[0]!.text).set).toHaveProperty("baselineState");
     expect((await verifyLog(options)).check).toMatchObject({ verified: 1, signaturesChecked: true });
+  });
+});
+
+describe("using the snapshot at stop", () => {
+  const stop = () => stopSession({ ...options, adapters: [] });
+
+  it("counts a file the developer had changed and the session changed again", async () => {
+    await writeFile(path.join(cwd, "src/a.ts"), "developer's edit\n");
+    await startSession("work", { ...options, scope: ["docs/"] });
+    await writeFile(path.join(cwd, "src/a.ts"), "developer's edit\nand the session's\n");
+    const stopped = await stop();
+    expect(stopped.reality).toEqual(["src/a.ts"]);
+    expect(stopped.drift).toEqual(["src/a.ts"]);
+    expect(stopped.endState).toEqual({ "src/a.ts": await git("hash-object", "src/a.ts") });
+  });
+
+  it("still leaves out a dirty file the session did not touch", async () => {
+    await writeFile(path.join(cwd, "src/a.ts"), "developer's edit\n");
+    await startSession("work", options);
+    await writeFile(path.join(cwd, "src/new.ts"), "session\n");
+    expect((await stop()).reality).toEqual(["src/new.ts"]);
+  });
+
+  it.each([
+    ["put back to HEAD", async () => { await git("checkout", "--", "src/a.ts"); }],
+    ["deleted", async () => { await unlink(path.join(cwd, "src/a.ts")); }],
+  ])("counts a dirty file the session %s", async (_, act) => {
+    await writeFile(path.join(cwd, "src/a.ts"), "developer's edit\n");
+    await startSession("work", options);
+    await act();
+    expect((await stop()).reality).toEqual(["src/a.ts"]);
+  });
+
+  it("counts a file deleted at start that the session recreated, and an untracked one it removed", async () => {
+    await unlink(path.join(cwd, "src/gone.ts"));
+    await writeFile(path.join(cwd, "notes.md"), "untracked\n");
+    await startSession("work", options);
+    await writeFile(path.join(cwd, "src/gone.ts"), "back\n");
+    await unlink(path.join(cwd, "notes.md"));
+    const stopped = await stop();
+    expect(stopped.reality).toEqual(["notes.md", "src/gone.ts"]);
+    expect(stopped.endState).toMatchObject({ "notes.md": null });
+  });
+
+  it("leaves a record from before the snapshot exactly as it measured before", async () => {
+    await writeFile(path.join(cwd, "src/a.ts"), "developer's edit\n");
+    await appendSession({
+      intent: "old", startedAt: new Date().toISOString(), startCommit: await git("rev-parse", "HEAD"),
+      baseline: ["src/a.ts"],
+    }, options);
+    await writeFile(path.join(cwd, "src/a.ts"), "edited again\n");
+    expect((await stop()).reality).toEqual([]);
+  });
+});
+
+describe("baselineChanges", () => {
+  it("names the paths whose blob moved, and nothing for a record without a snapshot", () => {
+    const now = new Map<string, string | null>([["a", "1"], ["b", "9"], ["c", null], ["d", "4"]]);
+    expect(baselineChanges({ a: "1", b: "2", c: "3", d: null }, now)).toEqual(["b", "c", "d"]);
+    expect(baselineChanges(undefined, now)).toEqual([]);
+    expect(baselineChanges({}, now)).toEqual([]);
   });
 });

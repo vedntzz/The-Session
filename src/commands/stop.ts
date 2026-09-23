@@ -1,6 +1,6 @@
 import { captureCost, type Adapter } from "../capture/index.js";
 import { classifyPaths } from "../classify.js";
-import { changedFilesSince, endStateOf } from "../git.js";
+import { changedFilesSince, endStateOf, repoRoot, workingBlobs } from "../git.js";
 import {
   getOpenSession,
   hasDeclaredScope,
@@ -24,14 +24,38 @@ export interface StopOptions extends StoreOptions {
 }
 
 /**
- * What this session changed: everything different from the start commit,
- * less whatever was already dirty when it opened. A file the session touched
- * on top of pre-existing edits is still excluded, since git reports only that
- * it differs from HEAD, not who made which hunk.
+ * What this session changed: everything different from the start commit, less
+ * whatever was already dirty when it opened — plus `touchedBaseline`, the dirty
+ * paths the snapshot shows the session changed again. Git says only that a
+ * file differs from HEAD, not who made which hunk; the blob at start is what
+ * says the session did something to it. Sorted, as git returns it.
  */
-export function computeReality(changed: readonly string[], baseline: readonly string[]): string[] {
+export function computeReality(
+  changed: readonly string[],
+  baseline: readonly string[],
+  touchedBaseline: readonly string[] = [],
+): string[] {
   const before = new Set(baseline);
-  return changed.filter((path) => !before.has(path));
+  const own = changed.filter((path) => !before.has(path));
+  return [...new Set([...own, ...touchedBaseline])].sort();
+}
+
+/**
+ * The paths dirty at start whose blob is not what it was then: edited again,
+ * deleted, created where it had been deleted, or put back to HEAD — each is
+ * something the session did. `now` is the working blob of each path (`null`
+ * for no regular file). A record from before the snapshot has none to compare
+ * with, and says nothing here rather than guessing: its reality is what it
+ * always was.
+ */
+export function baselineChanges(
+  baselineState: Readonly<Record<string, string | null>> | undefined,
+  now: ReadonlyMap<string, string | null>,
+): string[] {
+  if (baselineState === undefined) return [];
+  return Object.keys(baselineState)
+    .filter((path) => now.has(path) && now.get(path) !== baselineState[path])
+    .sort();
 }
 
 /**
@@ -78,7 +102,9 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
 
   const cwd = options.cwd ?? process.cwd();
   const changed = await diffSince(open.startCommit, cwd);
-  const reality = computeReality(changed, open.baseline);
+  const now = open.baselineState === undefined ? new Map<string, string | null>()
+    : await workingBlobs(await repoRoot(cwd), Object.keys(open.baselineState));
+  const reality = computeReality(changed, open.baseline, baselineChanges(open.baselineState, now));
   const endedAt = new Date().toISOString();
   const captured = await captureCost(
     { from: open.startedAt, to: endedAt, cwd },

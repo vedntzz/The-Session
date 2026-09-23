@@ -48,6 +48,13 @@ Three commands cut, one boundary drawn. See
   5-second deadline, and one that fails unexpectedly exits 2, because the host
   lets a timed-out or crashed hook through. A `session` the editor cannot find
   on `PATH` still lets writes through.
+- **Edits to files you had already changed now count.** `session start`
+  records the blob of every file dirty at start (`baselineState`, hashes only),
+  and `stop` counts a dirty file whose content moved during the session —
+  edited again, deleted, recreated or put back to HEAD — in `reality`, and so
+  in drift and outcome. Before, anything dirty at start was subtracted whole,
+  so work on top of your own changes left no trace. Sessions recorded earlier
+  keep their old figures; nothing is backfilled.
 - **Shell commands are checked.** `session hook check` reads `Bash` calls and
   the matcher is `Edit|Write|MultiEdit|Bash`; run `session hook install
   --enforce` again to update an existing install. npm/pnpm/yarn, `sed -i`,

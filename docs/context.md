@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `e6a1759 session hook check: check shell commands, and ask when it can't tell` (`v1.0.0-47-ge6a1759`).
+Derived at `a539b6b start: record the blob of every file already dirty at start` (`v1.0.0-48-ga539b6b`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -59,13 +59,13 @@ bundler, no monorepo.
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
      131
-   18115
+   18141
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
       62
-   19049
+   19111
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -335,7 +335,7 @@ to nest here and its relative links repointed at this directory.
 
 ```console
 $ wc -l .claude/skills/measurement-rules/SKILL.md
-     566 .claude/skills/measurement-rules/SKILL.md
+     585 .claude/skills/measurement-rules/SKILL.md
 ```
 
 That file is the copy a change is held to. **If the two ever disagree, the
@@ -393,6 +393,25 @@ end state for any of them — that one attempted something, and `classify`
 reports it abandoned. `attemptedNothing` is the whole test, and it is false
 while a session is still running: a session that has changed nothing *yet* is
 `open`.
+
+### Reality and the starting snapshot
+
+`reality` is what the session changed: the diff against `startCommit`, less
+`baseline` (dirty at start), **plus** every baseline path whose blob at stop
+differs from `baselineState` — `computeReality` with `baselineChanges`. Edited
+again, deleted, recreated, or put back to HEAD all count: each is something
+the session did to a file the developer had already changed.
+
+Git says only that a file differs from HEAD, never who wrote which hunk, so a
+path that is in `reality` this way is counted whole, like any other path. It
+drifts if it is outside scope and is in `endState` for outcome and survival.
+There is no separate "touched a dirty file" category: that would be a second
+view of one fact.
+
+A record without `baselineState` (before 23 September 2026) has nothing to
+compare with. Its reality is what it always was — the old subtraction, with
+the blind spot — and nothing is inferred to fill it. Never backfill the
+snapshot from a later tree: that would describe the wrong instant.
 
 ### Class
 
@@ -1005,9 +1024,9 @@ model's rate. A release of this tool is not a price update.
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
  Test Files  61 passed (61)
-      Tests  2161 passed (2161)
-   Start at  10:41:48
-   Duration  169.52s (transform 1.69s, setup 0ms, collect 7.40s, tests 887.84s, environment 6ms, prepare 2.40s)
+      Tests  2168 passed (2168)
+   Start at  11:00:35
+   Duration  159.25s (transform 1.38s, setup 0ms, collect 5.56s, tests 727.32s, environment 5ms, prepare 2.30s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

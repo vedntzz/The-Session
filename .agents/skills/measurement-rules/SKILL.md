@@ -1,6 +1,6 @@
 ---
 name: measurement-rules
-description: Load when changing how a session's outcome, class, intent source or cost is decided or displayed — editing outcome.ts, classify.ts, observe.ts, pricing.ts, scan.ts, rates.json, or debt.ts; changing Prime's proposal rule or evaluation; adding a class rule or a model price; touching a view that prints money, a median, a merge rate, a drift figure, or any total that might have nothing behind it. Also load before "simplifying" a figure, apportioning one counter from another, or making an unpriced total read as zero.
+description: Load when changing how a session's outcome, class, intent source or cost is decided or displayed — editing outcome.ts, classify.ts, stop.ts's reality, observe.ts, pricing.ts, scan.ts, rates.json, or debt.ts; changing Prime's proposal rule or evaluation; adding a class rule or a model price; touching a view that prints money, a median, a merge rate, a drift figure, or any total that might have nothing behind it. Also load before "simplifying" a figure, apportioning one counter from another, or making an unpriced total read as zero.
 ---
 
 # Measurement rules
@@ -57,6 +57,25 @@ end state for any of them — that one attempted something, and `classify`
 reports it abandoned. `attemptedNothing` is the whole test, and it is false
 while a session is still running: a session that has changed nothing *yet* is
 `open`.
+
+## Reality and the starting snapshot
+
+`reality` is what the session changed: the diff against `startCommit`, less
+`baseline` (dirty at start), **plus** every baseline path whose blob at stop
+differs from `baselineState` — `computeReality` with `baselineChanges`. Edited
+again, deleted, recreated, or put back to HEAD all count: each is something
+the session did to a file the developer had already changed.
+
+Git says only that a file differs from HEAD, never who wrote which hunk, so a
+path that is in `reality` this way is counted whole, like any other path. It
+drifts if it is outside scope and is in `endState` for outcome and survival.
+There is no separate "touched a dirty file" category: that would be a second
+view of one fact.
+
+A record without `baselineState` (before 23 September 2026) has nothing to
+compare with. Its reality is what it always was — the old subtraction, with
+the blind spot — and nothing is inferred to fill it. Never backfill the
+snapshot from a later tree: that would describe the wrong instant.
 
 ## Class
 

@@ -79,8 +79,9 @@ type Session = {
   baseline: string[]           // dirty at start, subtracted from reality
   baselineState?: Record<string, string | null>  // blob id per baseline path at
                                // start, null = not a file; {} = clean; creating record
-                               // only. Lets a later edit to an already-dirty file show
-  reality: string[]            // observed from git diff, less baseline
+                               // only. stop adds back a baseline path whose blob moved
+  reality: string[]            // observed from git diff, less baseline, plus the
+                               // baseline paths the snapshot shows the session changed
   drift: string[]              // reality minus scope
   class?: SessionClass         // absent is derived from reality, never guessed
   cost: SessionCost
