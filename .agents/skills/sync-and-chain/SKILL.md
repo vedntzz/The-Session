@@ -1,6 +1,6 @@
 ---
 name: sync-and-chain
-description: Load when touching the on-disk log format, the hash chain, signing keys, `session verify`, or moving records between machines — editing chain.ts, keys.ts, verify.ts, sync.ts, store.ts appends, or anything that reads or writes refs/session/*. Also load before changing what a record hashes over, adding a field to LogRecord, collapsing an empty log into a passing verify, summing peers into one verdict, or making push/pull reach anything other than a git remote.
+description: Load when touching the on-disk log format, the hash chain, signing keys, `session verify`, or moving records between machines — editing chain.ts, keys.ts, verify.ts, sync.ts, store.ts appends, or anything that reads or writes refs/session/*. Also load before changing what a record hashes over, adding a field to LogRecord or to the creating record (agreement, checkout, proposal), letting a patch touch a field fixed at creation, collapsing an empty log into a passing verify, summing peers into one verdict, or making push/pull reach anything other than a git remote.
 ---
 
 # The log on disk, and how it travels
@@ -51,6 +51,25 @@ against, which is what a holder of the log alone needs. It catches a log that
 disagrees with itself about its key, and a log that disagrees with a key the
 verifier already had. It cannot catch a wholesale rewrite under a new key —
 see [What it does not do](../../../docs/decisions.md#what-it-does-not-do).
+
+**Some fields exist only in the creating record.** `proposal`, `agreement`,
+`checkout`, `intentSource` and `attribution` are written in the first record
+for a session and nowhere after (`intent` is the one exception: a passive
+session's arrives once, from its first prompt, through `captureIntent`). The
+writer refuses a patch that carries any of them,
+and refuses a `scope` patch on an agreed session; the fold ignores a later
+record that tries anyway, including one that tries to insert an agreement into
+a session that began without one. The signature proves the bytes were not
+edited; this rule is what stops a validly signed *later* line from revising
+what was accepted. Both are needed — don't drop either because the other
+exists.
+
+`checkout` is captured from git's root and the filesystem realpath at creation,
+never taken from the caller's fields, and is absent rather than guessed when
+git cannot say. Older records are never backfilled or re-signed: absent fields
+read through their defaults (`proposerOf` says `prime`), so the stored bytes
+and their hashes stay exactly as written. A new optional field needs no record
+version bump — `hash` already covers everything in `set`.
 
 `prev` makes the append a read-then-write, so appends take a lock file
 (`<log>.lock`, created `wx`, stale after 10s). Reading is untouched:

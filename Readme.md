@@ -74,8 +74,16 @@ recorded. Thin evidence produces no suggestion. [Prime workflow and limits](docs
 Add `--review` to `session start` or `session prime --start` to inspect and edit
 an agreement before starting: accepted paths, actions, sensitive paths and
 policy. Type `accept` to save it, or `cancel` to leave without a record.
-This step records policy only; enforcement is not yet implemented.
-[Agreement review and record](docs/agreements.md).
+The terms are signed into the session's first record and cannot be edited
+afterwards. [Agreement review and record](docs/agreements.md).
+
+`session hook check` is the check an editor runs before a write: given a
+Claude Code `Edit` or `Write` payload on stdin, it answers `ask` or `deny` when
+the write falls outside the open session's accepted terms, and prints nothing
+otherwise. It never grants a permission. Run `session hook install --enforce`
+inside a repository to register it there, in `.claude/settings.local.json`;
+nothing outside that repository is affected, and the user-level hooks are
+untouched. Until then, or for shell commands, a policy is recorded, not enforced.
 
 | | |
 |---|---|

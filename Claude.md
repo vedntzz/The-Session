@@ -6,11 +6,12 @@
 
 ## Invariants — do not violate these
 
-1. **`intent` is immutable.** Written once at `session start`, never edited afterward. A declaration you can revise after seeing the result is a rationalisation. No `--edit-intent` flag, ever.
+1. **`intent` is immutable, and so are the accepted terms.** Written once at `session start`, never edited afterward. A declaration you can revise after seeing the result is a rationalisation. No `--edit-intent` flag, ever. The same holds for `agreement`, `proposal` and `checkout`: signed into the creating record, never patched, never added to a session that began without them, never backfilled onto an old one.
 2. **Source code, prompts and transcripts never leave the machine.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service. The tool itself needs no account, reaches no network but that remote, and sends nothing. An [optional hosted team layer](docs/decisions.md#what-never-leaves-the-machine) may take metadata only — paths, counts, decisions, outcomes, costs — and does not exist yet, so anything in this repo reaching for one is wrong. Content never crosses, under any flag.
-3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else. A model may *propose* — a scope, an agreement — for the developer to accept, edit or reject before the work; the proposal records its proposer (`prime` or `external`) (field lands with the agreement record; records without it read as prime) and is recorded apart from what was accepted, as Prime's is, and only what was accepted is ever measured against. This tool never calls a model. [Models propose, never judge](docs/decisions.md#the-v1-boundary).
+3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else. A model may *propose* — a scope, an agreement — for the developer to accept, edit or reject before the work; the proposal records its proposer (`prime` or `external`; older proposals without the field read as `prime` through `proposerOf`, their bytes untouched) and is recorded apart from what was accepted, as Prime's is, and only what was accepted is ever measured against. This tool never calls a model. [Models propose, never judge](docs/decisions.md#the-v1-boundary).
 4. **Turns that produced nothing are first-class.** Turns that changed no files are counted and displayed, never dropped — and where the record cannot say which turns those were, *that* is displayed rather than a nought. A transcript names the tool a call used, never what it did to the disk, so the question goes to git: `empty.ts` is the one rule, and no view reads `cost.emptyTurns` itself.
 5. **Cross-tool.** Nothing may assume a specific coding tool. Adapters go behind an interface; the core reads a normalised shape.
+6. **The write check never grants.** `session hook check` answers `ask` or `deny`, or prints nothing and leaves the editor's own permissions in charge — never `allow`, never the host's literal `defer`, never rewritten tool input. A failure it can catch is a denial, not a guess, and no response echoes source content, paths or a raw error. The payload never chooses the repository; the process cwd does.
 
 ## Stack
 
@@ -39,6 +40,14 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       commands/sweep.ts settle + due checks, once a day per repo, silent unless written
       chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
       config.ts .session.json, checked in   ../rates.json prices per model, per Mtok
+      store/ record.ts types, append.ts writer, read.ts fold, paths.ts store location
+      agreement.ts accepted terms and validation — no tool names, no enforcement
+      commands/review.ts the --review screen   render/agreement.ts every term, visible
+      agreement-decision.ts pure defer/ask/deny for one attempted write
+      capture/write-request.ts normalised write   adapters/claude-write.ts Edit/Write
+      parser, keeps cwd and file path only   commands/resolve-write.ts read-only
+      path resolution against a trusted root   write-session.ts the one open session
+      bound to this checkout   commands/check-write.ts `session hook check`
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
@@ -51,8 +60,15 @@ type Session = {
   intent: string | null        // immutable; null until a passive session's first prompt
   intentSource?: IntentSource  // 'declared' | 'primed' | 'captured'; absent reads as declared
   proposal?: PrimeProposal    // present exactly for primed; original suggestion,
-                               // immutable and signed at start, even if scope is replaced
-  scope: string[]              // accepted scope, may be empty; separate from proposal
+                               // immutable and signed at start, even if scope is replaced;
+                               // proposer?: 'prime' | 'external', absent reads as prime
+  agreement?: Agreement        // { paths, actions: create|edit|delete, sensitivePaths,
+                               // policy: record|ask|deny }; only in the creating record,
+                               // absent means none was recorded — never default terms
+  checkout?: string            // canonical checkout root from git + realpath at creation;
+                               // absent when git could not say, never guessed or backfilled
+  scope: string[]              // accepted scope, may be empty; separate from proposal;
+                               // equals agreement.paths and is fixed when one exists
   baseline: string[]           // dirty at start, subtracted from reality
   reality: string[]            // observed from git diff, less baseline
   drift: string[]              // reality minus scope
@@ -103,4 +119,8 @@ type SessionCost = TokenCounts & {
 
 ## The rest
 
-Rules for one area each, loaded when that area is what you are changing: `.claude/skills/measurement-rules` (outcome, class, intent source, scan, debt, survival, Prime, money), `.claude/skills/sync-and-chain` (the line on disk, verify, refs), `.claude/skills/terminal-output` (CLI surface, colour, Markdown, Prime's preview, the pull request body). Why any of it is this way: [docs/decisions.md](docs/decisions.md).
+Rules for one area each, loaded when that area is what you are changing: `.claude/skills/measurement-rules` (outcome, class, intent source, scan, debt, survival, Prime, money), `.claude/skills/sync-and-chain` (the line on disk, verify, refs), `.claude/skills/terminal-output` (CLI surface, colour, Markdown, Prime's preview, the pull request body, the review screen), `.claude/skills/agreements-and-enforcement` (accepted terms, the write decision, payload parsing, path resolution, `session hook check`). Why any of it is this way: [docs/decisions.md](docs/decisions.md); the agreement contract in full: [docs/agreements.md](docs/agreements.md).
+
+## Working in this repo
+
+One milestone at a time: implement it, test it, write the handoff in `claudehand off/README.md` (archiving the previous one as a numbered file beside it), then stop. Vedant reviews, stages, commits and pushes — an agent never does, and never starts the next milestone unasked. A handoff reports what was actually run: which tests, how many passed, what failed and how it was fixed. A targeted run is not called a full-suite run.

@@ -1,6 +1,6 @@
 ---
 name: terminal-output
-description: Load when changing anything a person reads — terminal views, colour, the help surface, Prime's preview, or the Markdown and HTML reports. Editing render/palette.ts, render/terminal.ts, render/prime.ts, render/markdown.ts, render/html.ts, the help text in program.ts, or adding output to a command. Also load before introducing a colour role, hard-coding a hue, adding an emoji or spinner, putting a command in the short `--help` list, or interpolating an intent into a Markdown table.
+description: Load when changing anything a person reads — terminal views, colour, the help surface, Prime's preview, the agreement review screen, or the Markdown and HTML reports. Editing render/palette.ts, render/terminal.ts, render/prime.ts, render/agreement.ts, commands/review.ts, render/markdown.ts, render/html.ts, the help text in program.ts, or adding output to a command. Also load before introducing a colour role, hard-coding a hue, adding an emoji or spinner, putting a command in the short `--help` list, or interpolating an intent into a Markdown table.
 ---
 
 # What a person reads
@@ -298,6 +298,30 @@ The outcome line each view now leads with takes **no ink at all**. It is the
 one line that is always there, and colouring what is always there says nothing
 — the same argument that leaves the cost figure uncoloured. `merged` and
 `abandoned` stay where they mark one row out of a table of them.
+
+## The agreement review screen
+
+`render/agreement.ts` is a pure function of the draft; `commands/review.ts`
+owns the terminal. The rules the screen holds to:
+
+- **Every term stays visible.** All accepted paths, all sensitive paths, the
+  actions and the policy with its one-line meaning — never truncated to fit,
+  never "and 4 more". What is not on screen was not reviewed. Prime's original
+  scope sits above the accepted list, labelled as Prime's, so the two are never
+  confused.
+- **Line-oriented, not full-screen.** Cooked terminal input, no raw mode, no
+  cursor codes, no redraw. Record text goes through `safeText` and is printed
+  as `JSON.stringify` of itself, so a path or intent cannot move the cursor or
+  hide a character.
+- **It says what it does not do.** The screen says policy is checked only
+  where `session hook install --enforce` has run, only for Edit, Write and
+  MultiEdit, and never for shell commands; it says no session has started
+  until `accept`. Change that sentence in the commit that changes the reach.
+- Colour is the existing roles — `intent`, `path`, `meta`. No new role.
+
+`session hook check` is read by an editor, not a person: exactly one JSON line
+or nothing, no colour, no trailing prose, and the reason strings obey the same
+error style as the rest of the CLI — what happened, then what to do.
 
 ## Intent-source labels
 
