@@ -16,7 +16,12 @@ Three commands cut, one boundary drawn. See
   `session prime --start --review`. Review and edit accepted paths, actions,
   sensitive paths and policy before typing `accept`. Original Prime proposals
   remain separate. Cancellation writes nothing; scripted starts are unchanged.
-  Policy is recorded only; enforcement is not yet implemented.
+  Remaining sprint work extends this to enforcement below.
+- **`session hook install --enforce`** registers `session hook check` before
+  Edit, Write and MultiEdit, in this repository's `.claude/settings.local.json`
+  only. User-level settings are never touched, and other settings and hooks in
+  the file are kept. An `ask` or `deny` policy is checked from then on in that
+  repository; shell commands are not checked. Removal is not automated yet.
 
 ### Removed
 

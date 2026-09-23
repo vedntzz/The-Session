@@ -40,8 +40,9 @@ starts without `--review` retain their noninteractive behavior and create no
 agreement. Opening facts and the baseline are gathered after acceptance; a
 session opened elsewhere while the review waits prevents a second start.
 
-**Review only records policy; it does not activate enforcement.** The check
-command below is available, but opt-in installation is still pending. External
+**Review does not activate enforcement by itself.** A policy is checked only
+in a repository where `session hook install --enforce` has registered the check
+command below, and only for Edit, Write and MultiEdit. External
 proposal ingestion is not exposed, and this review refuses an external proposal
 rather than labelling it as Prime's.
 
@@ -107,7 +108,16 @@ another repository. The check selects the single open session bound to that
 checkout, never the newest session from another checkout sharing the same remote.
 It checks every requested and resolved path, retaining the strictest decision.
 The command does not install itself, change settings, append attempt records,
-or modify files. Existing hook installation remains unchanged.
+or modify files.
+
+`session hook install --enforce` registers it for the current repository only,
+in `<root>/.claude/settings.local.json`, under the matcher
+`Edit|Write|MultiEdit` with a 10-second timeout. The file is created if absent;
+other settings and hooks in it are kept, and a second install changes nothing.
+An entry filed under a narrower matcher is moved, not duplicated. User-level
+settings are never read or written, because outside a repository the check
+denies every supported write. `--enforce` refuses `--uninstall` and the passive
+flags by name; automated removal is the next step.
 
 - No agreement, a closed session, record-only policy, a compliant write or an
   unsupported tool produces no output: normal editor permissions still apply.
@@ -142,8 +152,8 @@ in one checkout share its one agreement. Moving/reusing checkout paths requires
 closing old sessions and starting new ones; the path is not a machine identity.
 Existing start/stop lifecycle selection is unchanged and remains repository-wide.
 The reader still tolerates a truncated final log line and does not verify
-signatures on every read, so this is not an integrity guarantee. Opt-in
-installation, real editor tests, timeout behavior and latency remain pending.
+signatures on every read, so this is not an integrity guarantee. Removal,
+real editor tests, timeout behavior and latency remain pending.
 
 ```ts
 agreement: {

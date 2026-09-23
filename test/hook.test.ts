@@ -1,8 +1,11 @@
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runGit } from "../src/git.js";
+import { buildProgram } from "../src/program.js";
 import {
+  CHECK_HOOK,
   hasHook,
   hasHooks,
   HOOKS,
@@ -10,13 +13,17 @@ import {
   PROMPT_HOOK,
   STOP_HOOK,
   wantedHooks,
+  withHook,
   withHooks,
+  withoutHook,
   withoutHooks,
   type HookSpec,
   type Settings,
 } from "../src/capture/hook.js";
 import {
+  enforceFile,
   formatHook,
+  installEnforce,
   installHook,
   settingsFile,
   uninstallHook,
@@ -312,6 +319,80 @@ describe("withoutHooks", () => {
   });
 });
 
+describe("the check hook", () => {
+  const CHECK = {
+    matcher: CHECK_HOOK.matcher,
+    hooks: [{ type: "command", command: CHECK_HOOK.command, timeout: CHECK_HOOK.timeout }],
+  };
+  /** Somebody else's PreToolUse hook, which must survive every operation. */
+  const LINT = { matcher: "Write", hooks: [{ type: "command", command: "lint --staged" }] };
+
+  it("runs the check before the three write tools and nothing else", () => {
+    expect(CHECK_HOOK.event).toBe("PreToolUse");
+    expect(CHECK_HOOK.command).toBe("session hook check");
+    expect(CHECK_HOOK.matcher).toBe("Edit|Write|MultiEdit");
+  });
+
+  it("is never part of what the user-level install registers or removes", () => {
+    expect(HOOKS).not.toContain(CHECK_HOOK);
+    expect(wantedHooks(true)).not.toContain(CHECK_HOOK);
+    const settings = { hooks: { PreToolUse: [CHECK] } };
+    expect(withHooks(settings, wantedHooks(true)).hooks).toMatchObject({ PreToolUse: [CHECK] });
+    expect(withoutHooks(settings)).toEqual(settings);
+  });
+
+  it("files itself under its own matcher, beside everything else", () => {
+    const before: Settings = { model: "opus", hooks: { PreToolUse: [LINT], [STOP_HOOK.event]: [STOP] } };
+    const after = withHook(before, CHECK_HOOK);
+    expect(after).toEqual({
+      model: "opus",
+      hooks: { PreToolUse: [LINT, CHECK], [STOP_HOOK.event]: [STOP] },
+    });
+    expect(hasHook(after, CHECK_HOOK)).toBe(true);
+  });
+
+  it("does not change the settings it was given", () => {
+    const before: Settings = { hooks: { PreToolUse: [LINT] } };
+    const copy = structuredClone(before);
+    withHook(before, CHECK_HOOK);
+    expect(before).toEqual(copy);
+  });
+
+  it("registers once, however many times it is added", () => {
+    const twice = withHook(withHook({}, CHECK_HOOK), CHECK_HOOK);
+    expect(twice).toEqual({ hooks: { PreToolUse: [CHECK] } });
+  });
+
+  it("is not registered under another matcher, and is moved rather than duplicated", () => {
+    // A group narrower than the hook's own would let Edit through unchecked.
+    const narrow = {
+      matcher: "Write",
+      hooks: [{ type: "command", command: "lint --staged" }, CHECK.hooks[0]],
+    };
+    const settings: Settings = { hooks: { PreToolUse: [narrow] } };
+    expect(hasHook(settings, CHECK_HOOK)).toBe(false);
+    expect(withHook(settings, CHECK_HOOK)).toEqual({ hooks: { PreToolUse: [LINT, CHECK] } });
+  });
+
+  it("repairs an entry on the wrong budget where it stands", () => {
+    const stale = { matcher: CHECK_HOOK.matcher, hooks: [{ type: "command", command: CHECK_HOOK.command }] };
+    const settings: Settings = { hooks: { PreToolUse: [stale] } };
+    expect(hasHook(settings, CHECK_HOOK)).toBe(false);
+    expect(withHook(settings, CHECK_HOOK)).toEqual({ hooks: { PreToolUse: [CHECK] } });
+  });
+
+  it("comes back out alone, pruning only what it emptied", () => {
+    const installed = withHook({ model: "opus", hooks: { PreToolUse: [LINT] } }, CHECK_HOOK);
+    expect(withoutHook(installed, CHECK_HOOK)).toEqual({ model: "opus", hooks: { PreToolUse: [LINT] } });
+    expect(withoutHook(withHook({}, CHECK_HOOK), CHECK_HOOK)).toEqual({});
+  });
+
+  it("refuses a settings file whose hooks are not the shape it claims", () => {
+    expect(() => withHook({ hooks: [] }, CHECK_HOOK)).toThrow(/hooks .*not an object/);
+    expect(() => withHook({ hooks: { PreToolUse: {} } }, CHECK_HOOK)).toThrow(/PreToolUse.*not a list/);
+  });
+});
+
 describe("installHook", () => {
   let root: string;
   let file: string;
@@ -467,6 +548,104 @@ describe("installHook", () => {
   });
 });
 
+describe("installEnforce", () => {
+  let root: string;
+  let repo: string;
+  let local: string;
+  let user: string;
+
+  beforeEach(async () => {
+    root = await realpath(await mkdtemp(path.join(tmpdir(), "session-enforce-")));
+    repo = path.join(root, "repo");
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await runGit(repo, ["init", "-q"]);
+    local = path.join(repo, ".claude", "settings.local.json");
+    user = path.join(root, "settings.json");
+    await writeFile(user, JSON.stringify({ hooks: { SessionEnd: [STOP] } }), "utf8");
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const read = async (): Promise<Settings> => JSON.parse(await readFile(local, "utf8")) as Settings;
+  const CHECK = {
+    matcher: CHECK_HOOK.matcher,
+    hooks: [{ type: "command", command: CHECK_HOOK.command, timeout: CHECK_HOOK.timeout }],
+  };
+
+  it("writes the check into this repository's own settings, creating them", async () => {
+    const result = await installEnforce({ cwd: repo });
+    expect(result).toEqual({ file: local, hooks: [CHECK_HOOK], changed: true, action: "installed" });
+    expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
+  });
+
+  it("finds the repository root from a subdirectory", async () => {
+    expect(await enforceFile({ cwd: path.join(repo, "src") })).toBe(local);
+  });
+
+  it("keeps every other setting and hook in the file", async () => {
+    await mkdir(path.dirname(local));
+    const theirs = { permissions: { allow: ["Bash(npm test)"] }, hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "audit" }] }] } };
+    await writeFile(local, JSON.stringify(theirs), "utf8");
+    await installEnforce({ cwd: repo });
+    expect(await read()).toEqual({
+      permissions: { allow: ["Bash(npm test)"] },
+      hooks: { PreToolUse: [theirs.hooks.PreToolUse[0], CHECK] },
+    });
+  });
+
+  it("leaves the file untouched when the check is already there", async () => {
+    await installEnforce({ cwd: repo });
+    const before = await stat(local);
+    const again = await installEnforce({ cwd: repo });
+    expect(again.changed).toBe(false);
+    expect((await stat(local)).mtimeMs).toBe(before.mtimeMs);
+    expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
+  });
+
+  it("keeps the file's permissions", async () => {
+    await mkdir(path.dirname(local));
+    await writeFile(local, "{}", "utf8");
+    await chmod(local, 0o600);
+    await installEnforce({ cwd: repo });
+    expect((await stat(local)).mode & 0o777).toBe(0o600);
+  });
+
+  it("refuses a file that is not valid JSON, and leaves it as it was", async () => {
+    await mkdir(path.dirname(local));
+    await writeFile(local, "{ nope", "utf8");
+    await expect(installEnforce({ cwd: repo })).rejects.toThrow(/not valid JSON/);
+    expect(await readFile(local, "utf8")).toBe("{ nope");
+  });
+
+  it("refuses outside a repository, writing nothing", async () => {
+    await expect(installEnforce({ cwd: root })).rejects.toThrow(/Not inside a git repository/);
+  });
+
+  it("never reads or writes the user-level settings", async () => {
+    const before = await readFile(user, "utf8");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await buildProgram({ cwd: repo, settings: user }).parseAsync(["node", "session", "hook", "install", "--enforce"]);
+    expect(await readFile(user, "utf8")).toBe(before);
+    expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
+    expect(log.mock.calls.flat().join("\n")).toContain("PreToolUse (Edit|Write|MultiEdit) → session hook check");
+  });
+
+  it.each([
+    [["--uninstall"], /cannot be combined with --uninstall/],
+    [["--no-passive"], /--passive applies to the user-level hooks/],
+    [["--passive=false"], /--passive applies to the user-level hooks/],
+  ])("refuses --enforce with %j, changing nothing", async (extra, message) => {
+    const before = await readFile(user, "utf8");
+    const program = buildProgram({ cwd: repo, settings: user });
+    await expect(program.parseAsync(["node", "session", "hook", "install", "--enforce", ...extra])).rejects.toThrow(message);
+    expect(await readFile(user, "utf8")).toBe(before);
+    await expect(stat(local)).rejects.toThrow();
+  });
+});
+
 describe("uninstallHook", () => {
   let root: string;
   let file: string;
@@ -543,6 +722,12 @@ describe("formatHook", () => {
       "  removed  /Users/dev/.claude/settings.json",
       "  hook     none registered",
     ]);
+  });
+
+  it("names the tools a matched hook fires for", () => {
+    expect(formatHook({ ...result, hooks: [CHECK_HOOK] })[1]).toBe(
+      "  hook     PreToolUse (Edit|Write|MultiEdit) → session hook check",
+    );
   });
 
   it("says when there was no hook to remove", () => {

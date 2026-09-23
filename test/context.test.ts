@@ -20,7 +20,7 @@ const document = (): string => readFileSync(CONTEXT, "utf8");
 
 /** Each block, and the file it is copied from, for the failure message. */
 const BLOCKS: ReadonlyArray<{ what: string; source: string; extract: (root: string) => string }> = [
-  { what: "the five invariants", source: "Claude.md", extract: extracts.invariants },
+  { what: "the invariants", source: "Claude.md", extract: extracts.invariants },
   { what: "the layout", source: "Claude.md", extract: extracts.layout },
   {
     what: "interface Session",

@@ -3,7 +3,7 @@
 Updated: 22 September 2026. Implement one milestone, test, stop for Vedant
 to review/commit/push. Never stage or commit automatically.
 
-## Current milestone: checkout-specific write-session selection
+## Current milestone: opt-in, per-repository enforcement install
 
 Complete and tested; waiting for Vedant's review and commit.
 
@@ -13,75 +13,65 @@ Complete and tested; waiting for Vedant's review and commit.
 - `0b9ffda`: [review screen](02-agreement-review.md).
 - `36d7f13`: [decision logic](03-agreement-decisions.md).
 - `da8c993`: [parser/resolver](04-write-parser-resolution.md).
-- `ff917f7`: [check command](05-write-check-command.md), committed by Vedant.
-  Working tree was clean when this milestone began.
+- `ff917f7`: [check command](05-write-check-command.md).
+- `5f51900`: [checkout binding](06-checkout-binding.md).
+
+Uncommitted alongside this milestone: a refresh of `Claude.md`, `AGENTS.md`,
+the skills and `docs/context.md` for the agreement work (new skill
+`agreements-and-enforcement`, invariant 6, record fields, layout).
 
 ### Solved
 
-- New records capture optional `checkout` metadata from Git and filesystem
-  realpath, not caller-supplied record fields. Subdirectories/root aliases
-  resolve to the same checkout. Unknown checkout remains absent.
-- Binding is signed in the creating record; cannot be patched, inserted later
-  or backfilled onto old records. Existing record version/signing rule unchanged.
-- Write checking chooses the single open session for the canonical checkout,
-  not the newest session in a shared remote log.
-- Multiple local sessions deny, including a newer non-agreed or record-only
-  session that would otherwise hide an earlier agreement.
-- Legacy open agreements without a binding deny with a recovery message.
-  Legacy sessions without agreements remain non-enforcing.
-- Known other-checkout sessions are ignored. No local open session means normal
-  editor permissions, not automatic approval.
-- Sync-and-chain rules guided immutable metadata and backward compatibility.
-  Terminal-output rules kept recovery messages static and actionable.
-
-### Files
-
-- `src/store/record.ts`, `append.ts`, `read.ts`: immutable captured binding.
-- `src/write-session.ts`: pure selection and typed, static selection errors.
-- `src/commands/check-write.ts`: canonical checkout selection and denial mapping.
-- `test/write-session.test.ts`: five pure missing/ambiguous/legacy/foreign cases.
-- `test/check-write.test.ts`: four added integration tests for canonical capture,
-  signatures, forged patches, ambiguity and two checkouts sharing a remote log.
-- `docs/agreements.md`: behavior and limits.
-- `docs/context.md`: regenerated from source through the supplied generator.
-- This handoff and archive of the previous milestone.
+- `CHECK_HOOK` in `src/capture/hook.ts`: `PreToolUse`, matcher
+  `Edit|Write|MultiEdit`, command `session hook check`, timeout 10 s. Kept out
+  of `HOOKS`, so the user-level install/uninstall never adds or removes it.
+- Matcher-aware settings surgery: an entry under a different matcher reads as
+  not registered and is moved (other entries in that group are kept); a stale
+  timeout is repaired in place; repeat installs register once. `withHook` and
+  `withoutHook` are pure and do not mutate their input.
+- `session hook install --enforce` writes only `<root>/.claude/settings.local.json`,
+  found from any subdirectory. Creates the file if absent; keeps other settings,
+  other hooks and the file mode; unchanged file keeps its mtime. Invalid JSON
+  is refused and left as it was. Outside a repository it refuses and writes
+  nothing. `--uninstall` and `--passive`/`--no-passive` with `--enforce` are
+  refused by name.
+- Wording: review screen now says policy is checked only where
+  `--enforce` has run, only for Edit/Write/MultiEdit, never shell commands.
+  Start line says `(never blocks)` for record, `(checked where session hook
+  install --enforce has run)` for ask/deny. README, CHANGELOG,
+  `docs/agreements.md`, both skill copies updated.
 
 ### Verification and failures
 
-- Focused run: 78 tests passed (26 handler, 5 selector, 47 agreement/storage).
 - Build and source/test type checks passed.
-- Full suite: 1,607 tests passed across 50 files; 8 generated-context checks
-  passed separately (1,615 total). Context regenerated through the supplied tool.
-- Final whitespace/diff check: passed.
-- No implementation or test failures. An optional process-list diagnostic was
-  blocked by the sandbox; normal test polling completed successfully without it.
+- Full suite: **1,637 tests passed across 51 files** (1,615 before, +22).
+  New: 9 check-hook settings tests, 11 install tests (3 of them refusal
+  cases), 1 matcher format test, 1 start-line test; review wording test updated.
+- Built-CLI smoke in a temporary repo and HOME: install from `src/`, repeat
+  install says `already`, existing `permissions` kept, user settings byte-
+  identical, three refusals exit 1, `--help` lists `--enforce`, and the
+  installed command denies an out-of-scope write under a deny agreement.
+- Failures: the first doc-edit script stopped on one mis-wrapped sentence in
+  `docs/agreements.md` (fixed, re-applied); the first smoke script failed on
+  zsh word-splitting (script bug, rerun with a function). No code failures.
 
 ### Boundaries
 
-This is checkout-path binding, not per-editor-process identity: two editors in
-one checkout share its agreement. Moving/reusing checkout paths requires closing
-old sessions and starting fresh. The path is not a machine identifier.
-
-Historical views and existing start/stop selection remain repository-wide;
-this milestone changes enforcement selection only. No lifecycle concurrency
-redesign, installer or editor settings changes. Missing legacy bindings are
-not guessed; close those agreed sessions before using enforcement.
-
-The existing reader still tolerates a truncated final line and does not verify
-signatures on every read. This is not an integrity guarantee. Filesystem races,
-unsupported shell writes and host process/timeout behavior remain limitations.
+Not exercised in a running editor. The check still denies unparseable input
+and a missing repository, which is why it is per-repository. Claude Code's
+behaviour when the handler times out or crashes is host behaviour, not
+verified here. `.claude/settings.local.json` is not added to `.gitignore` by
+this command; Claude Code normally ignores it, but a repo that does not will
+show it as untracked.
 
 ## Next milestones — stop and commit after each
 
-1. Opt-in hook installation, preserving unrelated settings and existing hooks.
-2. Safe removal and repeat installation: no duplicates or unrelated deletions.
-3. Timeout/failure behavior: tests and clear host-guarantee documentation.
-4. End-to-end editor flow, latency checks, sprint review and retrospective.
+1. `--enforce --uninstall`: remove only `CHECK_HOOK` from the repo file,
+   prune what it emptied, leave the user-level hooks alone.
+2. Timeout/failure behaviour: tests and clear host-guarantee documentation.
+3. End-to-end editor flow, latency checks, sprint review and retrospective.
 
 Other outstanding sprint items remain unverified: three-screen prototype,
 Claude resize/changelog work in `/Users/vedant/dev-session-ui`, hook research
 `2a06865` in `/Users/vedant/dev-session-hook`, and external-proposal ingestion
-scope. Existing sibling worktrees are preserved. No overall completion percentage.
-
-No staging, project commit, push, PR, dependency installation, user settings
-change or worktree cleanup. Codex stops here for Vedant's review and commit.
+scope. No overall completion percentage.

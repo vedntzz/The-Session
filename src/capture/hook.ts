@@ -29,6 +29,8 @@ export interface HookSpec {
   readonly timeout: number;
   /** True for the hooks that only passive capture needs. */
   readonly passive: boolean;
+  /** The tools a PreToolUse group fires for. Absent means every occurrence. */
+  readonly matcher?: string;
 }
 
 /**
@@ -103,6 +105,28 @@ export const PROMPT_HOOK: HookSpec = {
 export const HOOKS: readonly HookSpec[] = [STOP_HOOK, OPEN_HOOK, PROMPT_HOOK];
 
 /**
+ * Checks an attempted Edit, Write or MultiEdit against the open session's
+ * agreement, before the tool runs.
+ *
+ * Deliberately not in `HOOKS`: those belong in the user's settings and fire
+ * everywhere, and this one denies a supported write it cannot place in a
+ * repository. It is registered per repository, opt-in, and nothing that
+ * installs or removes `HOOKS` may touch it.
+ *
+ * The matcher names the tools `parseClaudeWrite` understands and no others, so
+ * a shell command never waits on a Node start it has nothing to learn from.
+ * Ten seconds covers that start on a slow machine many times over; what the
+ * editor does when a handler outlives it is a host behaviour, not a promise.
+ */
+export const CHECK_HOOK: HookSpec = {
+  event: "PreToolUse",
+  command: "session hook check",
+  timeout: 10,
+  passive: false,
+  matcher: "Edit|Write|MultiEdit",
+};
+
+/**
  * The hooks an installation wants. With passive capture off that is the stop
  * hook alone — and the other two are then unwanted rather than merely absent,
  * so installing that way takes back out whatever an earlier install left.
@@ -119,7 +143,8 @@ export function wantedHooks(passive: boolean): HookSpec[] {
  * `"*"`.
  */
 function ourGroup(hook: HookSpec): Record<string, unknown> {
-  return { hooks: [{ type: "command", command: hook.command, timeout: hook.timeout }] };
+  const entry = { type: "command", command: hook.command, timeout: hook.timeout };
+  return hook.matcher === undefined ? { hooks: [entry] } : { matcher: hook.matcher, hooks: [entry] };
 }
 
 /** A parsed settings file. Keys `session` knows nothing about are carried through. */
@@ -174,30 +199,50 @@ function claimGroups(value: unknown, event: string): unknown[] | undefined {
   return value;
 }
 
+/**
+ * Whether a group fires for exactly the tools the hook needs. A hook with no
+ * matcher is indifferent to the group's; one with a matcher accepts only its
+ * own, since a narrower group would let a supported tool through unchecked.
+ */
+function groupMatches(group: Record<string, unknown>, hook: HookSpec): boolean {
+  return hook.matcher === undefined || group["matcher"] === hook.matcher;
+}
+
+interface Found {
+  entry: Record<string, unknown>;
+  matches: boolean;
+}
+
 /** Every registered entry running one hook's command, whatever else it says. */
-function entriesFor(settings: Settings, hook: HookSpec): Record<string, unknown>[] {
-  const found: Record<string, unknown>[] = [];
+function foundFor(settings: Settings, hook: HookSpec): Found[] {
+  const found: Found[] = [];
   for (const group of groupsOf(settings, hook.event)) {
     if (!isObject(group) || !Array.isArray(group["hooks"])) {
       continue;
     }
     for (const entry of group["hooks"]) {
       if (isEntryFor(hook, entry)) {
-        found.push(entry as Record<string, unknown>);
+        found.push({ entry: entry as Record<string, unknown>, matches: groupMatches(group, hook) });
       }
     }
   }
   return found;
 }
 
+function entriesFor(settings: Settings, hook: HookSpec): Record<string, unknown>[] {
+  return foundFor(settings, hook).map((item) => item.entry);
+}
+
 /**
  * True when one hook is registered and says what it should. An entry left by
  * an older `session` runs the right command on too short a budget, so it reads
- * as not registered: installing over it is a repair, not a no-op.
+ * as not registered: installing over it is a repair, not a no-op. So does one
+ * filed under a matcher other than the hook's own.
  */
 export function hasHook(settings: Settings, hook: HookSpec): boolean {
-  const entries = entriesFor(settings, hook);
-  return entries.length > 0 && entries.every((entry) => entry["timeout"] === hook.timeout);
+  const found = foundFor(settings, hook);
+  return found.length > 0 &&
+    found.every((item) => item.matches && item.entry["timeout"] === hook.timeout);
 }
 
 /**
@@ -219,10 +264,14 @@ export function hasHooks(settings: Settings, wanted: readonly HookSpec[]): boole
 
 function addHook(settings: Settings, hook: HookSpec): Settings {
   // An entry already running the command is corrected where it stands, so an
-  // upgrade never leaves two hooks racing to do the same thing.
-  const existing = entriesFor(settings, hook);
-  if (existing.length > 0) {
-    for (const entry of existing) {
+  // upgrade never leaves two hooks racing to do the same thing. One under the
+  // wrong matcher cannot be corrected where it stands without changing what
+  // the rest of that group fires for, so it is taken out and filed afresh.
+  const found = foundFor(settings, hook);
+  if (found.some((item) => !item.matches)) {
+    settings = removeHook(settings, hook);
+  } else if (found.length > 0) {
+    for (const { entry } of found) {
       entry["timeout"] = hook.timeout;
     }
     return settings;
@@ -292,6 +341,20 @@ export function withHooks(settings: Settings, wanted: readonly HookSpec[]): Sett
     next = wanted.includes(hook) ? addHook(next, hook) : removeHook(next, hook);
   }
   return next;
+}
+
+/**
+ * The settings with one hook registered, alongside whatever else was there.
+ * For a hook kept apart from `HOOKS` — the check — so adding it says nothing
+ * about the others, and adding it twice registers it once.
+ */
+export function withHook(settings: Settings, hook: HookSpec): Settings {
+  return addHook(structuredClone(settings), hook);
+}
+
+/** The settings with one hook taken out and nothing else touched. */
+export function withoutHook(settings: Settings, hook: HookSpec): Settings {
+  return removeHook(structuredClone(settings), hook);
 }
 
 /** The settings with every hook of ours taken out and nothing else touched. */

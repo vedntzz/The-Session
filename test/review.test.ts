@@ -71,7 +71,8 @@ describe("agreement screen", () => {
     expect(text).toContain('"src"');
     expect(text).toContain("create, edit");
     expect(text).toContain("record — record writes without blocking");
-    expect(text).toContain("Policy is recorded only");
+    expect(text).toContain("session hook install --enforce");
+    expect(text).toContain("shell commands are not checked");
     expect(text).toContain("No session has started yet");
   });
 

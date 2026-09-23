@@ -1,14 +1,18 @@
-import { chmod, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import {
+  CHECK_HOOK,
+  hasHook,
   hasHooks,
   wantedHooks,
+  withHook,
   withHooks,
   withoutHooks,
   type HookSpec,
   type Settings,
 } from "../capture/hook.js";
+import { repoRoot } from "../git.js";
 
 /** What `session hook install` needs. */
 export interface HookOptions {
@@ -44,17 +48,18 @@ export function settingsFile(options: HookOptions = {}): string {
   return options.settings ?? path.join(homedir(), ".claude", "settings.json");
 }
 
-async function readSettings(file: string): Promise<Settings> {
-  const text = await readSettingsText(file);
+async function readSettings(file: string, absentIsEmpty = false): Promise<Settings> {
+  const text = await readSettingsText(file, absentIsEmpty);
   return text.trim() === "" ? {} : parseSettings(text, file);
 }
 
 /** The file's contents, or what to do about a machine that has none. */
-async function readSettingsText(file: string): Promise<string> {
+async function readSettingsText(file: string, absentIsEmpty: boolean): Promise<string> {
   try {
     return await readFile(file, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      if (absentIsEmpty) return "";
       throw new Error(
         `No Claude Code settings file at ${file}. Start Claude Code once so it ` +
           `writes one, or create the file with {} in it, then run session hook install again.`,
@@ -98,10 +103,15 @@ function parseSettings(text: string, file: string): Settings {
  */
 async function writeSettings(file: string, settings: Settings): Promise<void> {
   const staged = `${file}.session-tmp`;
+  const mode = await stat(file).then((found) => found.mode & 0o777, (error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined;
+    throw error;
+  });
+  await mkdir(path.dirname(file), { recursive: true });
   await writeFile(staged, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
   try {
     // Whatever the file was readable by, it still is.
-    await chmod(staged, (await stat(file)).mode & 0o777);
+    if (mode !== undefined) await chmod(staged, mode);
     await rename(staged, file);
   } catch (error) {
     await unlink(staged).catch(() => {});
@@ -159,6 +169,48 @@ export function uninstallHook(options: HookOptions = {}): Promise<HookResult> {
   );
 }
 
+/** What `session hook install --enforce` needs: the repository it applies to. */
+export interface EnforceOptions {
+  cwd?: string;
+}
+
+/**
+ * The repository's own, uncommitted Claude Code settings. Not the user's file,
+ * because the check denies a supported write it cannot place in a repository —
+ * registered there it would refuse edits in every directory on the machine.
+ * Not the checked-in `.claude/settings.json`, because enforcing an agreement is
+ * one developer's choice about their own sessions, the same as the other hooks.
+ */
+export async function enforceFile(options: EnforceOptions = {}): Promise<string> {
+  const cwd = options.cwd ?? process.cwd();
+  let root: string;
+  try {
+    root = await repoRoot(cwd);
+  } catch (error) {
+    throw new Error(
+      "Not inside a git repository. Run session hook install --enforce from the repository whose agreements it should check.",
+      { cause: error },
+    );
+  }
+  return path.join(root, ".claude", "settings.local.json");
+}
+
+/**
+ * Registers the agreement check for this repository and nothing else. The
+ * user-level hooks are neither read nor written, and every other setting in
+ * the repository's file is carried through. The file is created if absent:
+ * unlike the user's settings, a repository without one is the normal case.
+ */
+export async function installEnforce(options: EnforceOptions = {}): Promise<HookResult> {
+  const file = await enforceFile(options);
+  const settings = await readSettings(file, true);
+  const changed = !hasHook(settings, CHECK_HOOK);
+  if (changed) {
+    await writeSettings(file, withHook(settings, CHECK_HOOK));
+  }
+  return { file, hooks: [CHECK_HOOK], changed, action: "installed" };
+}
+
 /**
  * What the command prints: what it wrote, where it wrote it, and every hook
  * the file now holds. The hooks are listed rather than counted because which
@@ -180,7 +232,8 @@ export function formatHook(result: HookResult): string[] {
     lines.push("  hook     none registered");
   }
   for (const hook of result.hooks) {
-    lines.push(`  hook     ${hook.event} → ${hook.command}`);
+    const event = hook.matcher === undefined ? hook.event : `${hook.event} (${hook.matcher})`;
+    lines.push(`  hook     ${event} → ${hook.command}`);
   }
   return lines;
 }

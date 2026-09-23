@@ -42,7 +42,7 @@ function declaration(text, signature, what) {
   return text.slice(from, end + 2);
 }
 
-/** The five invariants, from the file that owns them. */
+/** The invariants, from the file that owns them. */
 export const invariants = (root) =>
   between(read(root, "Claude.md"), "## Invariants — do not violate these\n", "\n## Stack", "invariants");
 

@@ -284,6 +284,20 @@ describe("formatStarted", () => {
 
     expect(formatStarted(session)[1]).toBe("  scope    none declared");
   });
+
+  it("says where an agreement's policy is checked, and that record never blocks", async () => {
+    await commit("a.txt");
+    const terms = { paths: ["src"], actions: ["edit" as const], sensitivePaths: [] };
+    const started = (session: Awaited<ReturnType<typeof startSession>>) =>
+      formatStarted(session).find((line) => line.includes("agreement"));
+
+    const asked = await startSession("ask first", { ...options, scope: ["src"], agreement: { ...terms, policy: "ask" } });
+    expect(started(asked)).toBe("  agreement  saved; policy ask (checked where session hook install --enforce has run)");
+    await stopSession({ ...options, adapters: [] });
+
+    const recorded = await startSession("record it", { ...options, scope: ["src"], agreement: { ...terms, policy: "record" } });
+    expect(started(recorded)).toBe("  agreement  saved; policy record (never blocks)");
+  });
 });
 
 describe("attribution captured at start", () => {

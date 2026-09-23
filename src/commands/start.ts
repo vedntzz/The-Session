@@ -214,7 +214,10 @@ export function formatStarted(session: Session): string[] {
     lines.push("  primed   suggested and accepted scopes recorded separately");
   }
   if (session.agreement) {
-    lines.push(`  agreement  saved; policy ${session.agreement.policy} (recorded only)`);
+    const reach = session.agreement.policy === "record"
+      ? "never blocks"
+      : "checked where session hook install --enforce has run";
+    lines.push(`  agreement  saved; policy ${session.agreement.policy} (${reach})`);
   }
 
   const declared = attributionValues(session.attribution);

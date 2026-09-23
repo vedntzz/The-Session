@@ -28,7 +28,7 @@ export function formatAgreement(
   lines.push("  sensitive  paths", ...paths(agreement.sensitivePaths, "none", palette));
   lines.push(...note(`policy     ${agreement.policy} — ${POLICY_DESCRIPTION[agreement.policy]}`, palette.meta, width));
   lines.push("", ...note("Outside these terms means an unaccepted path or action, or any sensitive path.", palette.meta, width));
-  lines.push(...note("Policy is recorded only in this version; enforcement is not installed by this screen.", palette.meta, width));
+  lines.push(...note("Policy is checked only in a repository where session hook install --enforce has run, and only for Edit, Write and MultiEdit; shell commands are not checked.", palette.meta, width));
   lines.push(...note("Accept writes these terms once and starts the session. No session has started yet.", palette.meta, width));
   return lines;
 }

@@ -46,7 +46,7 @@ The commands above count the source and tests currently in the checkout.
 The intended practice is *prefer adding a test over adding a log line*, from
 Style in `Claude.md`.
 
-## The five invariants
+## The six invariants
 
 Copied verbatim from `Claude.md`, which owns them — extracted with
 `awk '/^## Invariants/,/^## Stack/' Claude.md`. Everything else in this
