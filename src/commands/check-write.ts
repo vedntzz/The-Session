@@ -3,7 +3,9 @@ import { parseAgreement } from "../agreement.js";
 import { decideAgreementWrite } from "../agreement-decision.js";
 import { MAX_WRITE_PAYLOAD_BYTES, parseClaudeWrite } from "../capture/adapters/claude-write.js";
 import { repoRoot } from "../git.js";
-import { getOpenSession, type StoreOptions } from "../store.js";
+import { realpath } from "node:fs/promises";
+import { readSessions, type StoreOptions } from "../store.js";
+import { selectWriteSession, WriteSessionSelectionError } from "../write-session.js";
 import { resolveFileWrite } from "./resolve-write.js";
 
 export type CheckWriteOptions = StoreOptions & { stdin?: AsyncIterable<Buffer | string> };
@@ -40,8 +42,8 @@ export async function checkWrite(options: CheckWriteOptions = {}): Promise<strin
     if (parsed.kind === "unsupported") return "";
     if (parsed.kind === "invalid") return response("deny", "Write check received invalid input. Check the PreToolUse hook configuration and retry.");
 
-    const cwd = await repoRoot(options.cwd ?? process.cwd());
-    const session = await getOpenSession({ ...options, cwd });
+    const cwd = await realpath(await repoRoot(options.cwd ?? process.cwd()));
+    const session = selectWriteSession(await readSessions({ ...options, cwd }), cwd);
     if (session?.agreement === undefined) return "";
     const agreement = parseAgreement(session.agreement);
     if (agreement.policy === "record") return "";
@@ -56,7 +58,8 @@ export async function checkWrite(options: CheckWriteOptions = {}): Promise<strin
     if (decision === "defer") return "";
     const violations = [...new Set(decisions.flatMap((item) => item.violations))];
     return response(decision, `Attempted write conflicts with the accepted agreement (${violations.join(", ")}). Review the attempted write before proceeding.`);
-  } catch {
+  } catch (error) {
+    if (error instanceof WriteSessionSelectionError) return response("deny", error.message);
     return response("deny", "Write check could not read its input, repository or agreement. Check the local hook setup and session log before retrying.");
   }
 }

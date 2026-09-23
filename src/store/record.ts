@@ -168,6 +168,8 @@ export function parseIntentSource(value: string): IntentSource {
 }
 
 export interface Session {
+  /** Canonical checkout root captured at creation; absent on older records. */
+  checkout?: string;
   /** Accepted terms, written only in the creating record; absent before agreements. */
   agreement?: import("../agreement.js").Agreement;
   /** Prime's original suggestion, immutable and separate from accepted scope. */
@@ -325,7 +327,7 @@ export type RecordFields = Partial<Omit<Session, "id">>;
  */
 export type SessionPatch = Omit<
   RecordFields,
-  "intent" | "intentSource" | "repo" | "attribution" | "proposal" | "agreement"
+  "intent" | "intentSource" | "repo" | "attribution" | "proposal" | "agreement" | "checkout"
 >;
 
 /**
@@ -333,7 +335,7 @@ export type SessionPatch = Omit<
  * yet — reality, drift, cost, where it ended up — is defaulted here and filled
  * in by later patches. `repo` is derived from the store's cwd, never passed.
  */
-export type NewSession = Partial<Omit<Session, "id" | "repo">> &
+export type NewSession = Partial<Omit<Session, "id" | "repo" | "checkout">> &
   Pick<Session, "intent" | "startedAt" | "startCommit"> & { id?: string };
 
 export interface StoreOptions {

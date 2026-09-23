@@ -1,5 +1,6 @@
 // Appending to the log, under a lock, with each line signed into the chain.
-import { appendFile, mkdir, open, rm, stat } from "node:fs/promises";
+import { appendFile, mkdir, open, realpath, rm, stat } from "node:fs/promises";
+import { tryGit } from "../git.js";
 import path from "node:path";
 import { canonicalJson, GENESIS, lineHash, recordHash, type SignedBody } from "../chain.js";
 import { fingerprint, loadOrCreateKeypair, signHash, type Keypair } from "../keys.js";
@@ -163,6 +164,10 @@ export async function appendSession(
   const repo = await repoIdentity(options.cwd ?? process.cwd());
 
   const session = sessionFrom(input, repo, intentSource);
+  // Never accept this binding from input or backfill older records. Unknown
+  // checkout stays absent, so enforcement can refuse to guess.
+  const root = await tryGit(options.cwd ?? process.cwd(), ["rev-parse", "--show-toplevel"]);
+  if (root !== undefined) session.checkout = await realpath(root.trim());
   const { id, ...set } = session;
   await writeRecord(id, set, options);
   return session;
@@ -234,6 +239,9 @@ export async function updateSession(
  * caller cannot quietly become the one that edits an intent.
  */
 function refusePatch(patch: SessionPatch): void {
+  if ("checkout" in patch) {
+    throw new Error("Checkout is captured at start and cannot be added or edited later. Start a new session in the intended checkout.");
+  }
   if ("agreement" in patch) {
     throw new Error("Agreement is written at start and cannot be added or edited later. Start a new session for different terms.");
   }

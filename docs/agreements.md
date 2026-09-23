@@ -102,8 +102,9 @@ shell or other tools are unsupported. This module alone intercepts nothing.
 ### PreToolUse check command
 
 `session hook check` reads one payload from stdin. The process working directory
-selects the trusted repository and its latest open session, using the existing
-repository-level session lookup; the payload cannot select another repository.
+selects the trusted repository and canonical checkout; the payload cannot select
+another repository. The check selects the single open session bound to that
+checkout, never the newest session from another checkout sharing the same remote.
 It checks every requested and resolved path, retaining the strictest decision.
 The command does not install itself, change settings, append attempt records,
 or modify files. Existing hook installation remains unchanged.
@@ -123,10 +124,25 @@ which pauses noninteractive runs. See the official
 Responses never grant `allow` or replace tool input. Record-only does not log
 attempts; ordinary stop-time diff measurement remains separate.
 
-The existing reader chooses the latest open session across checkouts sharing
-a repository identity, tolerates a truncated final log line, and does not
-cryptographically verify on every read. This command inherits those semantics;
-it is not an integrity or per-editor-session binding guarantee. Opt-in
+New records capture optional immutable `checkout` metadata from Git's root and
+filesystem realpath at creation, independent of caller-supplied record fields.
+Root aliases and subdirectories resolve to the same binding. If Git cannot
+identify a checkout, the binding stays absent rather than being guessed.
+Older records are never backfilled or re-signed; patches cannot add or replace
+their binding. Reports keep their existing repository-level history.
+
+Multiple open sessions in this checkout are denied, including a mix of agreed
+and non-agreed sessions. An open legacy agreement without a binding is also
+denied: close it and start a new session in the intended checkout. Legacy
+sessions without agreements add no restriction. Known other-checkout sessions
+are ignored; if none is open here, normal editor permissions remain in charge.
+
+This binds a session to a checkout path, not to an editor process. Two editors
+in one checkout share its one agreement. Moving/reusing checkout paths requires
+closing old sessions and starting new ones; the path is not a machine identity.
+Existing start/stop lifecycle selection is unchanged and remains repository-wide.
+The reader still tolerates a truncated final log line and does not verify
+signatures on every read, so this is not an integrity guarantee. Opt-in
 installation, real editor tests, timeout behavior and latency remain pending.
 
 ```ts

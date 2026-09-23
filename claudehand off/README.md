@@ -1,97 +1,87 @@
 # Sprint handoff
 
-Updated: 22 September 2026. One small feature at a time: implement, test, stop
-for Vedant's review and commit. Codex must not stage, commit or push.
+Updated: 22 September 2026. Implement one milestone, test, stop for Vedant
+to review/commit/push. Never stage or commit automatically.
 
-## Current step: PreToolUse check command
+## Current milestone: checkout-specific write-session selection
 
 Complete and tested; waiting for Vedant's review and commit.
 
-### Completed earlier
+### Previously completed
 
-- `d7346f4`: [immutable agreement record](01-agreement-record.md).
-- `0b9ffda`: [agreement review](02-agreement-review.md).
-- `36d7f13`: [pure decisions](03-agreement-decisions.md).
-- `da8c993`: [parser and resolver](04-write-parser-resolution.md).
-  Vedant confirmed the preceding changes were committed and pushed.
+- `d7346f4`: [agreement record](01-agreement-record.md).
+- `0b9ffda`: [review screen](02-agreement-review.md).
+- `36d7f13`: [decision logic](03-agreement-decisions.md).
+- `da8c993`: [parser/resolver](04-write-parser-resolution.md).
+- `ff917f7`: [check command](05-write-check-command.md), committed by Vedant.
+  Working tree was clean when this milestone began.
 
-### Solved in this step
+### Solved
 
-- Added `session hook check`: bound stdin to 2 MiB while reading, close oversized
-  iterators early, preserve UTF-8 across byte chunks.
-- Select the trusted repository from process cwd, never the payload; load its
-  latest open session through the existing repository-level lookup.
-- Check requested and physical symlink paths and use the strictest decision.
-- Emit one JSON ask/deny response for violations. No agreement, closed sessions,
-  compliant writes, record-only and unsupported tools remain silent.
-- Internal defer maps to silence, not the editor's literal defer (which pauses a
-  run). Never emit allow. Official response documentation is linked in
-  `docs/agreements.md`.
-- Deny malformed/oversized input, failed reads and unavailable checkouts.
-  Under ask/deny, unresolved paths produce denial instead of a guessed decision.
-  Static errors never echo source content, target paths or raw exceptions.
-- No installer changes. The handler writes no settings, source files or records.
-  Record-only does not log attempts; stop-time diff measurement remains separate.
-- Terminal-output rules kept the new command under hook, left short help intact,
-  and kept responses free of colour or incidental output.
+- New records capture optional `checkout` metadata from Git and filesystem
+  realpath, not caller-supplied record fields. Subdirectories/root aliases
+  resolve to the same checkout. Unknown checkout remains absent.
+- Binding is signed in the creating record; cannot be patched, inserted later
+  or backfilled onto old records. Existing record version/signing rule unchanged.
+- Write checking chooses the single open session for the canonical checkout,
+  not the newest session in a shared remote log.
+- Multiple local sessions deny, including a newer non-agreed or record-only
+  session that would otherwise hide an earlier agreement.
+- Legacy open agreements without a binding deny with a recovery message.
+  Legacy sessions without agreements remain non-enforcing.
+- Known other-checkout sessions are ignored. No local open session means normal
+  editor permissions, not automatic approval.
+- Sync-and-chain rules guided immutable metadata and backward compatibility.
+  Terminal-output rules kept recovery messages static and actionable.
 
-### Files changed
+### Files
 
-- `src/commands/check-write.ts`: bounded reader and handler.
-- `src/program/hook.ts`: check subcommand.
-- `test/check-write.test.ts`: 22 handler/integration tests with temp repositories.
-- `test/program.test.ts`: child-command expectation.
-- `docs/agreements.md`: response contract and limitations.
-- This handoff and the previous step's archive.
+- `src/store/record.ts`, `append.ts`, `read.ts`: immutable captured binding.
+- `src/write-session.ts`: pure selection and typed, static selection errors.
+- `src/commands/check-write.ts`: canonical checkout selection and denial mapping.
+- `test/write-session.test.ts`: five pure missing/ambiguous/legacy/foreign cases.
+- `test/check-write.test.ts`: four added integration tests for canonical capture,
+  signatures, forged patches, ambiguity and two checkouts sharing a remote log.
+- `docs/agreements.md`: behavior and limits.
+- `docs/context.md`: regenerated from source through the supplied generator.
+- This handoff and archive of the previous milestone.
 
-### Checks and failures
+### Verification and failures
 
-- Build and source/test type checks: passed.
-- 170 tests across handler (22), parser (21), resolver (25), decisions (33) and
-  existing hook configuration (69): passed.
-- 18 selected command-tree/help/hook integration tests: passed; 110 unrelated
-  program tests intentionally skipped in that targeted run.
-- 8 generated-context tests run separately: passed.
-- Total: 196 targeted tests passed. No full-suite rerun this step.
+- Focused run: 78 tests passed (26 handler, 5 selector, 47 agreement/storage).
+- Build and source/test type checks passed.
+- Full suite: 1,607 tests passed across 50 files; 8 generated-context checks
+  passed separately (1,615 total). Context regenerated through the supplied tool.
 - Final whitespace/diff check: passed.
-- No implementation/test failures. The first handoff replacement patch was
-  rejected for targeting the same file twice; corrected without changing code.
+- No implementation or test failures. An optional process-list diagnostic was
+  blocked by the sandbox; normal test polling completed successfully without it.
 
-### Limits and next integration obligations
+### Boundaries
 
-Not installed or exercised against a running editor yet. Review still says
-policy is recorded only. The resolver is a snapshot, not an atomic sandbox:
-filesystem changes can race the actual write. Shell and unrelated tools are
-unsupported.
+This is checkout-path binding, not per-editor-process identity: two editors in
+one checkout share its agreement. Moving/reusing checkout paths requires closing
+old sessions and starting fresh. The path is not a machine identifier.
 
-Existing lookup selects the latest open session across checkouts sharing repo
-identity, not a particular editor session. The reader tolerates an incomplete
-final line and does not verify signatures on every read. These inherited
-semantics are not an integrity or per-editor binding guarantee.
+Historical views and existing start/stop selection remain repository-wide;
+this milestone changes enforcement selection only. No lifecycle concurrency
+redesign, installer or editor settings changes. Missing legacy bindings are
+not guessed; close those agreed sessions before using enforcement.
 
-Non-repository invocation denies supported writes: installation must not
-accidentally activate this globally in arbitrary directories. Host timeout,
-process crashes and actual latency remain unverified; caught exceptions return
-denial, but process failure cannot promise fail-closed behavior.
+The existing reader still tolerates a truncated final line and does not verify
+signatures on every read. This is not an integrity guarantee. Filesystem races,
+unsupported shell writes and host process/timeout behavior remain limitations.
 
-## Remaining sprint work
+## Next milestones — stop and commit after each
 
-1. Next small step: opt-in installation, appropriate repository/session binding
-   and host failure/timeout tests. Update policy wording with actual capability.
-2. End-to-end flow, real editor latency checks, final review and retrospective.
+1. Opt-in hook installation, preserving unrelated settings and existing hooks.
+2. Safe removal and repeat installation: no duplicates or unrelated deletions.
+3. Timeout/failure behavior: tests and clear host-guarantee documentation.
+4. End-to-end editor flow, latency checks, sprint review and retrospective.
 
-Other items still needing confirmation/integration:
+Other outstanding sprint items remain unverified: three-screen prototype,
+Claude resize/changelog work in `/Users/vedant/dev-session-ui`, hook research
+`2a06865` in `/Users/vedant/dev-session-hook`, and external-proposal ingestion
+scope. Existing sibling worktrees are preserved. No overall completion percentage.
 
-- Saturday three-screen prototype remains unverified.
-- Claude's resize/changelog work in `/Users/vedant/dev-session-ui`.
-- Hook research at `docs/hook-capabilities` (`2a06865`) in
-  `/Users/vedant/dev-session-hook`.
-- External-proposal ingestion remains unexposed pending input/review design.
-- PRs and stale worktree/branch cleanup are separate; existing worktrees preserved.
-
-Monday consolidation/v1 boundary merged at `224fd81`. No overall sprint
-percentage is claimed while the prototype remains unverified.
-
-Current changes are uncommitted. No staging, project commit, push, PR, settings
-change, dependency installation or worktree cleanup performed.
-Codex stops here for Vedant to review and commit.
+No staging, project commit, push, PR, dependency installation, user settings
+change or worktree cleanup. Codex stops here for Vedant's review and commit.

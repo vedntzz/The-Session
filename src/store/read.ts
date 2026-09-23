@@ -319,6 +319,7 @@ export function foldRecord(
     ...(existing ? {
       proposal: existing.proposal, intentSource: existing.intentSource,
       agreement: existing.agreement,
+      checkout: existing.checkout,
       ...(existing.agreement ? { scope: existing.scope } : {}),
     } : {}),
   };

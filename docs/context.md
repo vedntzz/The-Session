@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `d7346f4 immutable agreement record` (`v1.0.0-22-gd7346f4`).
+Derived at `ff917f7 session hook check: agreement checks, safe error responses, and bounded input.` (`v1.0.0-26-gff917f7`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -58,14 +58,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     110
-   16853
+     116
+   17174
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      46
-   17374
+      51
+   17867
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -93,7 +93,7 @@ of it, and not from the Readme, which is prose.
 ```console
 $ node evidence/verbs.mjs
 top-level verbs:        20
-including subcommands:  26
+including subcommands:  27
 
 start [intent]            Begin a new session
                           --scope <paths...>  --review  --passive
@@ -131,6 +131,7 @@ config show               Print the attribution this repo declares
 key                       The signing key this machine writes with
 key show                  Print the public key, for anyone who wants to check the log
 hook                      Manage the editor hook that closes sessions
+hook check                Check a PreToolUse write against the open session's agreement
 hook install              Register the Claude Code hooks that open and close sessions
                           --uninstall  --passive [yes|no]  --no-passive
 help [topic]              Every command, not just the ones above
@@ -222,6 +223,8 @@ Verbatim from `src/store/record.ts`:
 
 ```ts
 export interface Session {
+  /** Canonical checkout root captured at creation; absent on older records. */
+  checkout?: string;
   /** Accepted terms, written only in the creating record; absent before agreements. */
   agreement?: import("../agreement.js").Agreement;
   /** Prime's original suggestion, immutable and separate from accepted scope. */
@@ -973,10 +976,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  45 passed (45)
-      Tests  1497 passed (1497)
-   Start at  13:31:57
-   Duration  216.64s (transform 1.72s, setup 0ms, collect 7.42s, tests 1030.63s, environment 6ms, prepare 2.54s)
+ Test Files  50 passed (50)
+      Tests  1607 passed (1607)
+   Start at  21:07:46
+   Duration  222.15s (transform 2.12s, setup 0ms, collect 8.93s, tests 1073.64s, environment 8ms, prepare 2.94s)
 ```
 
 The generator runs the behavioral suite before writing this document, then
