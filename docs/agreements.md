@@ -219,12 +219,24 @@ unknown. Nothing is executed, deleted or moved.
 
 The result deliberately has no `paths` or resolved action list: `mv a b`
 can write `b/a` when `b` is a directory, and a directory source can affect an
-entire subtree. A future read-only resolver must account for source removal,
-destination type, symlinks, directory contents and overwrite semantics before
-it can produce agreement operations. Until then, this request is unresolved
-and must not be accepted as a complete write set. Ordinary executable identity
+entire subtree. The request alone must not be accepted as a complete write set.
+Ordinary executable identity
 is assumed; aliases/functions and filesystem races remain limitations. Source:
 [GNU mv invocation](https://www.gnu.org/s/coreutils/manual/html_node/mv-invocation.html).
+
+`resolveMove` in `src/commands/resolve-move.ts` provides a read-only snapshot
+for regular-file-to-file moves only. It reuses the trusted-root checks and
+returns source `delete` operations plus destination `create`/`edit` operations.
+Parent-directory symlink aliases retain both requested and physical paths.
+Every operation must be checked; accepting the destination does not permit
+deleting an out-of-scope or sensitive source.
+
+Directory operands, leaf symlinks, hard-linked files, missing sources or
+destination parents, same-file aliases, escapes and invalid paths are blocked.
+Directory moves are deliberately unsupported, not partially enumerated.
+Interactive/no-clobber flags keep the potential effects: a possible skip is
+not a guaranteed no-op. No moves or content reads occur. This is still not
+wired into the hook, and filesystem changes after resolution can race a move.
 
 #### When the check cannot answer
 

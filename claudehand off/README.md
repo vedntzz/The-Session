@@ -1,59 +1,59 @@
 # Sprint handoff
 
-Updated: 23 September 2026. Implement one small milestone, test, update this
-handoff, then stop for Vedant to review and commit. Never stage or commit.
+Updated: 23 September 2026. One bounded milestone, tests, handoff, then stop
+for Vedant's review and commit. Never stage, commit or push automatically.
 
-## Current milestone: Sprint 2, Sun 27 — mv request parsing
+## Current milestone: Sprint 2 — regular-file mv resolution
 
-Complete and tested; waiting for review and commit. Tee committed at
-`bdf67d0`; archived in [17-tee-recognition.md](17-tee-recognition.md).
-Working tree was clean at the start.
+Complete and tested; waiting for review and commit. Previous move-parser
+milestone committed at `96c658e`; archived in
+[18-move-request.md](18-move-request.md). Working tree was clean at the start.
 
 ### Solved
 
-- `src/shell/move.ts`: pure `parseMove(command)`, returning a typed move
-  request or unknown. Not a resolved write set.
-- Exactly two literal operands; optional single -f, -i or -n and optional --
-  before operands. Preserve source, destination and overwrite mode.
-- Reject multiple sources, combined/repeated flags, backup options, target
-  directory overrides, unknown flags, shell expansion/chaining/redirection,
-  malformed syntax, control characters and /dev operands.
-- Do not flatten source deletion into an ordinary output path or guess whether
-  the destination is a directory. No filesystem reads or commands executed.
-- Existing parsers, shared tokenizer, CLI, hook and signed records unchanged.
-- Agreements-and-enforcement rules guided explicit uncertainty; GNU source
-  and unresolved-move contract are documented in docs/agreements.md.
+- `src/commands/resolve-move.ts`: read-only `resolveMove(request, cwd, repo)`.
+- Reuses resolveFileWrite for trusted-root containment, canonical agreement
+  paths, aliases and file metadata. No shell execution or content reads.
+- Returns source delete operations separately from destination create/edit.
+  Checks must evaluate every operation, not just the destination.
+- Parent-directory aliases preserve requested and physical paths on both sides.
+- Refuses directory operands, leaf symlinks, hard-linked files, missing source,
+  missing destination parents, same-file aliases, escapes and invalid paths.
+- Keeps potential effects for interactive/no-clobber rather than claiming
+  the operation will run or that a possible skip is a guaranteed no-op.
+- Unknown requests and errors return static blocked reasons.
+- Agreements-and-enforcement rules guided operation separation and conservative
+  refusal. No CLI, hook matcher, record shape or existing resolver changes.
 
-### Checks and failures
+### Verification and failures
 
-- 56 new move tests passed.
-- 290 targeted tests passed across move (56), tee (59), redirection (64),
-  sed (45), package-manager/tokenizer (58) and generated context (8).
+- 21 new resolver tests passed, using temporary files, aliases, links and
+  agreement decisions. Verify originals unchanged and new targets absent.
+- 143 targeted tests passed: move resolver 21, write resolver 25, move parser 56,
+  agreement decisions 33, generated context 8.
 - Build, source/test type checks and final diff whitespace check passed.
 - No implementation/test failures. No full-suite rerun for this isolated,
-  unwired parser; earlier full-suite results remain historical.
+  unwired resolver; earlier full-suite counts remain historical.
 
-### Important limits
+### Limits
 
-This completes request parsing only, not safe mv write recognition. A move
-can remove the source and write a different destination than its final operand
-when that operand is a directory. A directory source can affect a whole tree.
-A parsed request must remain unresolved until metadata determines the relevant
-operations; never feed it to the check as a complete path list.
+Only regular-file-to-file moves are resolved. Moves into directories and
+directory sources remain unsupported, not partially enumerated. Leaf links
+are refused because renaming a link differs from writing through it.
 
-Next move milestone: read-only resolution, conservatively refusing unsupported
-directory/symlink cases, preserving source deletion and destination create/edit.
-No runtime permission, successful move or sandbox guarantee is claimed.
+Resolution is a snapshot, not an atomic sandbox. Filesystem changes can race
+the later move. A resolved result describes potential operations, not success.
+This is still not integrated into Bash interception; no permission is granted.
 
 ## Remaining work — separately reviewed
 
-1. Finish mv resolution, then cp, rm and the read-only allowlist.
+1. cp, rm and the read-only allowlist; retain conservative unsupported cases.
 2. Shell-check integration: unknown non-read-only commands ask
    "Can't tell what this writes." No broad approval.
 3. Starting-tree snapshot and per-call PostToolUse diff.
 
 Sprint 1 still owed: retrospective, three-screen prototype, interactive
-two-minute ask check. Earlier work archived in 01–17; see docs/sprint-1-review.md.
+two-minute ask check. Earlier work archived in 01–18; see docs/sprint-1-review.md.
 
 Current changes uncommitted. No staging, commit, push, PR, user-settings change,
 dependency installation or worktree cleanup. Codex stops for Vedant.
