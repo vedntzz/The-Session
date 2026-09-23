@@ -46,6 +46,15 @@ export function visibleSessions(sessions: readonly Session[], state: UiState): S
   });
 }
 export interface UiKey { name?: string; ctrl?: boolean; sequence?: string }
+/**
+ * Scrolling steps from the offset the screen shows, not the one last stored.
+ * A resize changes `maxScroll` without a key press, and the renderer clamps a
+ * stale offset silently; stepping from the stale one would spend PgUp presses
+ * moving an offset nobody can see.
+ */
+function scrolled(state: UiState, maxScroll: number, delta: number): number {
+  return Math.max(0, Math.min(maxScroll, Math.min(state.scroll, maxScroll) + delta));
+}
 export function navigate(state: UiState, key: UiKey, count: number, maxScroll: number): UiState {
   const next = { ...state };
   if (state.searching) {
@@ -61,7 +70,7 @@ export function navigate(state: UiState, key: UiKey, count: number, maxScroll: n
   if (state.help) {
     if (name === "escape") return { ...next, help: false, scroll: 0 };
     const delta = name === "pageup" || name === "up" ? -5 : name === "pagedown" || name === "down" ? 5 : 0;
-    return { ...next, scroll: Math.max(0, Math.min(maxScroll, state.scroll + delta)) };
+    return { ...next, scroll: scrolled(state, maxScroll, delta) };
   }
   if (key.sequence === "/") next.searching = true;
   else if (name === "return") { next.expanded = !next.expanded; next.scroll = 0; }
@@ -69,7 +78,7 @@ export function navigate(state: UiState, key: UiKey, count: number, maxScroll: n
   else if (name === "escape") return initialState();
   else if (name === "o") { next.outcome = (state.outcome + 1) % OUTCOMES.length; next.selected = 0; next.scroll = 0; }
   else if (name === "pageup" || name === "pagedown" || (key.ctrl && (name === "u" || name === "d"))) {
-    next.scroll = Math.max(0, Math.min(maxScroll, state.scroll + (name === "pageup" || name === "u" ? -5 : 5)));
+    next.scroll = scrolled(state, maxScroll, name === "pageup" || name === "u" ? -5 : 5);
   } else {
     const delta = name === "up" || name === "k" ? -1 : name === "down" || name === "j" ? 1 : 0;
     next.selected = Math.max(0, Math.min(count - 1, name === "home" ? 0 : name === "end" ? count - 1 : state.selected + delta));

@@ -12,6 +12,28 @@ Three commands cut, one boundary drawn. See
 
 ### Added
 
+- **`session ui`**, a browsable ledger over the window `week` prints. One
+  timeline entry per session, expandable inline to the changed files as a
+  tree with drift marked `!`, the declared or accepted scope, and the cost;
+  `e` shows the evidence underneath — ids, commits, the four token counters,
+  Prime's original proposal, and every observation. `/` searches intent, id,
+  scope and paths, with exact filters `outside:yes|no`,
+  `outcome:<state>` and `source:<declared|primed|captured>`; an unknown filter
+  value is refused rather than broadening the match. `r` refreshes records
+  and Git outcomes. Read-only: rows come through `weekSessions` and
+  `withOutcomes`, and nothing is written. Needs an interactive terminal;
+  piped output is refused before raw mode is entered, and the terminal is
+  restored on quit, Ctrl-C, SIGTERM, SIGHUP and error. `--days` sets the
+  window.
+- **`session knowledge`**, a read-only view of which sessions declared,
+  changed or drifted onto which paths. `knowledge graph` writes a
+  self-contained HTML viewer and a compact JSON snapshot beside it and opens
+  the viewer; `--out` chooses where, `--no-open` only writes. `knowledge
+  context` prints the same JSON, `session.knowledge/v1`, to stdout for an
+  agent to read. Both take `--days`, `--limit`, `--path` and `--session`. An
+  edge means declared, changed or outside scope and nothing else — never
+  "depends on" or "should change next". No server, no CDN, no model call; see
+  [Session knowledge](docs/knowledge.md).
 - **Interactive agreement review** with `session start --review` and
   `session prime --start --review`. Review and edit accepted paths, actions,
   sensitive paths and policy before typing `accept`. Original Prime proposals

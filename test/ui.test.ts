@@ -139,6 +139,30 @@ describe("terminal UI", () => {
     expect(state.scroll).toBe(0);
   });
 
+  it("pages up at the first press after the terminal grows", () => {
+    // Scrolled to the bottom of a short terminal, then enlarged: the renderer
+    // clamps the stored offset to the new, smaller maximum, and the next PgUp
+    // has to move the view from there rather than from the offset nobody sees.
+    const input = data([session({ reality: Array.from({ length: 30 }, (_, i) => `src/api/file${i}.ts`) })]);
+    const topFile = (lines: string[]): string | undefined => lines.find((line) => line.includes("file"));
+    // Help fits whole at 40 rows, so it grows only to 26, where it still scrolls.
+    for (const [help, rows] of [[false, 40], [true, 26]] as const) {
+      let state = { ...initialState(), help };
+      let frame = renderUi(input, state, 80, 20);
+      for (let press = 0; press < 20; press++) {
+        state = navigate(state, { name: "pagedown" }, 1, frame.maxScroll);
+        frame = renderUi(input, state, 80, 20);
+      }
+      const grown = renderUi(input, state, 80, rows);
+      expect(grown.maxScroll).toBeLessThan(state.scroll);
+      state = navigate(state, { name: "pageup" }, 1, grown.maxScroll);
+      expect(state.scroll).toBe(Math.max(0, grown.maxScroll - 5));
+      const after = renderUi(input, state, 80, rows).lines;
+      if (help) expect(after).not.toEqual(grown.lines);
+      else expect(topFile(after)).not.toBe(topFile(grown.lines));
+    }
+  });
+
   it("paints the approved theme only where supported, with colourless and basic fallbacks", () => {
     const rgb = uiThemeFor({ isTTY: true, env: { COLORTERM: "truecolor" } });
     expect(rgb.background).toBe("\u001b[48;2;17;19;29m");
