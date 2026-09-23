@@ -753,7 +753,7 @@ describe("session", () => {
   it("puts install under hook", () => {
     const hook = buildProgram().commands.find((command) => command.name() === "hook");
 
-    expect(hook?.commands.map((command) => command.name())).toEqual(["install"]);
+    expect(hook?.commands.map((command) => command.name())).toEqual(["check", "install"]);
   });
 
   it("puts show under key", () => {

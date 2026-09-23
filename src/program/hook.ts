@@ -4,9 +4,17 @@ import { formatHook, installHook, uninstallHook } from "../commands/hook.js";
 import type { ProgramOptions } from "./options.js";
 import { parseFlag } from "./options.js";
 import { printLines } from "./print.js";
+import { checkWrite } from "../commands/check-write.js";
 
 export function registerHook(program: Command, options: ProgramOptions): void {
   const hook = program.command("hook").description("Manage the editor hook that closes sessions");
+
+  hook.command("check")
+    .description("Check a PreToolUse write against the open session's agreement")
+    .action(async () => {
+      const result = await checkWrite(options);
+      if (result !== "") console.log(result);
+    });
 
   hook
     .command("install")

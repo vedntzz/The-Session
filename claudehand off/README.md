@@ -1,108 +1,97 @@
 # Sprint handoff
 
 Updated: 22 September 2026. One small feature at a time: implement, test, stop
-for Vedant to review and commit. Codex must not commit or continue into the
-next feature without Vedant's instruction.
+for Vedant's review and commit. Codex must not stage, commit or push.
 
-## Current step: tool parsing and file-path resolution
+## Current step: PreToolUse check command
 
-**Complete and tested; waiting for Vedant's review and commit.**
+Complete and tested; waiting for Vedant's review and commit.
 
 ### Completed earlier
 
 - `d7346f4`: [immutable agreement record](01-agreement-record.md).
-- `0b9ffda`: [agreement review screen](02-agreement-review.md).
-- `36d7f13`: [pure agreement decisions](03-agreement-decisions.md), reviewed,
-  committed and pushed by Vedant.
+- `0b9ffda`: [agreement review](02-agreement-review.md).
+- `36d7f13`: [pure decisions](03-agreement-decisions.md).
+- `da8c993`: [parser and resolver](04-write-parser-resolution.md).
+  Vedant confirmed the preceding changes were committed and pushed.
 
 ### Solved in this step
 
-- Parse Edit, Write and legacy MultiEdit PreToolUse payloads into a
-  tool-independent file-write request. Validate required inputs, cap JSON at
-  2 MiB, and distinguish unsupported tools from invalid payloads.
-- Discard source/replacement text, content and transcript references; return
-  only cwd and file path. Error results contain static reason codes.
-- Resolve file paths against an explicitly supplied trusted repository root.
-  Do not let a payload choose that root. Support absolute paths, cwd-relative
-  paths, root aliases, and repository subdirectories.
-- Read filesystem metadata only: existing regular file means attempted edit;
-  absent file means attempted create. Missing parent directories are not
-  created. Empty replacement text never means file deletion.
-- Return both requested and physical paths for in-repo symlinks, deduplicated.
-  The future hook must check all returned paths and use the strictest decision.
-  A sensitive alias and a sensitive physical target both count.
-- Reject outside-repository paths/cwd, symlink escapes, broken/cyclic links,
-  directories, hard-linked files, parent traversal, ambiguous path spelling
-  and filesystem failures instead of guessing a target.
-- No files, records, settings or hooks are written by this implementation.
-
-### Source grounding
-
-Edit/Write schemas were checked against the official
-[hook reference](https://code.claude.com/docs/en/hooks#pretooluse) and
-[SDK reference](https://code.claude.com/docs/en/agent-sdk/python#edit).
-Those current references do not list MultiEdit. Its supported legacy shape
-is one file_path plus a nonempty list of old_string/new_string edits and
-optional replace_all. Unknown per-edit fields are refused. No claim is made
-that the currently installed editor emits this legacy tool.
+- Added `session hook check`: bound stdin to 2 MiB while reading, close oversized
+  iterators early, preserve UTF-8 across byte chunks.
+- Select the trusted repository from process cwd, never the payload; load its
+  latest open session through the existing repository-level lookup.
+- Check requested and physical symlink paths and use the strictest decision.
+- Emit one JSON ask/deny response for violations. No agreement, closed sessions,
+  compliant writes, record-only and unsupported tools remain silent.
+- Internal defer maps to silence, not the editor's literal defer (which pauses a
+  run). Never emit allow. Official response documentation is linked in
+  `docs/agreements.md`.
+- Deny malformed/oversized input, failed reads and unavailable checkouts.
+  Under ask/deny, unresolved paths produce denial instead of a guessed decision.
+  Static errors never echo source content, target paths or raw exceptions.
+- No installer changes. The handler writes no settings, source files or records.
+  Record-only does not log attempts; stop-time diff measurement remains separate.
+- Terminal-output rules kept the new command under hook, left short help intact,
+  and kept responses free of colour or incidental output.
 
 ### Files changed
 
-- `src/capture/write-request.ts`: normalized metadata and parser results.
-- `src/capture/adapters/claude-write.ts`: pure Claude payload parser.
-- `src/commands/resolve-write.ts`: read-only filesystem resolver.
-- `test/claude-write.test.ts`: 21 parser tests.
-- `test/resolve-write.test.ts`: 25 resolver/integration tests using temp files,
-  file and directory symlinks, hard links, and aliases of the repository root.
-- `docs/agreements.md`: implemented contract, sources and limits.
-- This handoff and the archive of the preceding decision step.
+- `src/commands/check-write.ts`: bounded reader and handler.
+- `src/program/hook.ts`: check subcommand.
+- `test/check-write.test.ts`: 22 handler/integration tests with temp repositories.
+- `test/program.test.ts`: child-command expectation.
+- `docs/agreements.md`: response contract and limitations.
+- This handoff and the previous step's archive.
 
 ### Checks and failures
 
-- `npm run build`: passed.
-- `npm run typecheck`: passed for source and tests.
-- **134 focused tests passed across 5 files**: 21 parser, 25 resolver,
-  33 decision, 47 agreement/storage and 8 generated-context tests.
-- `git diff --check`: passed.
-- No implementation or test failures encountered; none remain outstanding.
-- No full-suite rerun for this still-unwired adapter/resolver. Earlier
-  full-suite counts remain historical results, not current verification claims.
+- Build and source/test type checks: passed.
+- 170 tests across handler (22), parser (21), resolver (25), decisions (33) and
+  existing hook configuration (69): passed.
+- 18 selected command-tree/help/hook integration tests: passed; 110 unrelated
+  program tests intentionally skipped in that targeted run.
+- 8 generated-context tests run separately: passed.
+- Total: 196 targeted tests passed. No full-suite rerun this step.
+- Final whitespace/diff check: passed.
+- No implementation/test failures. The first handoff replacement patch was
+  rejected for targeting the same file twice; corrected without changing code.
 
 ### Limits and next integration obligations
 
-The resolver is a filesystem snapshot, not an atomic sandbox. A filesystem
-change after resolution can race the tool write. Other aliases beyond the
-requested and resolved names are not enumerated. Shell and unrelated editor
-tools are unsupported. None of this code intercepts a running editor yet.
+Not installed or exercised against a running editor yet. Review still says
+policy is recorded only. The resolver is a snapshot, not an atomic sandbox:
+filesystem changes can race the actual write. Shell and unrelated tools are
+unsupported.
 
-The next command must bound stdin while reading, select a trusted checkout
-independently of the payload, load the applicable agreement, handle invalid
-payloads/blocked resolutions explicitly, and evaluate every returned path.
-It must never turn a parsing or resolution failure into an allow response.
+Existing lookup selects the latest open session across checkouts sharing repo
+identity, not a particular editor session. The reader tolerates an incomplete
+final line and does not verify signatures on every read. These inherited
+semantics are not an integrity or per-editor binding guarantee.
 
-The review screen continues to say policy is recorded only, correctly.
-No runtime enforcement or hook installation has been added.
-
-All changes are uncommitted. No project commit, staging, push, PR, settings
-change, dependency or worktree cleanup was performed. Codex stops here.
+Non-repository invocation denies supported writes: installation must not
+accidentally activate this globally in arbitrary directories. Host timeout,
+process crashes and actual latency remain unverified; caught exceptions return
+denial, but process failure cannot promise fail-closed behavior.
 
 ## Remaining sprint work
 
-1. **Next small step:** wire these helpers into a PreToolUse command with
-   correct editor responses and explicit error handling; test the handler.
-2. Add opt-in hook installation and verify integration/timeout behavior.
-   Update recorded-only wording when the actual enforcement capability exists.
-3. End-to-end flow, actual hook latency checks, final review and retrospective.
+1. Next small step: opt-in installation, appropriate repository/session binding
+   and host failure/timeout tests. Update policy wording with actual capability.
+2. End-to-end flow, real editor latency checks, final review and retrospective.
 
-Other items still need confirmation or integration:
+Other items still needing confirmation/integration:
 
-- The Saturday three-screen prototype remains unverified.
-- Claude's resize fix/changelog work in `/Users/vedant/dev-session-ui`.
-- Hook research from `docs/hook-capabilities` (`2a06865`,
-  `/Users/vedant/dev-session-hook`).
-- External-proposal ingestion remains unexposed pending an input/review design.
-- Vedant owns commits. PRs and stale worktree/branch cleanup are separate;
-  existing worktrees are preserved.
+- Saturday three-screen prototype remains unverified.
+- Claude's resize/changelog work in `/Users/vedant/dev-session-ui`.
+- Hook research at `docs/hook-capabilities` (`2a06865`) in
+  `/Users/vedant/dev-session-hook`.
+- External-proposal ingestion remains unexposed pending input/review design.
+- PRs and stale worktree/branch cleanup are separate; existing worktrees preserved.
 
-Monday's consolidation and v1 boundary were merged at `224fd81`.
-No overall sprint percentage is claimed while the prototype is unverified.
+Monday consolidation/v1 boundary merged at `224fd81`. No overall sprint
+percentage is claimed while the prototype remains unverified.
+
+Current changes are uncommitted. No staging, project commit, push, PR, settings
+change, dependency installation or worktree cleanup performed.
+Codex stops here for Vedant to review and commit.

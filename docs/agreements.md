@@ -40,8 +40,8 @@ starts without `--review` retain their noninteractive behavior and create no
 agreement. Opening facts and the baseline are gathered after acceptance; a
 session opened elsewhere while the review waits prevents a second start.
 
-**Policy is only recorded in this version.** The enforcement hook is the next
-step; this screen does not install hooks or enforce the policy. External
+**Review only records policy; it does not activate enforcement.** The check
+command below is available, but opt-in installation is still pending. External
 proposal ingestion is not exposed, and this review refuses an external proposal
 rather than labelling it as Prime's.
 
@@ -54,7 +54,7 @@ returns `defer`, leaving the editor's own permissions in charge. A mismatch
 returns `ask` or `deny` according to policy; `record` returns `defer` while
 retaining the mismatch list. It neither writes a record nor claims a file changed.
 
-This function is not wired to an editor hook yet. Its adapter must supply a
+This function is wired to `session hook check`. Its adapter supplies a
 resolved, canonical repo-relative file and a known operation. Ambiguous paths
 and malformed terms throw; an adapter must handle those failures explicitly,
 never treat them as permission.
@@ -66,7 +66,7 @@ never treat them as permission.
 types and returns only `cwd` and `filePath`: source content, replacement strings
 and transcript paths are not retained. Unsupported tools are separate from
 malformed requests. Payloads over 2 MiB are refused before JSON parsing; the
-future command must also bound stdin while reading it.
+check command also bounds stdin while reading it.
 
 Edit and Write fields were checked against the [Claude hook reference](https://code.claude.com/docs/en/hooks#pretooluse)
 and [SDK tool reference](https://code.claude.com/docs/en/agent-sdk/python#edit).
@@ -97,9 +97,37 @@ are never opened, and missing files/directories are never created.
 
 This is a filesystem snapshot, not an atomic sandbox. Concurrent changes can
 race the later write, aliases beyond the checked names are not enumerated, and
-shell or other tools are unsupported. Hook JSON, installation and runtime
-enforcement remain the next step. A blocked resolution still needs an explicit
-hook response; this module alone intercepts nothing.
+shell or other tools are unsupported. This module alone intercepts nothing.
+
+### PreToolUse check command
+
+`session hook check` reads one payload from stdin. The process working directory
+selects the trusted repository and its latest open session, using the existing
+repository-level session lookup; the payload cannot select another repository.
+It checks every requested and resolved path, retaining the strictest decision.
+The command does not install itself, change settings, append attempt records,
+or modify files. Existing hook installation remains unchanged.
+
+- No agreement, a closed session, record-only policy, a compliant write or an
+  unsupported tool produces no output: normal editor permissions still apply.
+- An agreement mismatch emits one PreToolUse JSON response with `ask` or `deny`.
+- An unresolved target under ask/deny policy is denied, not guessed or approved.
+- Invalid/oversized input, failed reads, unreadable logs and an unavailable Git
+  checkout produce a static denial. No source content, paths or raw errors are
+  echoed. Run this command from the intended repository, not as a global hook
+  for arbitrary non-repository directories.
+
+Internal `defer` is translated to silence, **not** the host's literal `defer`,
+which pauses noninteractive runs. See the official
+[PreToolUse response contract](https://code.claude.com/docs/en/hooks#pretooluse-decision-control).
+Responses never grant `allow` or replace tool input. Record-only does not log
+attempts; ordinary stop-time diff measurement remains separate.
+
+The existing reader chooses the latest open session across checkouts sharing
+a repository identity, tolerates a truncated final log line, and does not
+cryptographically verify on every read. This command inherits those semantics;
+it is not an integrity or per-editor-session binding guarantee. Opt-in
+installation, real editor tests, timeout behavior and latency remain pending.
 
 ```ts
 agreement: {
