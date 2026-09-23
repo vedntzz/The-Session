@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `5f51900 checks now select the session belonging to the current checkout and deny ambiguous or unbound agreements.` (`v1.0.0-27-g5f51900`).
+Derived at `50a4fa4 docs: Sprint 1 review and the parking lot` (`v1.0.0-35-g50a4fa4`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -58,14 +58,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     116
-   17174
+     118
+   17534
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      51
-   17867
+      52
+   18293
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -134,7 +134,7 @@ key show                  Print the public key, for anyone who wants to check th
 hook                      Manage the editor hook that closes sessions
 hook check                Check a PreToolUse write against the open session's agreement
 hook install              Register the Claude Code hooks that open and close sessions
-                          --uninstall  --passive [yes|no]  --no-passive
+                          --uninstall  --passive [yes|no]  --no-passive  --enforce
 help [topic]              Every command, not just the ones above
 ```
 
@@ -965,6 +965,8 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       parser, keeps cwd and file path only   commands/resolve-write.ts read-only
       path resolution against a trusted root   write-session.ts the one open session
       bound to this checkout   commands/check-write.ts `session hook check`
+      shell/ words.ts one simple command's words, or unknown
+      package-manager.ts npm/pnpm/yarn → manifest and lockfile, or unknown
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
@@ -985,10 +987,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  50 passed (50)
-      Tests  1607 passed (1607)
-   Start at  21:28:46
-   Duration  222.31s (transform 1.81s, setup 0ms, collect 7.78s, tests 1043.40s, environment 7ms, prepare 2.49s)
+ Test Files  51 passed (51)
+      Tests  1700 passed (1700)
+   Start at  23:21:10
+   Duration  225.58s (transform 2.86s, setup 0ms, collect 11.64s, tests 1090.08s, environment 6ms, prepare 3.22s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

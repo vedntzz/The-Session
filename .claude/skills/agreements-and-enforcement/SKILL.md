@@ -1,6 +1,6 @@
 ---
 name: agreements-and-enforcement
-description: Load when touching accepted terms or anything that checks a write against them — editing agreement.ts, agreement-decision.ts, write-session.ts, capture/write-request.ts, capture/adapters/claude-write.ts, commands/resolve-write.ts, commands/check-write.ts, commands/review.ts, or `session hook install --enforce`, which registers `session hook check`. Also load before adding an agreement field or action, emitting `allow` or the host's `defer`, letting a payload choose a repository or session, turning a parse or resolution failure into silence, logging an attempted write, or widening what the review screen accepts.
+description: Load when touching accepted terms or anything that checks a write against them — editing agreement.ts, agreement-decision.ts, write-session.ts, capture/write-request.ts, capture/adapters/claude-write.ts, commands/resolve-write.ts, commands/check-write.ts, commands/review.ts, shell/words.ts, shell/package-manager.ts, or `session hook install --enforce`, which registers `session hook check`. Also load before adding an agreement field or action, emitting `allow` or the host's `defer`, letting a payload choose a repository or session, turning a parse or resolution failure into silence, treating an unrecognised shell command as writing nothing, logging an attempted write, or widening what the review screen accepts.
 ---
 
 # Accepted terms, and the check against them
@@ -83,6 +83,29 @@ because the spelling decides which terms apply.
    sharing the remote are ignored. None open here means no restriction.
 4. **Check** (`check-write.ts`): decide every resolved path and keep the
    strictest. Print one PreToolUse JSON response for `ask`/`deny`, or nothing.
+
+## Shell commands
+
+Sprint 2 extends the check to shell commands, a piece at a time. Each piece
+answers `writes` with a list of paths, or `unknown` — and unknown is never
+"writes nothing". The rules:
+
+- **Positive recognition only.** `shell/words.ts` accepts one simple command
+  and refuses chains, pipes, redirects, substitutions, globs, `~`, escapes and
+  `NAME=value` prefixes. Don't widen it by approximating what a shell would
+  do; add a real parser or leave it unknown.
+- **Over-approximate, never under.** Where a tool's behaviour varies by
+  version, list the extra file. An extra path makes the check stricter; a
+  missing one lets a write through unseen.
+- **Say what `writes` does not cover.** `package-manager.ts` maps npm, pnpm
+  and yarn to the manifest and lockfile only. `node_modules`, caches and
+  whatever a dependency's install script does are not in the answer and
+  cannot be — don't claim otherwise in output or docs.
+- **Unknown flags are unknown.** Each manager has an explicit flag list; a
+  global install, another directory, a workspace or anything unlisted is
+  unknown, not ignored.
+
+Nothing in `shell/` is wired to the hook yet; `Bash` is not in the matcher.
 
 ## What the check may never do
 

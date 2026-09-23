@@ -140,6 +140,26 @@ which pauses noninteractive runs. See the official
 Responses never grant `allow` or replace tool input. Record-only does not log
 attempts; ordinary stop-time diff measurement remains separate.
 
+#### Shell commands (not yet checked)
+
+Sprint 2 extends the check to shell commands. The first piece is pure and not
+yet wired to the hook: `packageManagerWrites` in `src/shell/package-manager.ts`
+says which tracked files an npm, pnpm or yarn command writes — the manifest
+and lockfile — or that it cannot tell.
+
+It recognises one simple command only, through `simpleWords`: no chains,
+pipes, redirects, substitutions, globs or environment prefixes. A global
+install, another directory (`--prefix`, `-C`, `--dir`, `--cwd`), a workspace
+or recursive flag, or any flag outside a fixed list is unknown. `npm run`,
+`npm test` and `npx` are unknown: they run arbitrary code. Frozen installs
+(`npm ci`, `--frozen-lockfile`, `--immutable`, `npm --no-save`) write neither
+file. Where versions differ — whether `update` rewrites the manifest — the
+answer includes the file.
+
+What it cannot see, and says so: `node_modules`, package caches, and anything
+a dependency's install script writes. `npm-shrinkwrap.json` and yarn's Plug'n'Play
+files are not listed.
+
 #### When the check cannot answer
 
 Claude Code lets a PreToolUse write through when the hook times out, exits

@@ -48,6 +48,8 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       parser, keeps cwd and file path only   commands/resolve-write.ts read-only
       path resolution against a trusted root   write-session.ts the one open session
       bound to this checkout   commands/check-write.ts `session hook check`
+      shell/ words.ts one simple command's words, or unknown
+      package-manager.ts npm/pnpm/yarn → manifest and lockfile, or unknown
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 

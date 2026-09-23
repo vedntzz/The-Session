@@ -3,47 +3,58 @@
 Updated: 22 September 2026. Implement one milestone, test, stop for Vedant
 to review/commit/push. Never stage or commit automatically.
 
-## Current milestone: Sprint 1 review and parking lot
+## Current milestone: Sprint 2, Sat 26 — package-manager recognition
 
-Complete; waiting for Vedant's review and commit. Docs only.
+Complete and tested; waiting for Vedant's review and commit. Pure code, not
+wired to the hook: `Bash` is not in the matcher yet.
 
-The sprint plan is `~/Downloads/the-session-sprint-plan (1).pdf`: three
-one-week sprints, 19 September to 9 October, to a pilot-ready drift guard.
-Every build item in Sprint 1 landed on 22 September; the handoffs so far were
-all Sprint 1. Earlier "MVP percentage" answers in chat did not know this plan.
+Sprint plan: `~/Downloads/the-session-sprint-plan (1).pdf`. Sprint 1 is
+reviewed in `docs/sprint-1-review.md` (`50a4fa4`); earlier handoffs are
+archived as `01`–`13` beside this file.
 
-### Previously completed
+### Solved
 
-- `d7346f4` [agreement record](01-agreement-record.md), `0b9ffda`
-  [review screen](02-agreement-review.md), `36d7f13`
-  [decision logic](03-agreement-decisions.md), `da8c993`
-  [parser/resolver](04-write-parser-resolution.md), `ff917f7`
-  [check command](05-write-check-command.md), `5f51900`
-  [checkout binding](06-checkout-binding.md).
-- `2c870ec` [enforce install](07-enforce-install.md), `52474c7` docs refresh,
-  `64f3c40` [enforce uninstall](08-enforce-uninstall.md), `2b29d61`
-  [failure behaviour](09-failure-behaviour.md), `e2c178a`
-  [end-to-end run](10-end-to-end.md), `1260e16`
-  [hook research restored](11-hook-research.md), `949ede1`
-  [UI resize](12-ui-resize.md).
+- `src/shell/words.ts` — `simpleWords(command)`: the words of one simple
+  command, or undefined. Single quotes literal; double quotes only when nothing
+  inside can expand. Refuses chains, pipes, redirects, `$`/backtick
+  substitution, globs, braces, `~`, `!`, `#`, backslashes, newlines and a
+  leading `NAME=value`. Reused by Sunday's parseable writers.
+- `src/shell/package-manager.ts` — `packageManagerWrites(command)`:
+  `{ kind: "writes", paths }` relative to the command's directory, or
+  `{ kind: "unknown" }`.
+  - npm → `package.json`, `package-lock.json`; pnpm → `pnpm-lock.yaml`;
+    yarn → `yarn.lock` (bare `yarn` is install).
+  - add/remove with packages → manifest + lock; install without packages →
+    lock; update → manifest + lock (versions differ, so the extra file is
+    listed); `npm ci`, `--frozen-lockfile`, `--immutable`, `npm --no-save` →
+    no tracked files.
+  - Unknown: any flag outside each manager's list, `-g`/`--global`,
+    `--prefix`/`-C`/`--dir`/`--cwd`, workspace/recursive flags, `npm run`,
+    `npm test`, `npx`, add/remove with no package, pnpm/yarn install with
+    packages, other programs (bun), and prototype names such as `constructor`.
+- Stated limits: `node_modules`, caches and dependency install scripts are not
+  covered; `npm-shrinkwrap.json` and yarn Plug'n'Play files are not listed.
+- Docs: `docs/agreements.md` "Shell commands (not yet checked)", a "Shell
+  commands" rules section in the skill (both copies, description extended),
+  layout lines in `Claude.md`/`AGENTS.md`, `docs/context.md` regenerated.
+  No CHANGELOG entry until it is user-visible.
 
-### Done
+### Verification
 
-- `docs/sprint-1-review.md`: exit condition (met, with how to reproduce it),
-  plan against actual by day with commits, measurements, what was not done and
-  why, and facts for the retrospective. The retrospective itself is left for
-  Vedant.
-- `docs/parking-lot.md`: the plan's parking lot did not exist. Created with
-  six ideas raised during Sprint 1, each with the step it came from.
-- Both files are under `docs/`, which `package.json` publishes to npm.
+- 58 new tests (`test/package-manager.test.ts`), all passing on first run.
+- Build and source/test type checks passed.
+- Full suite via the context generator: **1,700 passed across 52 files**, plus
+  8 context tests (1,708 total; 1,650 before).
 
 ## Next
 
-1. Vedant: the retrospective section, the three-screen prototype (the
-   storyboard PDF may be it), and the two-minute interactive `ask` check.
-2. Sprint 2, "the hard edges" (26 September to 2 October), in plan order:
-   package-manager recognition (Claude, Sat 26) first — npm, pnpm and yarn
-   installs mapped to the manifest and lockfile.
+Sprint 2 in plan order, each a separate step:
 
-Codex owns screens, snapshots and cleanup in worktree B; Claude owns hooks,
-gating and logging in worktree A. Never both in the same files.
+1. Sun 27 — parseable writers (`sed -i`, `>`, `tee`, `mv`, `cp`, `rm`) and a
+   read-only allowlist, pure, on `simpleWords` (redirects need a small extension).
+2. Mon 28 — wire `Bash` into the check: unknown and not allowlisted means
+   `ask` with "Can't tell what this writes."; grants scoped to one operation.
+3. Tue 29 / Wed 30 (Codex) — starting-tree snapshot; PostToolUse diff per call.
+
+Still owed from Sprint 1 (Vedant): retrospective, three-screen prototype,
+interactive `ask` check.
