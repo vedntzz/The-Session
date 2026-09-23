@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `546f5a3 stop count a file dirty at start` (`v1.0.0-49-g546f5a3`).
+Derived at `7db73ba Tree status` (`v1.0.0-50-g7db73ba`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -58,14 +58,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     132
-   18180
+     133
+   18385
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      63
-   19194
+      64
+   19368
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -134,7 +134,7 @@ key show                  Print the public key, for anyone who wants to check th
 hook                      Manage the editor hook that closes sessions
 hook check                Check a PreToolUse write against the open session's agreement
 hook install              Register the Claude Code hooks that open and close sessions
-                          --uninstall  --passive [yes|no]  --no-passive  --enforce
+                          --uninstall  --passive [yes|no]  --no-passive  --repo
 help [topic]              Every command, not just the ones above
 ```
 
@@ -268,6 +268,12 @@ export interface Session {
    * Absent on sessions opened before it existed — never backfilled.
    */
   baselineState?: Record<string, string | null>;
+  /**
+   * Every tool call the hooks saw, in order: its number, what the tree held
+   * before it, and what it changed. Folded from `toolCallStart`/`toolCallEnd`
+   * records and never written as a field; see `tool-calls.ts`.
+   */
+  toolCalls?: import("../tool-calls.js").ToolCall[];
   /** The paths that actually changed, observed from git. */
   reality: string[];
   /** `reality` minus `scope` — recorded, never blocked. */
@@ -1005,6 +1011,7 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       capture/adapters/claude-bash.ts Bash payload → cwd and command, nothing kept
       tree-state.ts what changed between two looks at the tree (git/blobs.ts
       treeStateSince takes a look against the start commit)
+      tool-calls.ts one record per tool call: number, before, what it changed
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
@@ -1025,10 +1032,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  62 passed (62)
-      Tests  2174 passed (2174)
-   Start at  11:10:08
-   Duration  159.17s (transform 1.12s, setup 0ms, collect 5.34s, tests 684.83s, environment 7ms, prepare 2.50s)
+ Test Files  63 passed (63)
+      Tests  2188 passed (2188)
+   Start at  11:26:06
+   Duration  156.90s (transform 1.26s, setup 0ms, collect 5.76s, tests 695.68s, environment 8ms, prepare 2.39s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

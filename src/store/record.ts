@@ -212,6 +212,12 @@ export interface Session {
    * Absent on sessions opened before it existed — never backfilled.
    */
   baselineState?: Record<string, string | null>;
+  /**
+   * Every tool call the hooks saw, in order: its number, what the tree held
+   * before it, and what it changed. Folded from `toolCallStart`/`toolCallEnd`
+   * records and never written as a field; see `tool-calls.ts`.
+   */
+  toolCalls?: import("../tool-calls.js").ToolCall[];
   /** The paths that actually changed, observed from git. */
   reality: string[];
   /** `reality` minus `scope` — recorded, never blocked. */
@@ -325,7 +331,12 @@ export function inOwnWords(session: Pick<Session, "intentSource">): boolean {
 }
 
 /** The `set` payload of a record. Creating records carry every field. */
-export type RecordFields = Partial<Omit<Session, "id">>;
+export type RecordFields = Partial<Omit<Session, "id" | "toolCalls">> & {
+  /** A tool call about to run; folded into `Session.toolCalls`. */
+  toolCallStart?: import("../tool-calls.js").ToolCallStart;
+  /** A tool call that ran; folded into `Session.toolCalls`. */
+  toolCallEnd?: import("../tool-calls.js").ToolCallEnd;
+};
 
 /**
  * Fields `updateSession` may set. Declaration fields are absent by design: intent is written
@@ -340,6 +351,7 @@ export type RecordFields = Partial<Omit<Session, "id">>;
 export type SessionPatch = Omit<
   RecordFields,
   "intent" | "intentSource" | "repo" | "attribution" | "proposal" | "agreement" | "checkout" | "baselineState"
+  | "toolCallStart" | "toolCallEnd"
 >;
 
 /**
@@ -347,7 +359,7 @@ export type SessionPatch = Omit<
  * yet — reality, drift, cost, where it ended up — is defaulted here and filled
  * in by later patches. `repo` is derived from the store's cwd, never passed.
  */
-export type NewSession = Partial<Omit<Session, "id" | "repo" | "checkout">> &
+export type NewSession = Partial<Omit<Session, "id" | "repo" | "checkout" | "toolCalls">> &
   Pick<Session, "intent" | "startedAt" | "startCommit"> & { id?: string };
 
 export interface StoreOptions {

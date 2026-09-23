@@ -168,3 +168,21 @@ export async function treeStateSince(
 ): Promise<Record<string, string | null>> {
   return endStateOf(await changedFilesSince(commit, cwd), cwd);
 }
+
+/**
+ * A look after a tool call: `treeStateSince`, plus the blob of every path the
+ * look before named that is now back as it was at `commit`. Without those, a
+ * path the call put back would be absent from the look and could not be told
+ * from one that never changed. Every path `before` names is in the answer.
+ */
+export async function treeStateAfter(
+  before: Readonly<Record<string, string | null>>,
+  commit: string,
+  cwd: string = process.cwd(),
+): Promise<Record<string, string | null>> {
+  const now = await treeStateSince(commit, cwd);
+  const restored = Object.keys(before).filter((path) => !Object.hasOwn(now, path));
+  if (restored.length === 0) return now;
+  const blobs = await workingBlobs(await repoRoot(cwd), restored);
+  return { ...now, ...Object.fromEntries(blobs) };
+}

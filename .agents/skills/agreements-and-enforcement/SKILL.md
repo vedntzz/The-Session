@@ -1,6 +1,6 @@
 ---
 name: agreements-and-enforcement
-description: Load when touching accepted terms or anything that checks a write against them — editing agreement.ts, agreement-decision.ts, write-session.ts, capture/write-request.ts, capture/adapters/claude-write.ts, commands/resolve-write.ts, commands/check-write.ts, commands/review.ts, shell/*, commands/resolve-shell.ts, capture/adapters/claude-bash.ts, or `session hook install --enforce`, which registers `session hook check`. Also load before adding an agreement field or action, emitting `allow` or the host's `defer`, letting a payload choose a repository or session, turning a parse or resolution failure into silence, treating an unrecognised shell command as writing nothing, logging an attempted write, or widening what the review screen accepts.
+description: Load when touching accepted terms or anything that checks a write against them — editing agreement.ts, agreement-decision.ts, write-session.ts, capture/write-request.ts, capture/adapters/claude-write.ts, commands/resolve-write.ts, commands/check-write.ts, commands/review.ts, shell/*, commands/resolve-shell.ts, capture/adapters/claude-bash.ts, or `session hook install --repo`, which registers `session hook check`. Also load before adding an agreement field or action, emitting `allow` or the host's `defer`, letting a payload choose a repository or session, turning a parse or resolution failure into silence, treating an unrecognised shell command as writing nothing, logging an attempted write, or widening what the review screen accepts.
 ---
 
 # Accepted terms, and the check against them
@@ -154,11 +154,11 @@ only when both agree; don't pick a dialect from the platform.
   deadline under the timeout; a test pins it.
 
 Outside a git repository a supported write is denied. That is why the check
-is never registered as a global hook: `session hook install --enforce` writes
+is never registered as a global hook: `session hook install --repo` writes
 `CHECK_HOOK` into the repository's own `.claude/settings.local.json` and
 nothing else. It is kept out of `HOOKS`, so the user-level install and
 uninstall never add or remove it — don't fold it in. Its matcher is part of
 being registered: an entry under a narrower group is moved, not left, since
-it would let a supported tool through. `--enforce --uninstall` removes every
+it would let a supported tool through. `--repo --uninstall` removes every
 entry running the check, whatever its matcher, and creates no file to do it. The review screen and start line say
 where policy is checked; change them in the same commit that changes where.

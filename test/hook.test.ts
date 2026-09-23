@@ -22,11 +22,11 @@ import {
   type Settings,
 } from "../src/capture/hook.js";
 import {
-  enforceFile,
+  repoSettingsFile,
   formatHook,
-  installEnforce,
+  installRepoHooks,
   installHook,
-  uninstallEnforce,
+  uninstallRepoHooks,
   settingsFile,
   uninstallHook,
   type HookResult,
@@ -564,14 +564,14 @@ describe("installHook", () => {
   });
 });
 
-describe("installEnforce", () => {
+describe("installRepoHooks", () => {
   let root: string;
   let repo: string;
   let local: string;
   let user: string;
 
   beforeEach(async () => {
-    root = await realpath(await mkdtemp(path.join(tmpdir(), "session-enforce-")));
+    root = await realpath(await mkdtemp(path.join(tmpdir(), "session-repo-hooks-")));
     repo = path.join(root, "repo");
     await mkdir(path.join(repo, "src"), { recursive: true });
     await runGit(repo, ["init", "-q"]);
@@ -592,20 +592,20 @@ describe("installEnforce", () => {
   };
 
   it("writes the check into this repository's own settings, creating them", async () => {
-    const result = await installEnforce({ cwd: repo });
+    const result = await installRepoHooks({ cwd: repo });
     expect(result).toEqual({ file: local, hooks: [CHECK_HOOK], changed: true, action: "installed" });
     expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
   });
 
   it("finds the repository root from a subdirectory", async () => {
-    expect(await enforceFile({ cwd: path.join(repo, "src") })).toBe(local);
+    expect(await repoSettingsFile({ cwd: path.join(repo, "src") })).toBe(local);
   });
 
   it("keeps every other setting and hook in the file", async () => {
     await mkdir(path.dirname(local));
     const theirs = { permissions: { allow: ["Bash(npm test)"] }, hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "audit" }] }] } };
     await writeFile(local, JSON.stringify(theirs), "utf8");
-    await installEnforce({ cwd: repo });
+    await installRepoHooks({ cwd: repo });
     expect(await read()).toEqual({
       permissions: { allow: ["Bash(npm test)"] },
       hooks: { PreToolUse: [theirs.hooks.PreToolUse[0], CHECK] },
@@ -613,9 +613,9 @@ describe("installEnforce", () => {
   });
 
   it("leaves the file untouched when the check is already there", async () => {
-    await installEnforce({ cwd: repo });
+    await installRepoHooks({ cwd: repo });
     const before = await stat(local);
-    const again = await installEnforce({ cwd: repo });
+    const again = await installRepoHooks({ cwd: repo });
     expect(again.changed).toBe(false);
     expect((await stat(local)).mtimeMs).toBe(before.mtimeMs);
     expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
@@ -625,25 +625,25 @@ describe("installEnforce", () => {
     await mkdir(path.dirname(local));
     await writeFile(local, "{}", "utf8");
     await chmod(local, 0o600);
-    await installEnforce({ cwd: repo });
+    await installRepoHooks({ cwd: repo });
     expect((await stat(local)).mode & 0o777).toBe(0o600);
   });
 
   it("refuses a file that is not valid JSON, and leaves it as it was", async () => {
     await mkdir(path.dirname(local));
     await writeFile(local, "{ nope", "utf8");
-    await expect(installEnforce({ cwd: repo })).rejects.toThrow(/not valid JSON/);
+    await expect(installRepoHooks({ cwd: repo })).rejects.toThrow(/not valid JSON/);
     expect(await readFile(local, "utf8")).toBe("{ nope");
   });
 
   it("refuses outside a repository, writing nothing", async () => {
-    await expect(installEnforce({ cwd: root })).rejects.toThrow(/Not inside a git repository/);
+    await expect(installRepoHooks({ cwd: root })).rejects.toThrow(/Not inside a git repository/);
   });
 
   it("never reads or writes the user-level settings", async () => {
     const before = await readFile(user, "utf8");
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    await buildProgram({ cwd: repo, settings: user }).parseAsync(["node", "session", "hook", "install", "--enforce"]);
+    await buildProgram({ cwd: repo, settings: user }).parseAsync(["node", "session", "hook", "install", "--repo"]);
     expect(await readFile(user, "utf8")).toBe(before);
     expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
     expect(log.mock.calls.flat().join("\n")).toContain("PreToolUse (Edit|Write|MultiEdit|Bash) → session hook check");
@@ -652,10 +652,10 @@ describe("installEnforce", () => {
   it.each([
     [["--no-passive"], /--passive applies to the user-level hooks/],
     [["--passive=false"], /--passive applies to the user-level hooks/],
-  ])("refuses --enforce with %j, changing nothing", async (extra, message) => {
+  ])("refuses --repo with %j, changing nothing", async (extra, message) => {
     const before = await readFile(user, "utf8");
     const program = buildProgram({ cwd: repo, settings: user });
-    await expect(program.parseAsync(["node", "session", "hook", "install", "--enforce", ...extra])).rejects.toThrow(message);
+    await expect(program.parseAsync(["node", "session", "hook", "install", "--repo", ...extra])).rejects.toThrow(message);
     expect(await readFile(user, "utf8")).toBe(before);
     await expect(stat(local)).rejects.toThrow();
   });
@@ -666,15 +666,15 @@ describe("installEnforce", () => {
     it("takes the check out and leaves every other setting and hook", async () => {
       await mkdir(path.dirname(local));
       await writeFile(local, JSON.stringify({ permissions: { allow: ["Bash(ls)"] }, hooks: { PreToolUse: [AUDIT] } }), "utf8");
-      await installEnforce({ cwd: repo });
-      const result = await uninstallEnforce({ cwd: path.join(repo, "src") });
+      await installRepoHooks({ cwd: repo });
+      const result = await uninstallRepoHooks({ cwd: path.join(repo, "src") });
       expect(result).toEqual({ file: local, hooks: [], changed: true, action: "removed" });
       expect(await read()).toEqual({ permissions: { allow: ["Bash(ls)"] }, hooks: { PreToolUse: [AUDIT] } });
     });
 
     it("leaves an emptied file as {}, not deleted", async () => {
-      await installEnforce({ cwd: repo });
-      await uninstallEnforce({ cwd: repo });
+      await installRepoHooks({ cwd: repo });
+      await uninstallRepoHooks({ cwd: repo });
       expect(await read()).toEqual({});
     });
 
@@ -682,12 +682,12 @@ describe("installEnforce", () => {
       await mkdir(path.dirname(local));
       const narrow = { matcher: "Write", hooks: [{ type: "command", command: "lint" }, { type: "command", command: CHECK_HOOK.command }] };
       await writeFile(local, JSON.stringify({ hooks: { PreToolUse: [narrow] } }), "utf8");
-      await uninstallEnforce({ cwd: repo });
+      await uninstallRepoHooks({ cwd: repo });
       expect(await read()).toEqual({ hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: "lint" }] }] } });
     });
 
     it("creates nothing when the repository has no settings file", async () => {
-      const result = await uninstallEnforce({ cwd: repo });
+      const result = await uninstallRepoHooks({ cwd: repo });
       expect(result.changed).toBe(false);
       await expect(stat(local)).rejects.toThrow();
     });
@@ -697,7 +697,7 @@ describe("installEnforce", () => {
       const text = JSON.stringify({ hooks: { PreToolUse: [] } });
       await writeFile(local, text, "utf8");
       const before = await stat(local);
-      expect((await uninstallEnforce({ cwd: repo })).changed).toBe(false);
+      expect((await uninstallRepoHooks({ cwd: repo })).changed).toBe(false);
       expect(await readFile(local, "utf8")).toBe(text);
       expect((await stat(local)).mtimeMs).toBe(before.mtimeMs);
     });
@@ -705,16 +705,16 @@ describe("installEnforce", () => {
     it("refuses invalid JSON and non-repositories, writing nothing", async () => {
       await mkdir(path.dirname(local));
       await writeFile(local, "{ nope", "utf8");
-      await expect(uninstallEnforce({ cwd: repo })).rejects.toThrow(/not valid JSON/);
+      await expect(uninstallRepoHooks({ cwd: repo })).rejects.toThrow(/not valid JSON/);
       expect(await readFile(local, "utf8")).toBe("{ nope");
-      await expect(uninstallEnforce({ cwd: root })).rejects.toThrow(/Not inside a git repository/);
+      await expect(uninstallRepoHooks({ cwd: root })).rejects.toThrow(/Not inside a git repository/);
     });
 
     it("never touches the user-level hooks, through the CLI", async () => {
-      await installEnforce({ cwd: repo });
+      await installRepoHooks({ cwd: repo });
       const before = await readFile(user, "utf8");
       const log = vi.spyOn(console, "log").mockImplementation(() => {});
-      await buildProgram({ cwd: repo, settings: user }).parseAsync(["node", "session", "hook", "install", "--enforce", "--uninstall"]);
+      await buildProgram({ cwd: repo, settings: user }).parseAsync(["node", "session", "hook", "install", "--repo", "--uninstall"]);
       expect(await readFile(user, "utf8")).toBe(before);
       expect(await read()).toEqual({});
       expect(log.mock.calls.flat().join("\n")).toMatch(/removed .*settings\.local\.json[\s\S]*none registered/);
@@ -722,7 +722,7 @@ describe("installEnforce", () => {
 
     it("is not undone by the user-level uninstall", async () => {
       // Pointed at the repository file, the user-level removal still leaves the check.
-      await installEnforce({ cwd: repo });
+      await installRepoHooks({ cwd: repo });
       await uninstallHook({ settings: local });
       expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
     });

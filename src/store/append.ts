@@ -14,10 +14,13 @@ import {
   type StoreOptions,
 } from "./record.js";
 import { repoIdentity, resolveStoreFile, storeHome } from "./paths.js";
+import { endFor, startFor, type ToolCallEnd, type ToolCallStart } from "../tool-calls.js";
+import type { TreeState } from "../tree-state.js";
 import {
   intentSourceFor,
   isComplete,
   keptIntent,
+  foldLog,
   readLog,
   readLogFile,
   readSessions,
@@ -95,7 +98,11 @@ export function nextPrev(log: RawLog): string {
   return last ? lineHash(last.text) : GENESIS;
 }
 
-export async function writeRecord(id: string, set: RecordFields, options: StoreOptions): Promise<void> {
+export async function writeRecord(
+  id: string,
+  set: RecordFields | ((log: RawLog) => RecordFields | undefined),
+  options: StoreOptions,
+): Promise<void> {
   const file = await resolveStoreFile(options);
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
 
@@ -105,7 +112,11 @@ export async function writeRecord(id: string, set: RecordFields, options: StoreO
 
   await withLock(file, async () => {
     const log = await readLog(options);
-    const record = signRecord(id, set, nextPrev(log), keypair);
+    // A builder sees the log as it stands under the lock, so anything it
+    // numbers or orders cannot race another writer. Undefined writes nothing.
+    const fields = typeof set === "function" ? set(log) : set;
+    if (fields === undefined) return;
+    const record = signRecord(id, fields, nextPrev(log), keypair);
 
     // A previous write cut short leaves a line with no newline on it. Starting
     // on a fresh line keeps that damage to the one line it happened on rather
@@ -239,6 +250,9 @@ export async function updateSession(
  * caller cannot quietly become the one that edits an intent.
  */
 function refusePatch(patch: SessionPatch): void {
+  if ("toolCalls" in patch || "toolCallStart" in patch || "toolCallEnd" in patch) {
+    throw new Error("Tool calls are recorded by the tool-call hooks and cannot be patched.");
+  }
   if ("baselineState" in patch) {
     throw new Error("The starting snapshot is taken at start and cannot be added or edited later.");
   }
@@ -269,4 +283,43 @@ function refusePatch(patch: SessionPatch): void {
   if (patch.endedAt != null) {
     assertTimestamp("endedAt", patch.endedAt);
   }
+}
+
+/**
+ * Records that a tool call is about to run, numbered from this session's own
+ * counter under the log's lock, so two calls starting together cannot share a
+ * number. Undefined when that call id is already recorded. Throws when the
+ * session is not in this log: a call belongs to exactly one session.
+ */
+export async function recordCallStart(
+  sessionId: string, callId: string, tool: string, before: TreeState, options: StoreOptions,
+): Promise<ToolCallStart | undefined> {
+  let written: ToolCallStart | undefined;
+  await writeRecord(sessionId, (log) => {
+    written = startFor(callsOf(log, sessionId), callId, tool, before);
+    return written ? { toolCallStart: written } : undefined;
+  }, options);
+  return written;
+}
+
+/**
+ * Records that a tool call ran and what it changed, decided under the lock
+ * against every call already recorded — which is what makes the overlap
+ * check see a call that started a moment ago. Undefined when already ended.
+ */
+export async function recordCallEnd(
+  sessionId: string, callId: string, tool: string, after: TreeState, options: StoreOptions,
+): Promise<ToolCallEnd | undefined> {
+  let written: ToolCallEnd | undefined;
+  await writeRecord(sessionId, (log) => {
+    written = endFor(callsOf(log, sessionId), callId, tool, after);
+    return written ? { toolCallEnd: written } : undefined;
+  }, options);
+  return written;
+}
+
+function callsOf(log: RawLog, sessionId: string) {
+  const session = foldLog(log).find((item) => item.id === sessionId);
+  if (!session) throw new Error(`No session with id ${sessionId} in this log. Start a session before recording tool calls.`);
+  return session.toolCalls ?? [];
 }

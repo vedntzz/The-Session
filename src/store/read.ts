@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { hasAttribution } from "../config.js";
 import { parseAgreement, scopeForAgreement } from "../agreement.js";
+import { foldToolCall } from "../tool-calls.js";
 import {
   RECORD_VERSION,
   zeroCost,
@@ -313,8 +314,12 @@ export function foldRecord(
   order: Map<string, number>,
 ): void {
   const existing = sessions.get(record.id);
+  // Tool calls are events, not fields: folded into a list, and a `toolCalls`
+  // value in any record is ignored — the list only ever comes from events.
+  const { toolCallStart, toolCallEnd, ...rest } = record.set as RecordFields & { toolCalls?: unknown };
+  const { toolCalls: _ignored, ...fields } = rest;
   const merged: Partial<Session> = {
-    ...existing, ...record.set, ...keptIntent(existing, record),
+    ...existing, ...fields, ...keptIntent(existing, record),
     // Neither assistance nor its original suggestion may be added or revised
     // after the creating record, including on logs that predate Prime.
     ...(existing ? {
@@ -322,9 +327,15 @@ export function foldRecord(
       agreement: existing.agreement,
       checkout: existing.checkout,
       baselineState: existing.baselineState,
+      toolCalls: existing.toolCalls,
       ...(existing.agreement ? { scope: existing.scope } : {}),
     } : {}),
   };
+  if (existing && (toolCallStart || toolCallEnd)) {
+    const calls = existing.toolCalls ?? [];
+    const seq = calls.reduce((max, call) => Math.max(max, call.startSeq ?? 0, call.endSeq ?? 0), 0) + 1;
+    merged.toolCalls = foldToolCall(calls, seq, { toolCallStart, toolCallEnd });
+  }
   if (!isComplete(merged)) {
     // A patch whose creating record is missing: nothing to anchor it to.
     return;

@@ -68,6 +68,16 @@ exists.
 `workingBlobs` that gives `endState`; hashes only, never content. `{}` means
 the tree was clean, absent means the record predates it.
 
+**Tool calls are events, not fields.** A `toolCallStart` or `toolCallEnd`
+record adds to `Session.toolCalls` in log order; the fold never takes a
+`toolCalls` value from any record, and `updateSession` refuses all three keys.
+Both are written through `writeRecord` with a builder that reads the log under
+the lock: the call number (`n`, this session's own counter) and the overlap
+flag are decided against exactly what is on disk, so two calls starting
+together cannot share a number. A call is marked `overlapping` when another
+ran during it, which marks both; overlapping and unpaired calls record
+`changed: null` and no files — never a guess. Hashes and paths only.
+
 `checkout` is captured from git's root and the filesystem realpath at creation,
 never taken from the caller's fields, and is absent rather than guessed when
 git cannot say. Older records are never backfilled or re-signed: absent fields

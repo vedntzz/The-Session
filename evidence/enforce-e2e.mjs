@@ -27,7 +27,7 @@ git("commit", "-qm", "init");
 
 console.log("# Agreement enforcement, end to end\n");
 console.log(`repo ${repo}\n`);
-console.log(run("session", ["hook", "install", "--enforce"]).stdout);
+console.log(run("session", ["hook", "install", "--repo"]).stdout);
 
 // The agreement is written through the same API --review calls on accept.
 const { startSession } = await import(path.join(import.meta.dirname, "../dist/commands/start.js"));

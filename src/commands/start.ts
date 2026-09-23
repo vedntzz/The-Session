@@ -220,7 +220,7 @@ export function formatStarted(session: Session): string[] {
   if (session.agreement) {
     const reach = session.agreement.policy === "record"
       ? "never blocks"
-      : "checked where session hook install --enforce has run";
+      : "checked where session hook install --repo has run";
     lines.push(`  agreement  saved; policy ${session.agreement.policy} (${reach})`);
   }
 

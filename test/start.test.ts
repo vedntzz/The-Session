@@ -292,7 +292,7 @@ describe("formatStarted", () => {
       formatStarted(session).find((line) => line.includes("agreement"));
 
     const asked = await startSession("ask first", { ...options, scope: ["src"], agreement: { ...terms, policy: "ask" } });
-    expect(started(asked)).toBe("  agreement  saved; policy ask (checked where session hook install --enforce has run)");
+    expect(started(asked)).toBe("  agreement  saved; policy ask (checked where session hook install --repo has run)");
     await stopSession({ ...options, adapters: [] });
 
     const recorded = await startSession("record it", { ...options, scope: ["src"], agreement: { ...terms, policy: "record" } });

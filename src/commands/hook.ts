@@ -171,8 +171,8 @@ export function uninstallHook(options: HookOptions = {}): Promise<HookResult> {
   );
 }
 
-/** What `session hook install --enforce` needs: the repository it applies to. */
-export interface EnforceOptions {
+/** What `session hook install --repo` needs: the repository it applies to. */
+export interface RepoHookOptions {
   cwd?: string;
 }
 
@@ -183,14 +183,14 @@ export interface EnforceOptions {
  * Not the checked-in `.claude/settings.json`, because enforcing an agreement is
  * one developer's choice about their own sessions, the same as the other hooks.
  */
-export async function enforceFile(options: EnforceOptions = {}): Promise<string> {
+export async function repoSettingsFile(options: RepoHookOptions = {}): Promise<string> {
   const cwd = options.cwd ?? process.cwd();
   let root: string;
   try {
     root = await repoRoot(cwd);
   } catch (error) {
     throw new Error(
-      "Not inside a git repository. Run session hook install --enforce from the repository whose agreements it should check.",
+      "Not inside a git repository. Run session hook install --repo from the repository whose agreements it should check.",
       { cause: error },
     );
   }
@@ -203,8 +203,8 @@ export async function enforceFile(options: EnforceOptions = {}): Promise<string>
  * the repository's file is carried through. The file is created if absent:
  * unlike the user's settings, a repository without one is the normal case.
  */
-export async function installEnforce(options: EnforceOptions = {}): Promise<HookResult> {
-  const file = await enforceFile(options);
+export async function installRepoHooks(options: RepoHookOptions = {}): Promise<HookResult> {
+  const file = await repoSettingsFile(options);
   const settings = await readSettings(file, true);
   const changed = !hasHook(settings, CHECK_HOOK);
   if (changed) {
@@ -220,8 +220,8 @@ export async function installEnforce(options: EnforceOptions = {}): Promise<Hook
  * file without the check, is left alone — nothing is created to say so. A
  * file emptied by the removal stays as `{}`, since nothing records who made it.
  */
-export async function uninstallEnforce(options: EnforceOptions = {}): Promise<HookResult> {
-  const file = await enforceFile(options);
+export async function uninstallRepoHooks(options: RepoHookOptions = {}): Promise<HookResult> {
+  const file = await repoSettingsFile(options);
   const settings = await readSettings(file, true);
   const changed = hasEntry(settings, CHECK_HOOK);
   if (changed) {

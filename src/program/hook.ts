@@ -1,6 +1,6 @@
 // `session hook`.
 import type { Command } from "commander";
-import { formatHook, installEnforce, installHook, uninstallEnforce, uninstallHook } from "../commands/hook.js";
+import { formatHook, installRepoHooks, installHook, uninstallRepoHooks, uninstallHook } from "../commands/hook.js";
 import type { ProgramOptions } from "./options.js";
 import { parseFlag } from "./options.js";
 import { printLines } from "./print.js";
@@ -29,7 +29,7 @@ export function registerHook(program: Command, options: ProgramOptions): void {
   hook
     .command("install")
     .description("Register the Claude Code hooks that open and close sessions")
-    .option("--uninstall", "take the hooks back out instead (with --enforce, only the check)")
+    .option("--uninstall", "take the hooks back out instead (with --repo, only the check)")
     .option(
       "--passive [yes|no]",
       "record sessions nobody declared, from the first prompt onwards",
@@ -41,15 +41,15 @@ export function registerHook(program: Command, options: ProgramOptions): void {
     // reach for, and `--no-passive` is what anyone reading a commander CLI
     // would.
     .option("--no-passive", "register only the hook that closes a session you started")
-    .option("--enforce", "check writes against the open agreement, in this repository only")
-    .action(async (flags: { uninstall?: boolean; passive?: boolean; enforce?: boolean }, command: Command) => {
-      if (flags.enforce) {
+    .option("--repo", "register this repository's own hooks (the agreement check), in .claude/settings.local.json")
+    .action(async (flags: { uninstall?: boolean; passive?: boolean; repo?: boolean }, command: Command) => {
+      if (flags.repo) {
         // The check is a separate, per-repository arrangement; a flag meant for
         // the user-level hooks is refused by name rather than quietly ignored.
         if (command.getOptionValueSource("passive") === "cli") {
-          throw new Error("--passive applies to the user-level hooks, not --enforce. Run session hook install separately for those.");
+          throw new Error("--passive applies to the user-level hooks, not --repo. Run session hook install separately for those.");
         }
-        printLines(formatHook(flags.uninstall ? await uninstallEnforce(options) : await installEnforce(options)));
+        printLines(formatHook(flags.uninstall ? await uninstallRepoHooks(options) : await installRepoHooks(options)));
         return;
       }
       const result = flags.uninstall

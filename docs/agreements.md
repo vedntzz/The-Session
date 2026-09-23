@@ -41,7 +41,7 @@ agreement. Opening facts and the baseline are gathered after acceptance; a
 session opened elsewhere while the review waits prevents a second start.
 
 **Review does not activate enforcement by itself.** A policy is checked only
-in a repository where `session hook install --enforce` has registered the check
+in a repository where `session hook install --repo` has registered the check
 command below, and only for Edit, Write and MultiEdit. External
 proposal ingestion is not exposed, and this review refuses an external proposal
 rather than labelling it as Prime's.
@@ -110,15 +110,15 @@ It checks every requested and resolved path, retaining the strictest decision.
 The command does not install itself, change settings, append attempt records,
 or modify files.
 
-`session hook install --enforce` registers it for the current repository only,
+`session hook install --repo` registers it for the current repository only,
 in `<root>/.claude/settings.local.json`, under the matcher
 `Edit|Write|MultiEdit` with a 10-second timeout. The file is created if absent;
 other settings and hooks in it are kept, and a second install changes nothing.
 An entry filed under a narrower matcher is moved, not duplicated. User-level
 settings are never read or written, because outside a repository the check
-denies every supported write. `--enforce` refuses the passive flags by name.
+denies every supported write. `--repo` refuses the passive flags by name.
 
-`session hook install --enforce --uninstall` takes the check back out of the
+`session hook install --repo --uninstall` takes the check back out of the
 same file, including an entry filed under another matcher, and leaves every
 other setting and hook. A file emptied by the removal stays as `{}`; a
 repository without the file, or without the check, is left untouched and no
@@ -158,7 +158,7 @@ through `resolveShellCommand` (below), and:
 - `record` stays silent, as for file tools.
 
 An install made before `Bash` was in the matcher reads as not registered; run
-`session hook install --enforce` again to repair it. Every Bash call now
+`session hook install --repo` again to repair it. Every Bash call now
 starts the check, about 190 ms each. Measured in a real Claude Code run on
 23 September 2026 under a deny agreement for edits under `src/`: `echo b >
 src/a.txt` ran, `echo hello > notes.txt` was denied, `touch src/new.txt` was

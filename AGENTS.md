@@ -57,6 +57,7 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       capture/adapters/claude-bash.ts Bash payload → cwd and command, nothing kept
       tree-state.ts what changed between two looks at the tree (git/blobs.ts
       treeStateSince takes a look against the start commit)
+      tool-calls.ts one record per tool call: number, before, what it changed
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
@@ -90,6 +91,10 @@ type Session = {
   outcome: 'open' | 'merged' | 'abandoned' | 'empty'  // what settle/mark last wrote;
                                // views recompute it — never read this one to display
   attribution?: Attribution    // copied from .session.json at start, not patchable
+  toolCalls?: ToolCall[]       // folded from toolCallStart/toolCallEnd event records,
+                               // never a field: { n, tool, before, end: { files:
+                               // [{path, blob|null}], changed: bool|null, overlapping } }.
+                               // Every call, no-ops too; overlapping calls attribute nothing
   endState?: Record<string, string | null>  // blob id per reality path at stop, null
                                // = deleted; what makes "did it merge" answerable
   observations?: Observation[] // { outcome, observedAt, commit, branch, source }

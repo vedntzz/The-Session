@@ -314,7 +314,7 @@ owns the terminal. The rules the screen holds to:
   as `JSON.stringify` of itself, so a path or intent cannot move the cursor or
   hide a character.
 - **It says what it does not do.** The screen says policy is checked only
-  where `session hook install --enforce` has run, for Edit, Write, MultiEdit
+  where `session hook install --repo` has run, for Edit, Write, MultiEdit
   and shell commands, and that a shell command it cannot read is asked about;
   it says no session has started until `accept`. Change that sentence in the commit that changes the reach.
 - Colour is the existing roles — `intent`, `path`, `meta`. No new role.

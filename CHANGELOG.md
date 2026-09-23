@@ -39,11 +39,11 @@ Three commands cut, one boundary drawn. See
   sensitive paths and policy before typing `accept`. Original Prime proposals
   remain separate. Cancellation writes nothing; scripted starts are unchanged.
   Remaining sprint work extends this to enforcement below.
-- **`session hook install --enforce`** registers `session hook check` before
+- **`session hook install --repo`** registers `session hook check` before
   Edit, Write and MultiEdit, in this repository's `.claude/settings.local.json`
   only. User-level settings are never touched, and other settings and hooks in
   the file are kept. An `ask` or `deny` policy is checked from then on in that
-  repository. `--enforce --uninstall` takes
+  repository. `--repo --uninstall` takes
   only the check back out of that file. A check that stalls denies at its own
   5-second deadline, and one that fails unexpectedly exits 2, because the host
   lets a timed-out or crashed hook through. A `session` the editor cannot find
@@ -57,7 +57,7 @@ Three commands cut, one boundary drawn. See
   keep their old figures; nothing is backfilled.
 - **Shell commands are checked.** `session hook check` reads `Bash` calls and
   the matcher is `Edit|Write|MultiEdit|Bash`; run `session hook install
-  --enforce` again to update an existing install. npm/pnpm/yarn, `sed -i`,
+  --repo` again to update an existing install. npm/pnpm/yarn, `sed -i`,
   `>`, `tee`, `mv`, `cp` and `rm` are recognized and their writes decided like
   an edit; a short list of readers passes; anything else is asked about with
   "Can't tell what this writes." Chains, pipes, substitutions, globs,
