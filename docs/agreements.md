@@ -238,6 +238,26 @@ Interactive/no-clobber flags keep the potential effects: a possible skip is
 not a guaranteed no-op. No moves or content reads occur. This is still not
 wired into the hook, and filesystem changes after resolution can race a move.
 
+`parseCopy` in `src/shell/copy.ts` accepts a two-operand `cp`, optionally with
+one `-i` or `-n` and an optional `--` before operands. Recursive, backup, link,
+metadata-preservation, target-directory and force options remain unknown.
+In particular, `-f` can remove an existing destination and is not silently
+treated as an ordinary edit. See [GNU cp invocation](https://www.gnu.org/s/coreutils/manual/html_node/cp-invocation.html).
+
+`resolveCopy` resolves only regular-file-to-file copies. Shared metadata-only
+checks in `resolve-file-pair.ts` keep its path safety aligned with `resolveMove`:
+both operands must be in the trusted repository, the source must exist, and
+the destination parent must exist. Directory operands, leaf links, hard links,
+same-file aliases and unsafe/unresolved paths are blocked. This deliberately
+also refuses outside-repository read sources rather than widening the boundary.
+
+Only destination create/edit operations are emitted, including requested and
+physical parent aliases. Source reads are not labelled as writes or deletions.
+Interactive/no-clobber keep the potential write rather than imply a guaranteed
+skip. No file content is read or copied by resolution. Metadata side effects
+across platform/filesystem variants are not established by this subset; this
+is not a sandbox. Hook integration remains unchanged.
+
 #### When the check cannot answer
 
 Claude Code lets a PreToolUse write through when the hook times out, exits
