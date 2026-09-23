@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `9889fff shell: refuse zsh expansions the tokenizer could not see` (`v1.0.0-45-g9889fff`).
+Derived at `9205285 shell: resolve one command to the writes to check, or unknown` (`v1.0.0-46-g9205285`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -58,14 +58,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     130
-   18030
+     131
+   18094
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
       61
-   18853
+   18951
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -971,6 +971,7 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       requests, resolved read-only by commands/resolve-{move,copy,remove}.ts
       read-only.ts the short list of commands known to write no file
       commands/resolve-shell.ts one command → the writes to check, or unknown
+      capture/adapters/claude-bash.ts Bash payload → cwd and command, nothing kept
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
@@ -992,9 +993,9 @@ model's rate. A release of this tool is not a price update.
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
  Test Files  60 passed (60)
-      Tests  2141 passed (2141)
-   Start at  10:20:13
-   Duration  221.99s (transform 1.76s, setup 0ms, collect 8.02s, tests 1056.07s, environment 7ms, prepare 3.24s)
+      Tests  2152 passed (2152)
+   Start at  10:32:01
+   Duration  229.00s (transform 1.90s, setup 0ms, collect 8.68s, tests 1121.73s, environment 7ms, prepare 3.42s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

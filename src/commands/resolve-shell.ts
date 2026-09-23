@@ -9,7 +9,7 @@ import { packageManagerWrites, type ShellWrites } from "../shell/package-manager
 import { readOnlyWrites } from "../shell/read-only.js";
 import { redirectWrites } from "../shell/redirect.js";
 import { parseRemove } from "../shell/remove.js";
-import { sedWrites, type SedDialect } from "../shell/sed.js";
+import { sedWrites } from "../shell/sed.js";
 import { teeWrites } from "../shell/tee.js";
 import { resolveCopy } from "./resolve-copy.js";
 import { resolveMove } from "./resolve-move.js";
@@ -24,10 +24,17 @@ export type ShellResolution =
   /** Recognized, but a path could not be checked; never read as no writes. */
   | { kind: "blocked"; reason: string };
 
-/** macOS ships BSD sed; elsewhere assume GNU. A sed earlier on PATH is the
- * stated PATH limit, not something the command text can show. */
-export function platformSedDialect(platform: NodeJS.Platform = process.platform): SedDialect {
-  return platform === "darwin" ? "macos" : "gnu";
+/**
+ * Which sed will run cannot be told from the platform: GNU sed is often first
+ * on PATH on macOS. The two dialects read `-i` differently — `sed -i '' s f`
+ * edits f on macOS and treats `s` as a file on GNU — so a command is known only
+ * when both dialects recognize it, and then every path either names is checked.
+ */
+export function sedEitherDialect(command: string): ShellWrites {
+  const gnu = sedWrites(command, "gnu");
+  const macos = sedWrites(command, "macos");
+  if (gnu.kind !== "writes" || macos.kind !== "writes") return { kind: "unknown" };
+  return { kind: "writes", paths: [...new Set([...gnu.paths, ...macos.paths])] };
 }
 
 type Claim = () => Promise<ShellResolution>;
@@ -36,12 +43,10 @@ type Claim = () => Promise<ShellResolution>;
  * Exactly one recognizer must claim a command. None is "can't tell"; two
  * would be two readings of one command, and picking either would be a guess.
  */
-export async function resolveShellCommand(
-  command: string, cwd: string, repo: string, dialect: SedDialect = platformSedDialect(),
-): Promise<ShellResolution> {
+export async function resolveShellCommand(command: string, cwd: string, repo: string): Promise<ShellResolution> {
   const claims: Claim[] = [];
   for (const writes of [
-    readOnlyWrites(command), packageManagerWrites(command), sedWrites(command, dialect),
+    readOnlyWrites(command), packageManagerWrites(command), sedEitherDialect(command),
     redirectWrites(command), teeWrites(command),
   ]) {
     if (writes.kind === "writes") claims.push(() => resolvePaths(writes, cwd, repo));

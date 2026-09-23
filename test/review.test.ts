@@ -72,7 +72,7 @@ describe("agreement screen", () => {
     expect(text).toContain("create, edit");
     expect(text).toContain("record — record writes without blocking");
     expect(text).toContain("session hook install --enforce");
-    expect(text).toContain("shell commands are not checked");
+    expect(text).toContain("a shell command the check cannot read is asked about");
     expect(text).toContain("No session has started yet");
   });
 

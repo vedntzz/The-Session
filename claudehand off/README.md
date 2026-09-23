@@ -3,45 +3,58 @@
 Updated: 23 September 2026. One bounded milestone, tests, handoff, then stop
 for Vedant's review and commit. Never stage, commit or push automatically.
 
-## Current milestone: Sprint 2, Mon 28 (part 1) — one resolver for a shell command
+## Current milestone: Sprint 2, Mon 28 (part 2) — shell commands are checked
 
-Complete and tested; waiting for review and commit. The zsh step was committed
-as `9889fff`; its handoff is archived in [23-zsh.md](23-zsh.md). Monday's
-integration is split: this part is the resolver, the next wires it to the hook.
+Complete and tested; waiting for review and commit. Part 1 (the resolver) was
+committed as `9205285`; archived in [24-resolve-shell.md](24-resolve-shell.md).
+This closes Monday 28's item.
 
 ### Solved
 
-- `src/commands/resolve-shell.ts`: `resolveShellCommand(command, cwd, repo,
-  dialect?)` → `resolved` (writes, possibly empty), `unknown` or `blocked`.
-  Asks all eight recognizers (read-only, package manager, sed, redirect, tee,
-  mv, cp, rm); exactly one must claim the command, else unknown — two claims
-  would be two readings, never a guess. `ShellWrites` paths resolve from the
-  command's directory through `resolveFileWrite`; move/copy/remove through
-  their resolvers. One blocked path blocks the command.
-- `platformSedDialect()`: macOS → BSD syntax, otherwise GNU. A GNU sed on PATH
-  falls under the stated PATH limit.
-- Docs: resolver paragraph in `docs/agreements.md`, layout line in
-  `Claude.md`/`AGENTS.md`, `docs/context.md` regenerated.
+- `src/capture/adapters/claude-bash.ts`: `parseClaudeBash` → `{ cwd, command }`
+  for `tool_name: "Bash"`; another tool is unsupported, a missing command is
+  invalid (deny). Command and description are never stored or echoed.
+- `src/commands/check-write.ts`: tries the Edit/Write parser, then Bash.
+  Shell commands go through `resolveShellCommand`: resolved writes are decided
+  as edits (extracted into `decide`); `unknown` under ask/deny → `ask` "Can't
+  tell what this writes. Review the command before it runs."; `blocked` →
+  deny; `record` silent. Unsupported tools still silent without a repository.
+- `CHECK_HOOK.matcher` → `Edit|Write|MultiEdit|Bash`. An older install reads
+  as not registered; a repeat `--enforce` install moves it (tested).
+- Review screen: "…for Edit, Write, MultiEdit and shell commands; a shell
+  command the check cannot read is asked about."
+- **Correction to part 1:** `platformSedDialect` picked sed syntax from the OS,
+  against GPT's documented rule "Do not infer the executable's dialect from
+  the OS". Replaced by `sedEitherDialect`: known only when GNU and macOS
+  readings both succeed, checking the union. `sed -i -e 's/a/b/' f` now checks
+  `f` and `f-e` (macOS's backup); `sed -i ''` and GNU-only `sed -i` are asked.
+- Docs: `docs/agreements.md` "Shell commands" rewritten for live behaviour and
+  every "not wired" line removed; README, CHANGELOG entry, both skills (both
+  copies), layout line; `docs/context.md` regenerated.
 
 ### Checks
 
-- 26 new tests (`test/resolve-shell.test.ts`) against a temporary repo: every
-  recognizer end to end, a subdirectory cwd, ten unknown commands, sed dialect
-  in both directions, three blocked cases, and that nothing on disk changes.
-  Passed on first run.
+- New: 10 shell-command check tests, 1 matcher-repair test, sed tests
+  rewritten for both dialects. Two existing tests updated (old matcher string;
+  Bash no longer the example of an unsupported tool).
+- Real Claude Code run (`claude -p`, Haiku, Bash only) under a deny agreement
+  for edits under `src/`: `echo b > src/a.txt` ran; `echo hello > notes.txt`
+  denied with the agreement reason; `touch src/new.txt` asked and, with no one
+  to answer under `-p`, did not run. Neither file exists. $0.03.
 - Build and source/test type checks passed.
-- Full suite via the context generator: **2,141 passed across 60 files**, plus
-  8 context tests (2,149 total; 2,123 before).
+- Full suite via the context generator: **2,152 passed across 60 files**, plus
+  8 context tests (2,160 total; 2,149 before).
+
+### For Vedant
+
+Any repository that already ran `session hook install --enforce` needs it run
+again to add `Bash` to the matcher. Every Bash call now starts the check
+(~190 ms). Under `claude -p`, an `ask` means the command does not run.
 
 ## Remaining Sprint 2 work — separate milestones
 
-1. Mon 28 part 2: `hook check` accepts the Bash payload (`tool_input.command`),
-   calls `resolveShellCommand`, decides each write as for Edit/Write; unknown
-   under ask/deny policy → `ask` "Can't tell what this writes."; blocked →
-   deny; matcher gains `Bash` (a repeat `--enforce` install repairs it);
-   review screen and start line stop saying shell commands are not checked.
-2. Starting-tree snapshot and per-call PostToolUse diff (Tue 29, Wed 30).
-3. The npm install / sed / node -e walkthrough (Thu 1); fixes and retro (Fri 2).
+1. Starting-tree snapshot and per-call PostToolUse diff (Tue 29, Wed 30).
+2. The npm install / sed / node -e walkthrough (Thu 1); fixes and retro (Fri 2).
 
 Sprint 1 still owed (Vedant): retrospective, three-screen prototype,
 interactive two-minute ask check.

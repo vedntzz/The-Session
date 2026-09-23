@@ -1,6 +1,6 @@
 ---
 name: agreements-and-enforcement
-description: Load when touching accepted terms or anything that checks a write against them — editing agreement.ts, agreement-decision.ts, write-session.ts, capture/write-request.ts, capture/adapters/claude-write.ts, commands/resolve-write.ts, commands/check-write.ts, commands/review.ts, shell/words.ts, shell/package-manager.ts, or `session hook install --enforce`, which registers `session hook check`. Also load before adding an agreement field or action, emitting `allow` or the host's `defer`, letting a payload choose a repository or session, turning a parse or resolution failure into silence, treating an unrecognised shell command as writing nothing, logging an attempted write, or widening what the review screen accepts.
+description: Load when touching accepted terms or anything that checks a write against them — editing agreement.ts, agreement-decision.ts, write-session.ts, capture/write-request.ts, capture/adapters/claude-write.ts, commands/resolve-write.ts, commands/check-write.ts, commands/review.ts, shell/*, commands/resolve-shell.ts, capture/adapters/claude-bash.ts, or `session hook install --enforce`, which registers `session hook check`. Also load before adding an agreement field or action, emitting `allow` or the host's `defer`, letting a payload choose a repository or session, turning a parse or resolution failure into silence, treating an unrecognised shell command as writing nothing, logging an attempted write, or widening what the review screen accepts.
 ---
 
 # Accepted terms, and the check against them
@@ -112,7 +112,10 @@ answers `writes` with a list of paths, or `unknown` — and unknown is never
   global install, another directory, a workspace or anything unlisted is
   unknown, not ignored.
 
-Nothing in `shell/` is wired to the hook yet; `Bash` is not in the matcher.
+Wired through `commands/resolve-shell.ts`: exactly one recognizer must claim
+a command, and unknown becomes `ask` "Can't tell what this writes." — never
+silence, never `allow`. `sed` is read in both GNU and macOS dialects and known
+only when both agree; don't pick a dialect from the platform.
 
 ## What the check may never do
 
@@ -136,7 +139,10 @@ Nothing in `shell/` is wired to the hook yet; `Bash` is not in the matcher.
 
 - A snapshot, not a sandbox: the filesystem can change between the check and
   the write, and aliases beyond the two checked names are not enumerated.
-- Shell writes and other tools are not intercepted.
+- A shell command is only as known as its text: chains, pipes, substitutions,
+  aliases, functions, `PATH` and whatever a dependency's install script does
+  are outside it. Unrecognized means asked, not safe. Other tools are not
+  intercepted.
 - Binding is to a checkout path, not an editor process: two editors in one
   checkout share one agreement.
 - The reader tolerates a truncated last line and does not verify signatures on

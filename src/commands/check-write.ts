@@ -1,11 +1,13 @@
 // Read-only PreToolUse boundary. Never grants permission or echoes tool content.
 import { parseAgreement } from "../agreement.js";
-import { decideAgreementWrite } from "../agreement-decision.js";
+import { decideAgreementWrite, type AgreementWrite } from "../agreement-decision.js";
+import { parseClaudeBash } from "../capture/adapters/claude-bash.js";
 import { MAX_WRITE_PAYLOAD_BYTES, parseClaudeWrite } from "../capture/adapters/claude-write.js";
 import { repoRoot } from "../git.js";
 import { realpath } from "node:fs/promises";
 import { readSessions, type StoreOptions } from "../store.js";
 import { selectWriteSession, WriteSessionSelectionError } from "../write-session.js";
+import { resolveShellCommand } from "./resolve-shell.js";
 import { resolveFileWrite } from "./resolve-write.js";
 
 export type CheckWriteOptions = StoreOptions & {
@@ -67,7 +69,8 @@ async function evaluate(options: CheckWriteOptions): Promise<string> {
   try {
     const payload = await payloadFrom(options.stdin ?? process.stdin);
     if (payload === undefined) return response("deny", "Write check input exceeds 2 MiB. Reduce the tool payload and retry.");
-    const parsed = parseClaudeWrite(payload);
+    const file = parseClaudeWrite(payload);
+    const parsed = file.kind === "unsupported" ? parseClaudeBash(payload) : file;
     if (parsed.kind === "unsupported") return "";
     if (parsed.kind === "invalid") return response("deny", "Write check received invalid input. Check the PreToolUse hook configuration and retry.");
 
@@ -76,19 +79,31 @@ async function evaluate(options: CheckWriteOptions): Promise<string> {
     if (session?.agreement === undefined) return "";
     const agreement = parseAgreement(session.agreement);
     if (agreement.policy === "record") return "";
-    const resolved = await resolveFileWrite(parsed.request, cwd);
+    const resolved = parsed.kind === "write"
+      ? await resolveFileWrite(parsed.request, cwd)
+      : await resolveShellCommand(parsed.request.command, parsed.request.cwd, cwd);
+    if (resolved.kind === "unknown") {
+      // Not a denial: nothing says the command breaks the terms, only that
+      // nothing can say it keeps them. The developer answers, per command.
+      return response("ask", "Can't tell what this writes. Review the command before it runs.");
+    }
     if (resolved.kind === "blocked") {
       return response("deny", `Write target could not be checked (${resolved.reason}). Check the target path and retry.`);
     }
-    const decisions = resolved.writes.map((write) => decideAgreementWrite(agreement, write));
-    const decision = decisions.some((item) => item.decision === "deny") ? "deny"
-      : decisions.some((item) => item.decision === "ask") ? "ask" : "defer";
-    // Internal defer means no decision. The host's literal defer pauses a run.
-    if (decision === "defer") return "";
-    const violations = [...new Set(decisions.flatMap((item) => item.violations))];
-    return response(decision, `Attempted write conflicts with the accepted agreement (${violations.join(", ")}). Review the attempted write before proceeding.`);
+    return decide(agreement, resolved.writes);
   } catch (error) {
     if (error instanceof WriteSessionSelectionError) return response("deny", error.message);
     return response("deny", "Write check could not read its input, repository or agreement. Check the local hook setup and session log before retrying.");
   }
+}
+
+/** Every write decided, the strictest kept. No writes, or all compliant, is silence. */
+function decide(agreement: ReturnType<typeof parseAgreement>, writes: readonly AgreementWrite[]): string {
+  const decisions = writes.map((write) => decideAgreementWrite(agreement, write));
+  const decision = decisions.some((item) => item.decision === "deny") ? "deny"
+    : decisions.some((item) => item.decision === "ask") ? "ask" : "defer";
+  // Internal defer means no decision. The host's literal defer pauses a run.
+  if (decision === "defer") return "";
+  const violations = [...new Set(decisions.flatMap((item) => item.violations))];
+  return response(decision, `Attempted write conflicts with the accepted agreement (${violations.join(", ")}). Review the attempted write before proceeding.`);
 }

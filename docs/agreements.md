@@ -140,10 +140,31 @@ which pauses noninteractive runs. See the official
 Responses never grant `allow` or replace tool input. Record-only does not log
 attempts; ordinary stop-time diff measurement remains separate.
 
-#### Shell commands (not yet checked)
+#### Shell commands
 
-Sprint 2 extends the check to shell commands. The first piece is pure and not
-yet wired to the hook: `packageManagerWrites` in `src/shell/package-manager.ts`
+`session hook check` also reads Claude Code's `Bash` payloads, and the check's
+matcher is `Edit|Write|MultiEdit|Bash`. `parseClaudeBash` keeps only `cwd` and
+the command, in memory; neither is stored, logged or echoed. The command goes
+through `resolveShellCommand` (below), and:
+
+- a recognized command's writes are decided exactly as an Edit or Write's —
+  silence when accepted, the policy's `ask` or `deny` when not;
+- a known reader, or a command that writes no tracked file, is silent;
+- a command nothing recognizes is **`ask`, "Can't tell what this writes."**,
+  under both `ask` and `deny` policy: nothing says it breaks the terms, only
+  that nothing can say it keeps them. Under `claude -p` there is no one to
+  answer, and the command does not run;
+- a recognized command whose path cannot be checked is denied;
+- `record` stays silent, as for file tools.
+
+An install made before `Bash` was in the matcher reads as not registered; run
+`session hook install --enforce` again to repair it. Every Bash call now
+starts the check, about 190 ms each. Measured in a real Claude Code run on
+23 September 2026 under a deny agreement for edits under `src/`: `echo b >
+src/a.txt` ran, `echo hello > notes.txt` was denied, `touch src/new.txt` was
+asked about and did not run.
+
+The pieces, each pure or metadata-only: `packageManagerWrites` in `src/shell/package-manager.ts`
 says which tracked files an npm, pnpm or yarn command writes — the manifest
 and lockfile — or that it cannot tell.
 
@@ -160,7 +181,7 @@ What it cannot see, and says so: `node_modules`, package caches, and anything
 a dependency's install script writes. `npm-shrinkwrap.json` and yarn's Plug'n'Play
 files are not listed.
 
-`sedWrites` in `src/shell/sed.ts` is also pure and not wired to the hook.
+`sedWrites` in `src/shell/sed.ts` is also pure.
 The caller must explicitly identify `gnu` or `macos` sed; omitted or unknown
 dialects return unknown. Do not infer the executable's dialect from the OS.
 It accepts in-place editing with a simple slash-delimited substitution, optional
@@ -190,7 +211,7 @@ Append/clobber operators, descriptors, multiple redirects, input redirects,
 expansions, chains, pipes, malformed quotes and `/dev` targets are unknown.
 Paths remain unresolved; the parser neither creates/truncates files nor decides
 create versus edit. Only the output path is returned, never the output content.
-Like the other shell parsers this is not wired into the check. Syntax grounding:
+Syntax grounding:
 [Bash redirections](https://www.gnu.org/s/bash/manual/html_node/Redirections.html).
 
 `teeWrites` in `src/shell/tee.ts` recognizes a standalone `tee` with one or more
@@ -256,7 +277,7 @@ physical parent aliases. Source reads are not labelled as writes or deletions.
 Interactive/no-clobber keep the potential write rather than imply a guaranteed
 skip. No file content is read or copied by resolution. Metadata side effects
 across platform/filesystem variants are not established by this subset; this
-is not a sandbox. Hook integration remains unchanged.
+is not a sandbox.
 
 `parseRemove` in `src/shell/remove.ts` accepts one `rm` with one or more
 literal operands, optionally one `-f` or `-i`, and an optional `--` before
@@ -271,7 +292,7 @@ rm's error. A leaf symlink is blocked, because rm removes the link rather than
 the file it names. Directories, hard-linked files (whose other names survive),
 escapes and unresolved paths are blocked, and one blocked operand blocks the
 whole command rather than yielding a partial answer. No file is removed or
-read. Hook integration remains unchanged.
+read.
 
 The shared tokenizer assumes the command may run in zsh, not only POSIX sh:
 Claude Code's Bash tool ran `/bin/zsh` 5.9 when checked on 23 September 2026
@@ -314,9 +335,12 @@ names are resolved from the command's own directory through the same
 `resolveFileWrite` the Edit/Write check uses; moves, copies and removals go
 through their resolvers. The answer is the list of writes (empty for a known
 reader or a frozen install), unknown, or blocked — and blocked is never read
-as "writes nothing". `sed -i` is read in macOS syntax on macOS and GNU syntax
-elsewhere; a GNU sed earlier on `PATH` is the stated `PATH` limit. Metadata
-only: no command runs and no file content is read. Not yet wired to the hook.
+as "writes nothing". Which `sed` runs cannot be told from the platform (GNU sed
+is often first on `PATH` on macOS), so `sedEitherDialect` reads a command in
+both dialects: it is known only when both recognize it, and every path either
+names is checked. `sed -i -e 's/a/b/' f` therefore checks `f` and `f-e`, the
+backup macOS would create; `sed -i ''` and a GNU-only `sed -i` are unknown.
+Metadata only: no command runs and no file content is read.
 
 #### When the check cannot answer
 

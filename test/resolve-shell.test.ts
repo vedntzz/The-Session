@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { platformSedDialect, resolveShellCommand } from "../src/commands/resolve-shell.js";
+import { resolveShellCommand, sedEitherDialect } from "../src/commands/resolve-shell.js";
 
 let temp: string;
 let root: string;
@@ -16,7 +16,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { await rm(temp, { recursive: true, force: true }); });
 
-const resolve = (command: string, cwd = root) => resolveShellCommand(command, cwd, root, "macos");
+const resolve = (command: string, cwd = root) => resolveShellCommand(command, cwd, root);
 const resolved = (...writes: [string, string][]) =>
   ({ kind: "resolved", writes: writes.map(([p, action]) => ({ path: p, action })) });
 
@@ -26,7 +26,8 @@ describe("resolveShellCommand", () => {
     ["a frozen install writes no tracked file", "npm ci", resolved()],
     ["an install edits the manifest and creates the lockfile", "npm install lodash",
       resolved(["package.json", "edit"], ["package-lock.json", "create"])],
-    ["sed -i edits in place", "sed -i '' 's/a/b/' src/a", resolved(["src/a", "edit"])],
+    ["sed -i with a backup edits in place and creates the backup", "sed -i.bak 's/a/b/' src/a",
+      resolved(["src/a", "edit"], ["src/a.bak", "create"])],
     ["a redirect creates its target", "echo hi > src/new", resolved(["src/new", "create"])],
     ["tee writes its operands", "tee src/a src/log", resolved(["src/a", "edit"], ["src/log", "create"])],
     ["a move deletes and creates", "mv src/a src/b", resolved(["src/a", "delete"], ["src/b", "create"])],
@@ -47,9 +48,12 @@ describe("resolveShellCommand", () => {
     expect(await resolve(command)).toEqual({ kind: "unknown" });
   });
 
-  it("does not read a GNU sed command as macOS's, or the reverse", async () => {
-    expect(await resolveShellCommand("sed -i 's/a/b/' src/a", root, root, "macos")).toEqual({ kind: "unknown" });
-    expect(await resolveShellCommand("sed -i 's/a/b/' src/a", root, root, "gnu")).toEqual(resolved(["src/a", "edit"]));
+  it("knows a sed command only when GNU and macOS sed both read it, and checks both readings", async () => {
+    // Which sed runs cannot be told from the platform, and the dialects disagree on -i.
+    expect(await resolve("sed -i 's/a/b/' src/a")).toEqual({ kind: "unknown" });
+    expect(await resolve("sed -i '' 's/a/b/' src/a")).toEqual({ kind: "unknown" });
+    // macOS reads -e as the backup suffix, so src/a-e is checked too.
+    expect(await resolve("sed -i -e 's/a/b/' src/a")).toEqual(resolved(["src/a", "edit"], ["src/a-e", "create"]));
   });
 
   it.each([
@@ -68,9 +72,11 @@ describe("resolveShellCommand", () => {
   });
 });
 
-describe("platformSedDialect", () => {
-  it("reads macOS as BSD sed and everything else as GNU", () => {
-    expect(platformSedDialect("darwin")).toBe("macos");
-    expect(platformSedDialect("linux")).toBe("gnu");
+describe("sedEitherDialect", () => {
+  it("is the union of both readings, or unknown when either cannot read it", () => {
+    expect(sedEitherDialect("sed -i.bak s/a/b/ f")).toEqual({ kind: "writes", paths: ["f", "f.bak"] });
+    expect(sedEitherDialect("sed -i -e s/a/b/ f")).toEqual({ kind: "writes", paths: ["f", "f-e"] });
+    expect(sedEitherDialect("sed -i s/a/b/ f")).toEqual({ kind: "unknown" });
+    expect(sedEitherDialect("sed s/a/b/ f")).toEqual({ kind: "unknown" });
   });
 });

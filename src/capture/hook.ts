@@ -113,8 +113,10 @@ export const HOOKS: readonly HookSpec[] = [STOP_HOOK, OPEN_HOOK, PROMPT_HOOK];
  * repository. It is registered per repository, opt-in, and nothing that
  * installs or removes `HOOKS` may touch it.
  *
- * The matcher names the tools `parseClaudeWrite` understands and no others, so
- * a shell command never waits on a Node start it has nothing to learn from.
+ * The matcher names the tools the check reads — `parseClaudeWrite` for the
+ * file tools, `parseClaudeBash` for shell commands — and no others. Adding a
+ * tool here makes an existing install read as not registered, so a repeat
+ * `--enforce` install repairs it rather than leaving the old group in place.
  * Ten seconds, twice the check's own deadline (`CHECK_DEADLINE_MS`): the host
  * lets a timed-out PreToolUse hook through, so the check has to deny on its
  * own clock before the host's runs out. A process that cannot start at all, or
@@ -125,7 +127,7 @@ export const CHECK_HOOK: HookSpec = {
   command: "session hook check",
   timeout: 10,
   passive: false,
-  matcher: "Edit|Write|MultiEdit",
+  matcher: "Edit|Write|MultiEdit|Bash",
 };
 
 /**

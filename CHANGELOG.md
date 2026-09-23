@@ -43,11 +43,18 @@ Three commands cut, one boundary drawn. See
   Edit, Write and MultiEdit, in this repository's `.claude/settings.local.json`
   only. User-level settings are never touched, and other settings and hooks in
   the file are kept. An `ask` or `deny` policy is checked from then on in that
-  repository; shell commands are not checked. `--enforce --uninstall` takes
+  repository. `--enforce --uninstall` takes
   only the check back out of that file. A check that stalls denies at its own
   5-second deadline, and one that fails unexpectedly exits 2, because the host
   lets a timed-out or crashed hook through. A `session` the editor cannot find
   on `PATH` still lets writes through.
+- **Shell commands are checked.** `session hook check` reads `Bash` calls and
+  the matcher is `Edit|Write|MultiEdit|Bash`; run `session hook install
+  --enforce` again to update an existing install. npm/pnpm/yarn, `sed -i`,
+  `>`, `tee`, `mv`, `cp` and `rm` are recognized and their writes decided like
+  an edit; a short list of readers passes; anything else is asked about with
+  "Can't tell what this writes." Chains, pipes, substitutions, globs,
+  aliases and anything a dependency's install script does are not seen.
 - `docs/decisions.md` records what a Claude Code `PreToolUse` hook can and
   cannot show, checked against the hooks reference on 21 and 22 September 2026.
 

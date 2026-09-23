@@ -83,7 +83,7 @@ the write falls outside the open session's accepted terms, and prints nothing
 otherwise. It never grants a permission. Run `session hook install --enforce`
 inside a repository to register it there, in `.claude/settings.local.json`;
 nothing outside that repository is affected, and the user-level hooks are
-untouched. Add `--uninstall` to take the check back out. Until then, or for shell commands, a policy is recorded, not enforced.
+untouched. Add `--uninstall` to take the check back out. It also checks shell commands: a write it can read is decided like an edit, and one it can't is asked about ("Can't tell what this writes."). Until the check is installed, a policy is recorded, not enforced.
 
 | | |
 |---|---|

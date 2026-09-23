@@ -329,10 +329,10 @@ describe("the check hook", () => {
   /** Somebody else's PreToolUse hook, which must survive every operation. */
   const LINT = { matcher: "Write", hooks: [{ type: "command", command: "lint --staged" }] };
 
-  it("runs the check before the three write tools and nothing else", () => {
+  it("runs the check before the file tools and shell commands, and nothing else", () => {
     expect(CHECK_HOOK.event).toBe("PreToolUse");
     expect(CHECK_HOOK.command).toBe("session hook check");
-    expect(CHECK_HOOK.matcher).toBe("Edit|Write|MultiEdit");
+    expect(CHECK_HOOK.matcher).toBe("Edit|Write|MultiEdit|Bash");
   });
 
   it("is never part of what the user-level install registers or removes", () => {
@@ -374,6 +374,13 @@ describe("the check hook", () => {
     const settings: Settings = { hooks: { PreToolUse: [narrow] } };
     expect(hasHook(settings, CHECK_HOOK)).toBe(false);
     expect(withHook(settings, CHECK_HOOK)).toEqual({ hooks: { PreToolUse: [LINT, CHECK] } });
+  });
+
+  it("treats an install from before shell commands were checked as needing repair", () => {
+    const before = { matcher: "Edit|Write|MultiEdit", hooks: [{ type: "command", command: CHECK_HOOK.command, timeout: CHECK_HOOK.timeout }] };
+    const settings: Settings = { hooks: { PreToolUse: [before] } };
+    expect(hasHook(settings, CHECK_HOOK)).toBe(false);
+    expect(withHook(settings, CHECK_HOOK)).toEqual({ hooks: { PreToolUse: [CHECK] } });
   });
 
   it("repairs an entry on the wrong budget where it stands", () => {
@@ -639,7 +646,7 @@ describe("installEnforce", () => {
     await buildProgram({ cwd: repo, settings: user }).parseAsync(["node", "session", "hook", "install", "--enforce"]);
     expect(await readFile(user, "utf8")).toBe(before);
     expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
-    expect(log.mock.calls.flat().join("\n")).toContain("PreToolUse (Edit|Write|MultiEdit) → session hook check");
+    expect(log.mock.calls.flat().join("\n")).toContain("PreToolUse (Edit|Write|MultiEdit|Bash) → session hook check");
   });
 
   it.each([
@@ -802,7 +809,7 @@ describe("formatHook", () => {
 
   it("names the tools a matched hook fires for", () => {
     expect(formatHook({ ...result, hooks: [CHECK_HOOK] })[1]).toBe(
-      "  hook     PreToolUse (Edit|Write|MultiEdit) → session hook check",
+      "  hook     PreToolUse (Edit|Write|MultiEdit|Bash) → session hook check",
     );
   });
 
