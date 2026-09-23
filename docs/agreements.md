@@ -210,6 +210,22 @@ executable identity, aliases/functions, and path resolution are not established
 by this parser. Nothing is executed or wired to the hook. Source:
 [GNU tee invocation](https://www.gnu.org/s/coreutils/manual/html_node/tee-invocation.html).
 
+`parseMove` in `src/shell/move.ts` parses a move request, **not a write set**.
+It accepts one `mv` with exactly two literal operands, optionally one of `-f`,
+`-i` or `-n`, and an optional `--` before operands. It preserves the source,
+destination and overwrite mode. Combined/repeated flags, backup options,
+target-directory overrides, multiple sources and compound shell syntax are
+unknown. Nothing is executed, deleted or moved.
+
+The result deliberately has no `paths` or resolved action list: `mv a b`
+can write `b/a` when `b` is a directory, and a directory source can affect an
+entire subtree. A future read-only resolver must account for source removal,
+destination type, symlinks, directory contents and overwrite semantics before
+it can produce agreement operations. Until then, this request is unresolved
+and must not be accepted as a complete write set. Ordinary executable identity
+is assumed; aliases/functions and filesystem races remain limitations. Source:
+[GNU mv invocation](https://www.gnu.org/s/coreutils/manual/html_node/mv-invocation.html).
+
 #### When the check cannot answer
 
 Claude Code lets a PreToolUse write through when the hook times out, exits
