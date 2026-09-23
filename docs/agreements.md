@@ -258,6 +258,21 @@ skip. No file content is read or copied by resolution. Metadata side effects
 across platform/filesystem variants are not established by this subset; this
 is not a sandbox. Hook integration remains unchanged.
 
+`parseRemove` in `src/shell/remove.ts` accepts one `rm` with one or more
+literal operands, optionally one `-f` or `-i`, and an optional `--` before
+operands. Recursive and directory removal (`-r`, `-R`, `--recursive`, `-d`),
+combined or long options, and every other flag are unknown: a directory's
+contents cannot be told from the command.
+
+`resolveRemove` in `src/commands/resolve-remove.ts` emits a `delete` for every
+operand, keeping parent-directory aliases. A missing operand is still a
+`delete`: it may exist by the time the command runs, and `-f` only silences
+rm's error. A leaf symlink is blocked, because rm removes the link rather than
+the file it names. Directories, hard-linked files (whose other names survive),
+escapes and unresolved paths are blocked, and one blocked operand blocks the
+whole command rather than yielding a partial answer. No file is removed or
+read. Hook integration remains unchanged.
+
 #### When the check cannot answer
 
 Claude Code lets a PreToolUse write through when the hook times out, exits

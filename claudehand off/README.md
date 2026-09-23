@@ -3,60 +3,47 @@
 Updated: 23 September 2026. One bounded milestone, tests, handoff, then stop
 for Vedant's review and commit. Never stage, commit or push automatically.
 
-## Current milestone: Sprint 2 — regular-file cp recognition and resolution
+## Current milestone: Sprint 2 — rm recognition and resolution
 
-Complete and tested; waiting for review and commit. Previous mv resolver
-committed at `fe5f0de`; archived in [19-move-resolution.md](19-move-resolution.md).
-Working tree was clean at the start.
+Complete and tested; waiting for review and commit. The cp step was committed
+as `a859c6c`; its handoff is archived in [20-copy.md](20-copy.md).
 
 ### Solved
 
-- `src/shell/copy.ts`: pure two-operand parseCopy with optional single -i/-n
-  and --. Unknown flags, recursion, backup, links, metadata-preservation,
-  directory overrides and -f remain unknown. Force can remove the destination.
-- `src/commands/resolve-copy.ts`: regular-file-to-file destination create/edit
-  only. Never reports source reads as writes or source deletion.
-- `src/commands/resolve-file-pair.ts`: extracted shared read-only validation
-  from resolveMove; both operations use the same containment and metadata checks.
-- `resolve-move.ts` keeps its prior contract: source delete plus destination
-  writes. Existing move tests passed after extraction.
-- Refuse directory operands, leaf links, hard links, same-file aliases, missing
-  sources/parents, escapes and unresolved paths. Preserve destination aliases.
-- No-clobber/interactive describe potential writes, never guaranteed skips.
-- Agreements-and-enforcement rules guided conservative semantics. Official GNU
-  source and explicit limits documented in docs/agreements.md.
+- `src/shell/remove.ts`: pure `parseRemove`. One `rm`, one or more literal
+  operands, optionally one `-f` or `-i`, optional `--`. Unknown: `-r`, `-R`,
+  `-rf`, `--recursive`, `-d`, combined or long options, options after
+  operands, empty operands, `/dev` targets, and anything `simpleWords` refuses.
+- `src/commands/resolve-remove.ts`: read-only `resolveRemove`. Every operand
+  becomes `delete`, parent aliases kept, deduplicated. A missing operand is
+  still a `delete` (it may exist when the command runs; `-f` only silences
+  the error). Leaf symlinks are blocked (`symlink-operand`): rm removes the
+  link, not the target. Directories, hard links, escapes and unresolved paths
+  are blocked by `resolveFileWrite`; one blocked operand blocks the command.
+- Docs: rm paragraphs in `docs/agreements.md`. The `Claude.md`/`AGENTS.md`
+  layout now lists all shell files — sed, redirect, tee, move, copy and remove
+  had not been added by the previous steps. `docs/context.md` regenerated.
 
-### Checks and failures
+### Checks
 
-- 52 new copy tests passed, including temp-filesystem resolution checks.
-- 388 targeted tests passed across 9 files: copy 52, move resolver 21, write
-  resolver 25, move parser 56, tee 59, redirect 64, sed 45, package manager 58,
-  and generated context 8.
-- Build, source/test type checks and final diff whitespace check passed.
-- No implementation/test failures. No full-suite rerun for these unwired
-  helpers; prior full-suite counts remain historical.
+- 43 new tests (`test/remove.test.ts`): parser cases, and resolution against
+  temporary files including aliases, links, hard links, a directory, an escape,
+  and the decision each deletion produces. Passed on first run.
+- Build and source/test type checks passed.
+- Full suite via the context generator: **2,040 passed across 58 files**, plus
+  8 context tests (2,048 total; 2,005 before).
 
 ### Limits
 
-Regular-file-to-file only. Read sources outside the repository are deliberately
-refused too. Recursive/directory copies, leaf links, force and other options
-remain unsupported. Platform/filesystem-specific metadata side effects are not
-established by this subset. Executable identity and filesystem races remain
-integration concerns; resolution is not an atomic sandbox or proof of success.
+Regular files only; directories are never enumerated. Not wired to the hook.
 
-No command execution or file-content reads by resolution, no settings/log
-writes, and no Bash hook integration. Temporary fixtures alone are written
-by tests. Originals remain unchanged and new targets remain absent.
+## Remaining Sprint 2 work — separate milestones
 
-## Remaining work — separate milestones
+1. The read-only allowlist (Sun 27): commands known to write nothing tracked.
+2. Shell-check integration (Mon 28): unknown non-read-only commands ask
+   "Can't tell what this writes." Grants scoped to one operation.
+3. Starting-tree snapshot and per-call PostToolUse diff (Tue 29, Wed 30).
+4. The npm install / sed / node -e walkthrough (Thu 1); fixes and retro (Fri 2).
 
-1. rm and the read-only allowlist.
-2. Shell-check integration: unknown non-read-only commands ask
-   "Can't tell what this writes." No broad approval.
-3. Starting-tree snapshot and per-call PostToolUse diff.
-
-Sprint 1 still owed: retrospective, three-screen prototype, interactive
-two-minute ask check. Earlier work archived in 01–19; see docs/sprint-1-review.md.
-
-Changes uncommitted. No staging, commit, push, PR, user-settings change,
-dependency installation or worktree cleanup. Codex stops for Vedant.
+Sprint 1 still owed (Vedant): retrospective, three-screen prototype,
+interactive two-minute ask check.

@@ -50,6 +50,8 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       bound to this checkout   commands/check-write.ts `session hook check`
       shell/ words.ts one simple command's words, or unknown
       package-manager.ts npm/pnpm/yarn → manifest and lockfile, or unknown
+      sed.ts redirect.ts tee.ts → paths written; move.ts copy.ts remove.ts →
+      requests, resolved read-only by commands/resolve-{move,copy,remove}.ts
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
