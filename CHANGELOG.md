@@ -21,7 +21,8 @@ Three commands cut, one boundary drawn. See
   Edit, Write and MultiEdit, in this repository's `.claude/settings.local.json`
   only. User-level settings are never touched, and other settings and hooks in
   the file are kept. An `ask` or `deny` policy is checked from then on in that
-  repository; shell commands are not checked. Removal is not automated yet.
+  repository; shell commands are not checked. `--enforce --uninstall` takes
+  only the check back out of that file.
 
 ### Removed
 

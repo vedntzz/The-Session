@@ -3,73 +3,56 @@
 Updated: 22 September 2026. Implement one milestone, test, stop for Vedant
 to review/commit/push. Never stage or commit automatically.
 
-## Current milestone: opt-in, per-repository enforcement install
+## Current milestone: removing the per-repository check
 
 Complete and tested; waiting for Vedant's review and commit.
 
 ### Previously completed
 
-- `d7346f4`: [agreement record](01-agreement-record.md).
-- `0b9ffda`: [review screen](02-agreement-review.md).
-- `36d7f13`: [decision logic](03-agreement-decisions.md).
-- `da8c993`: [parser/resolver](04-write-parser-resolution.md).
-- `ff917f7`: [check command](05-write-check-command.md).
-- `5f51900`: [checkout binding](06-checkout-binding.md).
-
-Uncommitted alongside this milestone: a refresh of `Claude.md`, `AGENTS.md`,
-the skills and `docs/context.md` for the agreement work (new skill
-`agreements-and-enforcement`, invariant 6, record fields, layout).
+- `d7346f4` [agreement record](01-agreement-record.md), `0b9ffda`
+  [review screen](02-agreement-review.md), `36d7f13`
+  [decision logic](03-agreement-decisions.md), `da8c993`
+  [parser/resolver](04-write-parser-resolution.md), `ff917f7`
+  [check command](05-write-check-command.md), `5f51900`
+  [checkout binding](06-checkout-binding.md).
+- `2c870ec` [enforce install](07-enforce-install.md) and `52474c7` docs refresh.
 
 ### Solved
 
-- `CHECK_HOOK` in `src/capture/hook.ts`: `PreToolUse`, matcher
-  `Edit|Write|MultiEdit`, command `session hook check`, timeout 10 s. Kept out
-  of `HOOKS`, so the user-level install/uninstall never adds or removes it.
-- Matcher-aware settings surgery: an entry under a different matcher reads as
-  not registered and is moved (other entries in that group are kept); a stale
-  timeout is repaired in place; repeat installs register once. `withHook` and
-  `withoutHook` are pure and do not mutate their input.
-- `session hook install --enforce` writes only `<root>/.claude/settings.local.json`,
-  found from any subdirectory. Creates the file if absent; keeps other settings,
-  other hooks and the file mode; unchanged file keeps its mtime. Invalid JSON
-  is refused and left as it was. Outside a repository it refuses and writes
-  nothing. `--uninstall` and `--passive`/`--no-passive` with `--enforce` are
-  refused by name.
-- Wording: review screen now says policy is checked only where
-  `--enforce` has run, only for Edit/Write/MultiEdit, never shell commands.
-  Start line says `(never blocks)` for record, `(checked where session hook
-  install --enforce has run)` for ask/deny. README, CHANGELOG,
-  `docs/agreements.md`, both skill copies updated.
+- `session hook install --enforce --uninstall` removes every entry running
+  `session hook check` from `<root>/.claude/settings.local.json`, whatever its
+  matcher or timeout, keeping other settings, hooks and entries in shared
+  groups. Found from any subdirectory.
+- A file emptied by removal stays `{}` (nothing records who created it). No
+  file, or no check in it: reported `not set`, nothing created or rewritten,
+  mtime kept — including a file holding an empty `PreToolUse: []`.
+- Invalid JSON and non-repositories are refused, nothing written. The user-level
+  uninstall still never removes the check, and this never touches user hooks.
+- New pure `hasEntry` in `src/capture/hook.ts` (any entry, any matcher/budget).
+  A first draft compared JSON before/after removal; replaced because pruning an
+  empty list would have reported a change that removed nothing.
+- `--enforce` still refuses the passive flags. Docs, README, CHANGELOG and both
+  skill copies updated.
 
 ### Verification and failures
 
 - Build and source/test type checks passed.
-- Full suite: **1,637 tests passed across 51 files** (1,615 before, +22).
-  New: 9 check-hook settings tests, 11 install tests (3 of them refusal
-  cases), 1 matcher format test, 1 start-line test; review wording test updated.
-- Built-CLI smoke in a temporary repo and HOME: install from `src/`, repeat
-  install says `already`, existing `permissions` kept, user settings byte-
-  identical, three refusals exit 1, `--help` lists `--enforce`, and the
-  installed command denies an out-of-scope write under a deny agreement.
-- Failures: the first doc-edit script stopped on one mis-wrapped sentence in
-  `docs/agreements.md` (fixed, re-applied); the first smoke script failed on
-  zsh word-splitting (script bug, rerun with a function). No code failures.
+- Full suite: **1,645 tests passed across 51 files** (1,637 before; +9 new,
+  -1 retired refusal test).
+- Built-CLI smoke in a temporary repo and HOME: install, uninstall prints
+  `removed` and leaves `permissions` intact, a second uninstall prints
+  `not set`, user settings byte-identical.
+- No test or code failures; the one design correction is noted above.
 
 ### Boundaries
 
-Not exercised in a running editor. The check still denies unparseable input
-and a missing repository, which is why it is per-repository. Claude Code's
-behaviour when the handler times out or crashes is host behaviour, not
-verified here. `.claude/settings.local.json` is not added to `.gitignore` by
-this command; Claude Code normally ignores it, but a repo that does not will
-show it as untracked.
+Unchanged from the install step: not exercised in a running editor; host
+timeout/crash behaviour unverified; `.gitignore` not managed.
 
 ## Next milestones — stop and commit after each
 
-1. `--enforce --uninstall`: remove only `CHECK_HOOK` from the repo file,
-   prune what it emptied, leave the user-level hooks alone.
-2. Timeout/failure behaviour: tests and clear host-guarantee documentation.
-3. End-to-end editor flow, latency checks, sprint review and retrospective.
+1. Timeout/failure behaviour: tests and clear host-guarantee documentation.
+2. End-to-end editor flow, latency checks, sprint review and retrospective.
 
 Other outstanding sprint items remain unverified: three-screen prototype,
 Claude resize/changelog work in `/Users/vedant/dev-session-ui`, hook research

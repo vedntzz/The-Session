@@ -3,11 +3,13 @@ import { homedir } from "node:os";
 import path from "node:path";
 import {
   CHECK_HOOK,
+  hasEntry,
   hasHook,
   hasHooks,
   wantedHooks,
   withHook,
   withHooks,
+  withoutHook,
   withoutHooks,
   type HookSpec,
   type Settings,
@@ -209,6 +211,23 @@ export async function installEnforce(options: EnforceOptions = {}): Promise<Hook
     await writeSettings(file, withHook(settings, CHECK_HOOK));
   }
   return { file, hooks: [CHECK_HOOK], changed, action: "installed" };
+}
+
+/**
+ * Takes the agreement check back out of this repository's settings and
+ * nothing else: other hooks in the file, every other setting, and the
+ * user-level hooks all stay as they were. A repository with no file, or a
+ * file without the check, is left alone — nothing is created to say so. A
+ * file emptied by the removal stays as `{}`, since nothing records who made it.
+ */
+export async function uninstallEnforce(options: EnforceOptions = {}): Promise<HookResult> {
+  const file = await enforceFile(options);
+  const settings = await readSettings(file, true);
+  const changed = hasEntry(settings, CHECK_HOOK);
+  if (changed) {
+    await writeSettings(file, withoutHook(settings, CHECK_HOOK));
+  }
+  return { file, hooks: [], changed, action: "removed" };
 }
 
 /**

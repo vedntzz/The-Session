@@ -119,5 +119,6 @@ is never registered as a global hook: `session hook install --enforce` writes
 nothing else. It is kept out of `HOOKS`, so the user-level install and
 uninstall never add or remove it — don't fold it in. Its matcher is part of
 being registered: an entry under a narrower group is moved, not left, since
-it would let a supported tool through. The review screen and start line say
+it would let a supported tool through. `--enforce --uninstall` removes every
+entry running the check, whatever its matcher, and creates no file to do it. The review screen and start line say
 where policy is checked; change them in the same commit that changes where.

@@ -1,6 +1,6 @@
 // `session hook`.
 import type { Command } from "commander";
-import { formatHook, installEnforce, installHook, uninstallHook } from "../commands/hook.js";
+import { formatHook, installEnforce, installHook, uninstallEnforce, uninstallHook } from "../commands/hook.js";
 import type { ProgramOptions } from "./options.js";
 import { parseFlag } from "./options.js";
 import { printLines } from "./print.js";
@@ -19,7 +19,7 @@ export function registerHook(program: Command, options: ProgramOptions): void {
   hook
     .command("install")
     .description("Register the Claude Code hooks that open and close sessions")
-    .option("--uninstall", "take the hooks back out instead")
+    .option("--uninstall", "take the hooks back out instead (with --enforce, only the check)")
     .option(
       "--passive [yes|no]",
       "record sessions nobody declared, from the first prompt onwards",
@@ -36,13 +36,10 @@ export function registerHook(program: Command, options: ProgramOptions): void {
       if (flags.enforce) {
         // The check is a separate, per-repository arrangement; a flag meant for
         // the user-level hooks is refused by name rather than quietly ignored.
-        if (flags.uninstall) {
-          throw new Error("--enforce cannot be combined with --uninstall yet. Remove the session hook check entry from .claude/settings.local.json by hand.");
-        }
         if (command.getOptionValueSource("passive") === "cli") {
           throw new Error("--passive applies to the user-level hooks, not --enforce. Run session hook install separately for those.");
         }
-        printLines(formatHook(await installEnforce(options)));
+        printLines(formatHook(flags.uninstall ? await uninstallEnforce(options) : await installEnforce(options)));
         return;
       }
       const result = flags.uninstall

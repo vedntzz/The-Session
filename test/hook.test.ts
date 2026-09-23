@@ -6,6 +6,7 @@ import { runGit } from "../src/git.js";
 import { buildProgram } from "../src/program.js";
 import {
   CHECK_HOOK,
+  hasEntry,
   hasHook,
   hasHooks,
   HOOKS,
@@ -25,6 +26,7 @@ import {
   formatHook,
   installEnforce,
   installHook,
+  uninstallEnforce,
   settingsFile,
   uninstallHook,
   type HookResult,
@@ -387,6 +389,13 @@ describe("the check hook", () => {
     expect(withoutHook(withHook({}, CHECK_HOOK), CHECK_HOOK)).toEqual({});
   });
 
+  it("finds an entry of its own whatever matcher or budget it has", () => {
+    const narrow = { matcher: "Write", hooks: [{ type: "command", command: CHECK_HOOK.command }] };
+    expect(hasEntry({ hooks: { PreToolUse: [narrow] } }, CHECK_HOOK)).toBe(true);
+    expect(hasEntry({ hooks: { PreToolUse: [LINT] } }, CHECK_HOOK)).toBe(false);
+    expect(hasEntry({}, CHECK_HOOK)).toBe(false);
+  });
+
   it("refuses a settings file whose hooks are not the shape it claims", () => {
     expect(() => withHook({ hooks: [] }, CHECK_HOOK)).toThrow(/hooks .*not an object/);
     expect(() => withHook({ hooks: { PreToolUse: {} } }, CHECK_HOOK)).toThrow(/PreToolUse.*not a list/);
@@ -634,7 +643,6 @@ describe("installEnforce", () => {
   });
 
   it.each([
-    [["--uninstall"], /cannot be combined with --uninstall/],
     [["--no-passive"], /--passive applies to the user-level hooks/],
     [["--passive=false"], /--passive applies to the user-level hooks/],
   ])("refuses --enforce with %j, changing nothing", async (extra, message) => {
@@ -643,6 +651,74 @@ describe("installEnforce", () => {
     await expect(program.parseAsync(["node", "session", "hook", "install", "--enforce", ...extra])).rejects.toThrow(message);
     expect(await readFile(user, "utf8")).toBe(before);
     await expect(stat(local)).rejects.toThrow();
+  });
+
+  describe("--uninstall", () => {
+    const AUDIT = { matcher: "Bash", hooks: [{ type: "command", command: "audit" }] };
+
+    it("takes the check out and leaves every other setting and hook", async () => {
+      await mkdir(path.dirname(local));
+      await writeFile(local, JSON.stringify({ permissions: { allow: ["Bash(ls)"] }, hooks: { PreToolUse: [AUDIT] } }), "utf8");
+      await installEnforce({ cwd: repo });
+      const result = await uninstallEnforce({ cwd: path.join(repo, "src") });
+      expect(result).toEqual({ file: local, hooks: [], changed: true, action: "removed" });
+      expect(await read()).toEqual({ permissions: { allow: ["Bash(ls)"] }, hooks: { PreToolUse: [AUDIT] } });
+    });
+
+    it("leaves an emptied file as {}, not deleted", async () => {
+      await installEnforce({ cwd: repo });
+      await uninstallEnforce({ cwd: repo });
+      expect(await read()).toEqual({});
+    });
+
+    it("removes an entry filed under another matcher too", async () => {
+      await mkdir(path.dirname(local));
+      const narrow = { matcher: "Write", hooks: [{ type: "command", command: "lint" }, { type: "command", command: CHECK_HOOK.command }] };
+      await writeFile(local, JSON.stringify({ hooks: { PreToolUse: [narrow] } }), "utf8");
+      await uninstallEnforce({ cwd: repo });
+      expect(await read()).toEqual({ hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: "lint" }] }] } });
+    });
+
+    it("creates nothing when the repository has no settings file", async () => {
+      const result = await uninstallEnforce({ cwd: repo });
+      expect(result.changed).toBe(false);
+      await expect(stat(local)).rejects.toThrow();
+    });
+
+    it("leaves a file without the check exactly as it was, even an empty list", async () => {
+      await mkdir(path.dirname(local));
+      const text = JSON.stringify({ hooks: { PreToolUse: [] } });
+      await writeFile(local, text, "utf8");
+      const before = await stat(local);
+      expect((await uninstallEnforce({ cwd: repo })).changed).toBe(false);
+      expect(await readFile(local, "utf8")).toBe(text);
+      expect((await stat(local)).mtimeMs).toBe(before.mtimeMs);
+    });
+
+    it("refuses invalid JSON and non-repositories, writing nothing", async () => {
+      await mkdir(path.dirname(local));
+      await writeFile(local, "{ nope", "utf8");
+      await expect(uninstallEnforce({ cwd: repo })).rejects.toThrow(/not valid JSON/);
+      expect(await readFile(local, "utf8")).toBe("{ nope");
+      await expect(uninstallEnforce({ cwd: root })).rejects.toThrow(/Not inside a git repository/);
+    });
+
+    it("never touches the user-level hooks, through the CLI", async () => {
+      await installEnforce({ cwd: repo });
+      const before = await readFile(user, "utf8");
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      await buildProgram({ cwd: repo, settings: user }).parseAsync(["node", "session", "hook", "install", "--enforce", "--uninstall"]);
+      expect(await readFile(user, "utf8")).toBe(before);
+      expect(await read()).toEqual({});
+      expect(log.mock.calls.flat().join("\n")).toMatch(/removed .*settings\.local\.json[\s\S]*none registered/);
+    });
+
+    it("is not undone by the user-level uninstall", async () => {
+      // Pointed at the repository file, the user-level removal still leaves the check.
+      await installEnforce({ cwd: repo });
+      await uninstallHook({ settings: local });
+      expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
+    });
   });
 });
 

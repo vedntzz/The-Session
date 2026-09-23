@@ -233,6 +233,11 @@ function entriesFor(settings: Settings, hook: HookSpec): Record<string, unknown>
   return foundFor(settings, hook).map((item) => item.entry);
 }
 
+/** True when any entry runs the hook's command, whatever its matcher or budget. */
+export function hasEntry(settings: Settings, hook: HookSpec): boolean {
+  return entriesFor(settings, hook).length > 0;
+}
+
 /**
  * True when one hook is registered and says what it should. An entry left by
  * an older `session` runs the right command on too short a budget, so it reads

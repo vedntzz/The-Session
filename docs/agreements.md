@@ -116,8 +116,14 @@ in `<root>/.claude/settings.local.json`, under the matcher
 other settings and hooks in it are kept, and a second install changes nothing.
 An entry filed under a narrower matcher is moved, not duplicated. User-level
 settings are never read or written, because outside a repository the check
-denies every supported write. `--enforce` refuses `--uninstall` and the passive
-flags by name; automated removal is the next step.
+denies every supported write. `--enforce` refuses the passive flags by name.
+
+`session hook install --enforce --uninstall` takes the check back out of the
+same file, including an entry filed under another matcher, and leaves every
+other setting and hook. A file emptied by the removal stays as `{}`; a
+repository without the file, or without the check, is left untouched and no
+file is created. The user-level `session hook install --uninstall` never
+removes the check, and this never removes the user-level hooks.
 
 - No agreement, a closed session, record-only policy, a compliant write or an
   unsupported tool produces no output: normal editor permissions still apply.
@@ -152,8 +158,8 @@ in one checkout share its one agreement. Moving/reusing checkout paths requires
 closing old sessions and starting new ones; the path is not a machine identity.
 Existing start/stop lifecycle selection is unchanged and remains repository-wide.
 The reader still tolerates a truncated final log line and does not verify
-signatures on every read, so this is not an integrity guarantee. Removal,
-real editor tests, timeout behavior and latency remain pending.
+signatures on every read, so this is not an integrity guarantee. Real
+editor tests, timeout behavior and latency remain pending.
 
 ```ts
 agreement: {
