@@ -92,7 +92,9 @@ answers `writes` with a list of paths, or `unknown` — and unknown is never
 
 - **Positive recognition only.** `shell/words.ts` accepts one simple command
   and refuses chains, pipes, redirects, substitutions, globs, `~`, escapes and
-  `NAME=value` prefixes. Don't widen it by approximating what a shell would
+  `NAME=value` prefixes — and, because the Bash tool runs zsh on macOS, an
+  unquoted `^` and a word-initial `=`. Model the strictest shell the editor
+  may use, not POSIX alone. Don't widen it by approximating what a shell would
   do; add a real parser or leave it unknown.
 - **Over-approximate, never under.** Where a tool's behaviour varies by
   version, list the extra file. An extra path makes the check stricter; a

@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `daa2e65 shell: recognise rm and resolve it to deletes, regular files only` (`v1.0.0-43-gdaa2e65`).
+Derived at `4917d28 shell: the read-only allowlist` (`v1.0.0-44-g4917d28`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -59,13 +59,13 @@ bundler, no monorepo.
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
      129
-   17955
+   17960
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
       60
-   18763
+   18777
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -991,9 +991,9 @@ model's rate. A release of this tool is not a price update.
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
  Test Files  59 passed (59)
-      Tests  2113 passed (2113)
-   Start at  09:54:51
-   Duration  222.70s (transform 1.93s, setup 0ms, collect 7.70s, tests 1058.82s, environment 7ms, prepare 3.40s)
+      Tests  2115 passed (2115)
+   Start at  10:13:03
+   Duration  225.48s (transform 2.04s, setup 0ms, collect 8.81s, tests 1104.14s, environment 7ms, prepare 3.35s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

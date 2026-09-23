@@ -3,8 +3,12 @@
 // rather than approximated: the caller treats "unknown" as "can't tell what
 // this writes", never as "writes nothing".
 
-/** Characters that make an unquoted word mean something other than itself. */
-const SPECIAL = /[;&|<>()$`\\*?[\]{}~!#\n\r]/;
+/**
+ * Characters that make an unquoted word mean something other than itself.
+ * The editor may run commands in zsh (Claude Code's Bash tool does, on macOS),
+ * so `^` is here too: a glob operator when extendedglob is set in a user's rc.
+ */
+const SPECIAL = /[;&|<>()$`\\*?[\]{}~!#^\n\r]/;
 
 /**
  * The words of one simple command, or undefined when the command is anything
@@ -30,7 +34,8 @@ export function simpleWords(command: string): string[] | undefined {
       if (char === '"' && /[$`\\!]/.test(quoted)) return undefined;
       word = (word ?? "") + quoted;
       i = end + 1;
-    } else if (SPECIAL.test(char)) {
+    } else if (SPECIAL.test(char) || (char === "=" && word === undefined)) {
+      // zsh expands an unquoted `=cmd` at the start of a word to cmd's path.
       return undefined;
     } else {
       word = (word ?? "") + char;

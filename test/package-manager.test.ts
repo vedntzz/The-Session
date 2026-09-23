@@ -24,6 +24,20 @@ describe("simpleWords", () => {
     expect(simpleWords(command)).toBeUndefined();
   });
 
+  it("refuses zsh expansions POSIX sh would not make", () => {
+    // Claude Code's Bash tool runs zsh on macOS: `=cmd` expands to cmd's path,
+    // and `^` is a glob operator under extendedglob.
+    expect(simpleWords("rm =node")).toBeUndefined();
+    expect(simpleWords("git diff HEAD^")).toBeUndefined();
+    expect(simpleWords("ls ^*.ts")).toBeUndefined();
+  });
+
+  it("keeps a quoted or mid-word = and a quoted ^ literal", () => {
+    expect(simpleWords("rm '=node'")).toEqual(["rm", "=node"]);
+    expect(simpleWords("npm i --registry=x a=b")).toEqual(["npm", "i", "--registry=x", "a=b"]);
+    expect(simpleWords("grep '^foo' a")).toEqual(["grep", "^foo", "a"]);
+  });
+
   it("refuses an environment assignment in front of the command", () => {
     expect(simpleWords("NODE_ENV=production npm ci")).toBeUndefined();
   });

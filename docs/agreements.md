@@ -273,6 +273,15 @@ escapes and unresolved paths are blocked, and one blocked operand blocks the
 whole command rather than yielding a partial answer. No file is removed or
 read. Hook integration remains unchanged.
 
+The shared tokenizer assumes the command may run in zsh, not only POSIX sh:
+Claude Code's Bash tool ran `/bin/zsh` 5.9 when checked on 23 September 2026
+on macOS. So besides everything above, an unquoted `^` (a glob operator under
+zsh's `extendedglob`) and an unquoted `=` at the start of a word (zsh expands
+`=cmd` to that command's path) are refused. Quoted, both stay literal.
+
+Aliases, shell functions and `PATH` are outside what any of this can see: a
+listed name runs whatever the editor's shell resolves it to.
+
 `readOnlyWrites` in `src/shell/read-only.ts` is the read-only allowlist: one
 simple command known to write no file answers `writes` with no paths, and
 anything else is unknown. Once the shell check is wired in, a listed command

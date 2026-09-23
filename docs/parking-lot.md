@@ -5,11 +5,11 @@ is picked up only by a later plan. Newest first. Record where each came from.
 
 ## From Sprint 2
 
-- **Which shell runs a Bash tool command.** `simpleWords` models POSIX sh.
-  If Claude Code runs commands in the user's login shell (zsh on macOS), zsh
-  expansions such as `=cmd` at the start of a word (a command's full path)
-  would change an operand without the tokenizer seeing it. Verify before the
-  shell check is wired, and refuse a leading `=` if so. (Read-only step.)
+- **Aliases, functions and `PATH`.** A name on the read-only list runs
+  whatever the shell resolves it to: an alias or function from the user's rc
+  file, or an earlier executable on `PATH`. The command text cannot show
+  that. Options: run the check's own `command -v` in the editor's shell, or
+  accept it as a stated limit. (zsh tokenizer step.)
 - **`~` inside a word.** The tokenizer refuses `~` anywhere, so `git diff
   HEAD~1` is unknown; a shell expands `~` only at a word's start. Narrowing
   that is a tokenizer change shared by every shell parser. (Read-only step.)
