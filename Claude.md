@@ -57,7 +57,10 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       capture/adapters/claude-bash.ts Bash payload → cwd and command, nothing kept
       tree-state.ts what changed between two looks at the tree (git/blobs.ts
       treeStateSince takes a look against the start commit)
-      tool-calls.ts one record per tool call: number, before, what it changed
+      tool-calls.ts one record per tool call: number, tool, what it changed
+      commands/tool-call.ts the before/after recorders, snapshot outside the lock
+      store/scratch.ts unsigned ~/.session/tmp/: per-session log path + start
+      commit, per-call before state (deleted at end); sweep prunes after a day
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
@@ -92,7 +95,7 @@ type Session = {
                                // views recompute it — never read this one to display
   attribution?: Attribution    // copied from .session.json at start, not patchable
   toolCalls?: ToolCall[]       // folded from toolCallStart/toolCallEnd event records,
-                               // never a field: { n, tool, before, end: { files:
+                               // never a field: { n, tool, end: { files:
                                // [{path, blob|null}], changed: bool|null, overlapping } }.
                                // Every call, no-ops too; overlapping calls attribute nothing
   endState?: Record<string, string | null>  // blob id per reality path at stop, null

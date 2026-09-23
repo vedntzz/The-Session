@@ -67,11 +67,11 @@ describe("the per-call record depends on no adapter", () => {
   });
 
   it("pairs a start with its end by call id alone: tool name and number play no part", () => {
-    let calls = foldToolCall([], 1, { toolCallStart: startFor([], "id-1", "Edit", {})! });
-    calls = foldToolCall(calls, 2, { toolCallStart: startFor(calls, "id-2", "Edit", {})! });
+    let calls = foldToolCall([], 1, { toolCallStart: startFor([], "id-1", "Edit")! });
+    calls = foldToolCall(calls, 2, { toolCallStart: startFor(calls, "id-2", "Edit")! });
     // Same tool as both, and a number that is not its own: still matched on id.
-    const end = endFor(calls, "id-1", "Bash", {})!;
+    const end = endFor(calls, "id-1", "Bash", {}, {})!;
     expect(end).toMatchObject({ callId: "id-1", n: 1, tool: "Edit" });
-    expect(endFor(calls, "no-such-id", "Edit", {})).toMatchObject({ unpaired: true, changed: null });
+    expect(endFor(calls, "no-such-id", "Edit", {}, {})).toMatchObject({ unpaired: true, changed: null });
   });
 });

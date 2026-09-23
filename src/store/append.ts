@@ -14,14 +14,11 @@ import {
   type StoreOptions,
 } from "./record.js";
 import { repoIdentity, resolveStoreFile, storeHome } from "./paths.js";
-import { endFor, startFor, type ToolCallEnd, type ToolCallStart } from "../tool-calls.js";
-import type { TreeState } from "../tree-state.js";
 import {
   intentSourceFor,
   isComplete,
   keptIntent,
-  foldLog,
-  readLog,
+  readLogAt,
   readLogFile,
   readSessions,
   sessionFrom,
@@ -98,10 +95,20 @@ export function nextPrev(log: RawLog): string {
   return last ? lineHash(last.text) : GENESIS;
 }
 
-export async function writeRecord(
-  id: string,
-  set: RecordFields | ((log: RawLog) => RecordFields | undefined),
+export async function writeRecord(id: string, set: RecordFields, options: StoreOptions): Promise<void> {
+  await writeRecordFrom(options, () => ({ id, set }));
+}
+
+/**
+ * Appends the record a builder makes from the log as it stands under the lock,
+ * so anything it numbers, orders or chooses cannot race another writer, and
+ * the log is read once. The builder may pick the session and may await; the
+ * lock is held while it does. Undefined writes nothing.
+ */
+export async function writeRecordFrom(
   options: StoreOptions,
+  build: (log: RawLog) => { id: string; set: RecordFields } | undefined
+    | Promise<{ id: string; set: RecordFields } | undefined>,
 ): Promise<void> {
   const file = await resolveStoreFile(options);
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
@@ -111,12 +118,10 @@ export async function writeRecord(
   const keypair = await loadOrCreateKeypair(storeHome(options));
 
   await withLock(file, async () => {
-    const log = await readLog(options);
-    // A builder sees the log as it stands under the lock, so anything it
-    // numbers or orders cannot race another writer. Undefined writes nothing.
-    const fields = typeof set === "function" ? set(log) : set;
-    if (fields === undefined) return;
-    const record = signRecord(id, fields, nextPrev(log), keypair);
+    const log = await readLogAt(file);
+    const built = await build(log);
+    if (built === undefined) return;
+    const record = signRecord(built.id, built.set, nextPrev(log), keypair);
 
     // A previous write cut short leaves a line with no newline on it. Starting
     // on a fresh line keeps that damage to the one line it happened on rather
@@ -283,43 +288,4 @@ function refusePatch(patch: SessionPatch): void {
   if (patch.endedAt != null) {
     assertTimestamp("endedAt", patch.endedAt);
   }
-}
-
-/**
- * Records that a tool call is about to run, numbered from this session's own
- * counter under the log's lock, so two calls starting together cannot share a
- * number. Undefined when that call id is already recorded. Throws when the
- * session is not in this log: a call belongs to exactly one session.
- */
-export async function recordCallStart(
-  sessionId: string, callId: string, tool: string, before: TreeState, options: StoreOptions,
-): Promise<ToolCallStart | undefined> {
-  let written: ToolCallStart | undefined;
-  await writeRecord(sessionId, (log) => {
-    written = startFor(callsOf(log, sessionId), callId, tool, before);
-    return written ? { toolCallStart: written } : undefined;
-  }, options);
-  return written;
-}
-
-/**
- * Records that a tool call ran and what it changed, decided under the lock
- * against every call already recorded — which is what makes the overlap
- * check see a call that started a moment ago. Undefined when already ended.
- */
-export async function recordCallEnd(
-  sessionId: string, callId: string, tool: string, after: TreeState, options: StoreOptions,
-): Promise<ToolCallEnd | undefined> {
-  let written: ToolCallEnd | undefined;
-  await writeRecord(sessionId, (log) => {
-    written = endFor(callsOf(log, sessionId), callId, tool, after);
-    return written ? { toolCallEnd: written } : undefined;
-  }, options);
-  return written;
-}
-
-function callsOf(log: RawLog, sessionId: string) {
-  const session = foldLog(log).find((item) => item.id === sessionId);
-  if (!session) throw new Error(`No session with id ${sessionId} in this log. Start a session before recording tool calls.`);
-  return session.toolCalls ?? [];
 }

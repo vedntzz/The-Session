@@ -5,3 +5,4 @@ export * from "./store/record.js";
 export * from "./store/paths.js";
 export * from "./store/read.js";
 export * from "./store/append.js";
+export * from "./store/scratch.js";

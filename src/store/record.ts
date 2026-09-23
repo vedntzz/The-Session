@@ -367,6 +367,12 @@ export interface StoreOptions {
   home?: string;
   /** Directory used to derive the repo key. Defaults to process.cwd(). */
   cwd?: string;
+  /**
+   * The log file, already resolved. Skips the git calls that find the repo's
+   * identity; a tool-call hook reads it from its scratch file, where the
+   * before hook cached it. Must be what `resolveStoreFile` returned.
+   */
+  storeFile?: string;
 }
 
 /**

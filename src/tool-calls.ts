@@ -1,7 +1,8 @@
-// One tool call at a time: what the working tree held before it, and what it
-// changed. Pure — the records are written by store/append.ts under the log's
-// lock and folded by store/read.ts. Every call is recorded, including calls that
-// changed nothing (invariant 4). Hashes and paths only; never content.
+// One tool call at a time: what it changed. Pure — the records are written by
+// commands/tool-call.ts under the log's lock and folded by store/read.ts. Every
+// call is recorded, including calls that changed nothing (invariant 4). The
+// tree state before a call is not signed: it lives in an unsigned scratch file
+// until the call ends (store/scratch.ts). The log holds paths and hashes only.
 import { treeStateChanges, type TreeState } from "./tree-state.js";
 
 /** Written when a call is about to run. `n` is this session's own counter. */
@@ -9,8 +10,6 @@ export interface ToolCallStart {
   readonly callId: string;
   readonly n: number;
   readonly tool: string;
-  /** The tree as it differed from the start commit just before the call. */
-  readonly before: TreeState;
 }
 
 /** A path a call changed, and its blob after (`null`: not a regular file). */
@@ -38,7 +37,6 @@ export interface ToolCall {
   readonly callId: string;
   readonly n: number;
   readonly tool: string;
-  readonly before?: TreeState;
   readonly startSeq?: number;
   readonly end?: ToolCallEnd;
   readonly endSeq?: number;
@@ -50,9 +48,9 @@ export function nextCallNumber(calls: readonly ToolCall[]): number {
 }
 
 /** The call a start record opens, or undefined if that call id is already open. */
-export function startFor(calls: readonly ToolCall[], callId: string, tool: string, before: TreeState): ToolCallStart | undefined {
+export function startFor(calls: readonly ToolCall[], callId: string, tool: string): ToolCallStart | undefined {
   if (calls.some((call) => call.callId === callId)) return undefined;
-  return { callId, n: nextCallNumber(calls), tool, before };
+  return { callId, n: nextCallNumber(calls), tool };
 }
 
 /**
@@ -60,19 +58,24 @@ export function startFor(calls: readonly ToolCall[], callId: string, tool: strin
  * from the log alone: another call that started before now and was still open,
  * or ended after this one started, ran during it — and this rule marks both,
  * since the other call's end saw this one open or will. Overlapping and
- * unpaired calls attribute no files: `changed` is `null`, not a guess.
+ * unpaired calls attribute no files: `changed` is `null`, not a guess. A call
+ * is unpaired when the log has no start for it or `before` is missing — the
+ * scratch file that held it is gone.
  */
-export function endFor(calls: readonly ToolCall[], callId: string, tool: string, after: TreeState): ToolCallEnd | undefined {
+export function endFor(
+  calls: readonly ToolCall[], callId: string, tool: string,
+  before: TreeState | undefined, after: TreeState,
+): ToolCallEnd | undefined {
   const call = calls.find((item) => item.callId === callId);
   if (call?.end) return undefined;
-  if (!call || call.before === undefined || call.startSeq === undefined) {
+  if (!call || before === undefined || call.startSeq === undefined) {
     return { callId, n: call?.n ?? nextCallNumber(calls), tool, files: [], changed: null, overlapping: false, unpaired: true };
   }
   const startSeq = call.startSeq;
   const overlapping = calls.some((other) => other.callId !== callId && other.startSeq !== undefined &&
     (other.endSeq === undefined ? true : other.endSeq > startSeq));
   if (overlapping) return { callId, n: call.n, tool: call.tool, files: [], changed: null, overlapping: true };
-  const files = filesChanged(call.before, after);
+  const files = filesChanged(before, after);
   return { callId, n: call.n, tool: call.tool, files, changed: files.length > 0, overlapping: false };
 }
 
@@ -100,7 +103,7 @@ export function foldToolCall(
   const next = [...calls];
   const { toolCallStart: start, toolCallEnd: end } = record;
   if (start && !next.some((call) => call.callId === start.callId)) {
-    next.push({ callId: start.callId, n: start.n, tool: start.tool, before: start.before, startSeq: seq });
+    next.push({ callId: start.callId, n: start.n, tool: start.tool, startSeq: seq });
   }
   if (end) {
     const index = next.findIndex((call) => call.callId === end.callId);

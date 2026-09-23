@@ -179,5 +179,6 @@ export function storeFileFor(identity: string, options: StoreOptions = {}): stri
  * be called would fork it.
  */
 export async function resolveStoreFile(options: StoreOptions = {}): Promise<string> {
+  if (options.storeFile !== undefined) return options.storeFile;
   return storeFileFor(await repoIdentity(options.cwd ?? process.cwd()), options);
 }

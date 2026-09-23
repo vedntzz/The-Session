@@ -78,6 +78,19 @@ together cannot share a number. A call is marked `overlapping` when another
 ran during it, which marks both; overlapping and unpaired calls record
 `changed: null` and no files — never a guess. Hashes and paths only.
 
+The tree state before a call is **not signed**. The start record is exactly
+`{callId, n, tool}`. Two unsigned files (0600) under `~/.session/tmp/<session>/`
+hold the rest: `session.json`, once per session — the resolved log path (its
+repo identity), the start commit and the checkout it is found by — and
+`call-<id>.json` per call in flight, the before state, deleted once the end
+record is written. Signing the before state would put a full tree state per
+call into a permanent, pushable log. An end whose call file is gone is
+`unpaired`. **The snapshot runs outside the lock**; the lock covers reading
+the log, confirming the session is still open, assigning `n` and appending,
+so parallel calls do not queue behind each other's snapshots — a test proves
+two snapshots overlap. A stale session cache is dropped and refreshed once.
+The sweep deletes scratch untouched for a day (`pruneScratch`).
+
 `checkout` is captured from git's root and the filesystem realpath at creation,
 never taken from the caller's fields, and is absent rather than guessed when
 git cannot say. Older records are never backfilled or re-signed: absent fields

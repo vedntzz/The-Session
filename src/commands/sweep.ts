@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { factsFor } from "../observe.js";
 import type { RepoFacts } from "../outcome.js";
-import { readSessions, repoKey, storeHome, type StoreOptions } from "../store.js";
+import { pruneScratch, readSessions, repoKey, storeHome, type StoreOptions } from "../store.js";
 import { settleSessions } from "./settle.js";
 import { checkSurvival } from "./survival.js";
 
@@ -132,6 +132,9 @@ export async function sweep(
   }
   // Before the work, not after. See the note at the top of this file.
   await stamp(file, now);
+  // Tool-call scratch a hook left behind: a call whose after hook never ran,
+  // a session long closed. Unsigned cache, never evidence; failure is ignored.
+  await pruneScratch(options, now).catch(() => 0);
 
   const facts = await factsFor(sessions, options.cwd ?? process.cwd());
   if (!facts) {
