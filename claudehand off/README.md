@@ -3,9 +3,14 @@
 Updated: 22 September 2026. Implement one milestone, test, stop for Vedant
 to review/commit/push. Never stage or commit automatically.
 
-## Current milestone: UI resize fix and changelog brought over
+## Current milestone: Sprint 1 review and parking lot
 
-Complete and tested; waiting for Vedant's review and commit.
+Complete; waiting for Vedant's review and commit. Docs only.
+
+The sprint plan is `~/Downloads/the-session-sprint-plan (1).pdf`: three
+one-week sprints, 19 September to 9 October, to a pilot-ready drift guard.
+Every build item in Sprint 1 landed on 22 September; the handoffs so far were
+all Sprint 1. Earlier "MVP percentage" answers in chat did not know this plan.
 
 ### Previously completed
 
@@ -19,47 +24,26 @@ Complete and tested; waiting for Vedant's review and commit.
   `64f3c40` [enforce uninstall](08-enforce-uninstall.md), `2b29d61`
   [failure behaviour](09-failure-behaviour.md), `e2c178a`
   [end-to-end run](10-end-to-end.md), `1260e16`
-  [hook research restored](11-hook-research.md).
-
-### Source
-
-Uncommitted work in `/Users/vedant/dev-session-ui` on `fix/ui-changelog-resize`,
-branched from `224fd81`: `src/render/tui/state.ts`, `test/ui.test.ts`,
-`CHANGELOG.md`. Neither code file has changed on master since `224fd81`, so
-the code patch applied cleanly; the CHANGELOG was merged by hand.
+  [hook research restored](11-hook-research.md), `949ede1`
+  [UI resize](12-ui-resize.md).
 
 ### Done
 
-- **Resize fix** (`state.ts`): PgUp/PgDn and help scrolling step from the
-  offset the screen shows (`min(scroll, maxScroll)`), not the stored one. After
-  the terminal grows, the renderer clamps a stale offset silently, and the first
-  PgUp used to move an offset nobody could see. Checked that the live command
-  feeds the post-resize `maxScroll` to `navigate` (`commands/ui.ts` repaints
-  on `resize` and stores `frame.maxScroll`).
-- **Test**: the branch's test, for both the timeline and help. Verified it
-  fails with `state.ts` reverted (1 failed) and passes with the fix.
-- **CHANGELOG**: master had no entry for `session ui` or `session knowledge`.
-  Added the branch's two entries at the top of Unreleased/Added after checking
-  each claim against master's code (signals, `isTTY` refusal, `e`/`r` keys,
-  exact filters that refuse unknown values, `weekSessions` → `withOutcomes`,
-  `--days/--limit/--path/--session/--out/--no-open`, `session.knowledge/v1`).
+- `docs/sprint-1-review.md`: exit condition (met, with how to reproduce it),
+  plan against actual by day with commits, measurements, what was not done and
+  why, and facts for the retrospective. The retrospective itself is left for
+  Vedant.
+- `docs/parking-lot.md`: the plan's parking lot did not exist. Created with
+  six ideas raised during Sprint 1, each with the step it came from.
+- Both files are under `docs/`, which `package.json` publishes to npm.
 
-### Verification
+## Next
 
-- Build and source/test type checks passed.
-- Full suite: **1,650 tests passed across 51 files** (1,649 before, +1).
-- Not driven in a live terminal: no tmux on this machine. The fix is in the
-  pure `navigate`, which the live command calls.
+1. Vedant: the retrospective section, the three-screen prototype (the
+   storyboard PDF may be it), and the two-minute interactive `ask` check.
+2. Sprint 2, "the hard edges" (26 September to 2 October), in plan order:
+   package-manager recognition (Claude, Sat 26) first — npm, pnpm and yarn
+   installs mapped to the manifest and lockfile.
 
-### For Vedant
-
-After committing, `fix/ui-changelog-resize` and its worktree hold nothing left
-to integrate and can be deleted. Not deleted here.
-
-## Next milestones — stop and commit after each
-
-1. Interactive `ask` check by hand in a Claude Code session (two minutes).
-2. Sprint review and retrospective.
-
-Other outstanding sprint items remain unverified: three-screen prototype
-and external-proposal ingestion scope. No overall completion percentage.
+Codex owns screens, snapshots and cleanup in worktree B; Claude owns hooks,
+gating and logging in worktree A. Never both in the same files.
