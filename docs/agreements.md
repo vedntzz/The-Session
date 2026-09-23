@@ -57,8 +57,49 @@ retaining the mismatch list. It neither writes a record nor claims a file change
 This function is not wired to an editor hook yet. Its adapter must supply a
 resolved, canonical repo-relative file and a known operation. Ambiguous paths
 and malformed terms throw; an adapter must handle those failures explicitly,
-never treat them as permission. Filesystem resolution, symlinks, outside-repo
-targets, tool parsing and hook responses remain the next integration step.
+never treat them as permission.
+
+### Tool requests and filesystem resolution
+
+`parseClaudeWrite` handles PreToolUse payloads for `Edit`, `Write` and the legacy
+`MultiEdit` shape (one `file_path`, a nonempty `edits` array). It validates input
+types and returns only `cwd` and `filePath`: source content, replacement strings
+and transcript paths are not retained. Unsupported tools are separate from
+malformed requests. Payloads over 2 MiB are refused before JSON parsing; the
+future command must also bound stdin while reading it.
+
+Edit and Write fields were checked against the [Claude hook reference](https://code.claude.com/docs/en/hooks#pretooluse)
+and [SDK tool reference](https://code.claude.com/docs/en/agent-sdk/python#edit).
+Current references no longer list MultiEdit, so that branch is compatibility
+for its explicit legacy shape, not a claim that current Claude emits it.
+Per-edit paths and unknown fields within `edits` are refused rather than
+silently overlooking another potential target.
+
+`resolveFileWrite` is read-only and receives a trusted repository root from its
+caller. It never derives that authority from the tool's payload. Relative file
+paths resolve from the payload's cwd, which must resolve inside that root.
+Absolute paths and root aliases (such as `/tmp` and `/private/tmp`) are supported.
+`..`, control characters, directory targets and path spellings the agreement
+matcher cannot represent faithfully are refused.
+
+Existing regular files produce an attempted `edit`; absent files, including
+those beneath missing parent directories, produce an attempted `create`.
+This applies to all three tools and says nothing about whether their write
+will succeed. Empty content or replacement text never means file deletion.
+
+For an in-repo symlink, resolution returns both the requested name and the
+resolved target, deduplicated. **The hook must check every returned path** and
+honour the most restrictive result. Both a sensitive alias and a sensitive
+target matter. Links that resolve outside the repository, dangling/cyclic
+links, hard-linked files and unreadable paths return a blocked resolution;
+no error becomes an empty scope or a permission grant. Existing file contents
+are never opened, and missing files/directories are never created.
+
+This is a filesystem snapshot, not an atomic sandbox. Concurrent changes can
+race the later write, aliases beyond the checked names are not enumerated, and
+shell or other tools are unsupported. Hook JSON, installation and runtime
+enforcement remain the next step. A blocked resolution still needs an explicit
+hook response; this module alone intercepts nothing.
 
 ```ts
 agreement: {
