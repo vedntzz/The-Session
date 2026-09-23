@@ -1,60 +1,57 @@
 # Sprint handoff
 
-Updated: 22 September 2026. Implement one milestone, test, stop for Vedant
-to review/commit/push. Never stage or commit automatically.
+Updated: 23 September 2026. One small feature, tests, handoff, then stop for
+Vedant's review and commit. Never stage, commit or push automatically.
 
-## Current milestone: Sprint 2, Sat 26 — package-manager recognition
+## Current milestone: Sprint 2, Sun 27 — sed in-place recognition
 
-Complete and tested; waiting for Vedant's review and commit. Pure code, not
-wired to the hook: `Bash` is not in the matcher yet.
-
-Sprint plan: `~/Downloads/the-session-sprint-plan (1).pdf`. Sprint 1 is
-reviewed in `docs/sprint-1-review.md` (`50a4fa4`); earlier handoffs are
-archived as `01`–`13` beside this file.
+Complete and tested; waiting for Vedant's review and commit.
+Previous package-manager milestone committed at `d4d0133`; archived in
+[14-package-manager-recognition.md](14-package-manager-recognition.md).
+The working tree was clean at the start.
 
 ### Solved
 
-- `src/shell/words.ts` — `simpleWords(command)`: the words of one simple
-  command, or undefined. Single quotes literal; double quotes only when nothing
-  inside can expand. Refuses chains, pipes, redirects, `$`/backtick
-  substitution, globs, braces, `~`, `!`, `#`, backslashes, newlines and a
-  leading `NAME=value`. Reused by Sunday's parseable writers.
-- `src/shell/package-manager.ts` — `packageManagerWrites(command)`:
-  `{ kind: "writes", paths }` relative to the command's directory, or
-  `{ kind: "unknown" }`.
-  - npm → `package.json`, `package-lock.json`; pnpm → `pnpm-lock.yaml`;
-    yarn → `yarn.lock` (bare `yarn` is install).
-  - add/remove with packages → manifest + lock; install without packages →
-    lock; update → manifest + lock (versions differ, so the extra file is
-    listed); `npm ci`, `--frozen-lockfile`, `--immutable`, `npm --no-save` →
-    no tracked files.
-  - Unknown: any flag outside each manager's list, `-g`/`--global`,
-    `--prefix`/`-C`/`--dir`/`--cwd`, workspace/recursive flags, `npm run`,
-    `npm test`, `npx`, add/remove with no package, pnpm/yarn install with
-    packages, other programs (bun), and prototype names such as `constructor`.
-- Stated limits: `node_modules`, caches and dependency install scripts are not
-  covered; `npm-shrinkwrap.json` and yarn Plug'n'Play files are not listed.
-- Docs: `docs/agreements.md` "Shell commands (not yet checked)", a "Shell
-  commands" rules section in the skill (both copies, description extended),
-  layout lines in `Claude.md`/`AGENTS.md`, `docs/context.md` regenerated.
-  No CHANGELOG entry until it is user-visible.
+- `src/shell/sed.ts`: pure `sedWrites(command, dialect?)`, returning writes
+  with persistent operand/backup paths, or unknown. Never executes commands.
+- Explicit GNU/macOS dialect required. Missing/unknown dialect is unknown;
+  the host OS is not evidence of which sed an editor's PATH runs.
+- Simple slash-delimited substitutions, separate -e expressions, -n/-E,
+  GNU -i/--in-place and macOS -i with a required extension (including empty).
+- Simple backup suffixes include each backup alongside its operand; duplicate
+  paths removed. Paths are not canonicalized or checked against scope here.
+- Unknown flags, script files, shell expansions/chains/redirects, sed execution
+  or extra-write commands/flags, addresses, escapes, bracket expressions and
+  complex backup templates remain unknown.
+- Reuses simpleWords unchanged. Does not change existing package-manager
+  parsing, CLI output, hook matchers, settings or records.
+- Agreements-and-enforcement skill guided positive recognition and explicit
+  uncertainty. GNU/BSD sources and limitations linked in docs/agreements.md.
 
-### Verification
+### Tests and failures
 
-- 58 new tests (`test/package-manager.test.ts`), all passing on first run.
+- 45 new sed tests passed; 58 existing package-manager/tokenizer tests passed.
 - Build and source/test type checks passed.
-- Full suite via the context generator: **1,700 passed across 52 files**, plus
-  8 context tests (1,708 total; 1,650 before).
+- 8 generated-context tests passed (111 targeted tests total); final diff check passed.
+- No implementation/test failures. No full-suite rerun for this isolated,
+  unwired pure parser; earlier full-suite counts are historical.
 
-## Next
+### Limits
 
-Sprint 2 in plan order, each a separate step:
+This recognizes a deliberately small subset, not arbitrary sed programs.
+It lists persistent targets/backups, not temporary files. Actual executable
+identity, path/symlink resolution, action classification and Bash integration
+remain later work. No shell interception or successful write is claimed.
 
-1. Sun 27 — parseable writers (`sed -i`, `>`, `tee`, `mv`, `cp`, `rm`) and a
-   read-only allowlist, pure, on `simpleWords` (redirects need a small extension).
-2. Mon 28 — wire `Bash` into the check: unknown and not allowlisted means
-   `ask` with "Can't tell what this writes."; grants scoped to one operation.
-3. Tue 29 / Wed 30 (Codex) — starting-tree snapshot; PostToolUse diff per call.
+## Remaining work — each a separate reviewed milestone
 
-Still owed from Sprint 1 (Vedant): retrospective, three-screen prototype,
-interactive `ask` check.
+1. Rest of Sun 27: redirects (>), tee, mv, cp, rm, and a read-only allowlist.
+2. Mon 28: wire shell recognition into check; unknown non-read-only commands
+   ask "Can't tell what this writes." Never grant broad approval.
+3. Codex days: starting-tree snapshot, then per-call PostToolUse diff.
+
+Still owed from Sprint 1: retrospective, three-screen prototype and the
+interactive two-minute ask check. Sprint 1 review: docs/sprint-1-review.md.
+
+Changes are uncommitted. No staging, commit, push, PR, user-settings change,
+dependency installation or worktree cleanup. Codex stops for Vedant.

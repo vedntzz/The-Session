@@ -160,6 +160,23 @@ What it cannot see, and says so: `node_modules`, package caches, and anything
 a dependency's install script writes. `npm-shrinkwrap.json` and yarn's Plug'n'Play
 files are not listed.
 
+`sedWrites` in `src/shell/sed.ts` is also pure and not wired to the hook.
+The caller must explicitly identify `gnu` or `macos` sed; omitted or unknown
+dialects return unknown. Do not infer the executable's dialect from the OS.
+It accepts in-place editing with a simple slash-delimited substitution, optional
+`-n`/`-E`, and separate `-e` expressions. GNU `-i`/`--in-place` and macOS
+`-i ''` are distinct. Simple backup extensions add every backup path to the
+answer, alongside each operand. Paths remain unresolved for the later resolver.
+
+Unknown flags, script files, addresses, bracket expressions, escaped script
+characters, alternate delimiters, `e`/`w` commands or flags, and complex backup
+templates remain unknown. No command is run; scripts are discarded from the
+result. Only persistent operand/backup names are listed, not sed's temporary
+files. This is not a sandbox or a claim that a write succeeded.
+Argument and backup behavior were checked against the
+[GNU sed manual](https://www.gnu.org/software/sed/manual/html_node/Command_002dLine-Options.html)
+and [FreeBSD sed reference](https://man.freebsd.org/cgi/man.cgi?query=sed&sektion=1&manpath=FreeBSD+14.0-RELEASE+and+Ports).
+
 #### When the check cannot answer
 
 Claude Code lets a PreToolUse write through when the hook times out, exits
