@@ -154,3 +154,17 @@ export async function endStateOf(
   const blobs = await workingBlobs(root, [...new Set(paths)].sort());
   return Object.fromEntries(blobs);
 }
+
+/**
+ * The working tree as it differs from `commit`: every changed, deleted or
+ * untracked path, with its blob id now (`null` where it is not a regular
+ * file). A path not in the map is as it was at `commit`. What `start` records
+ * as `baselineState` is this, taken at the start commit's instant; taken again
+ * after a tool call, two of them say what that call changed.
+ */
+export async function treeStateSince(
+  commit: string,
+  cwd: string = process.cwd(),
+): Promise<Record<string, string | null>> {
+  return endStateOf(await changedFilesSince(commit, cwd), cwd);
+}

@@ -55,6 +55,8 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       read-only.ts the short list of commands known to write no file
       commands/resolve-shell.ts one command → the writes to check, or unknown
       capture/adapters/claude-bash.ts Bash payload → cwd and command, nothing kept
+      tree-state.ts what changed between two looks at the tree (git/blobs.ts
+      treeStateSince takes a look against the start commit)
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 

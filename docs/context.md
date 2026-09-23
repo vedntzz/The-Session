@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `a539b6b start: record the blob of every file already dirty at start` (`v1.0.0-48-ga539b6b`).
+Derived at `546f5a3 stop count a file dirty at start` (`v1.0.0-49-g546f5a3`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -58,14 +58,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     131
-   18141
+     132
+   18180
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      62
-   19111
+      63
+   19194
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -1003,6 +1003,8 @@ src/  cli.ts registration   commands/ start prime stop show week scan debt survi
       read-only.ts the short list of commands known to write no file
       commands/resolve-shell.ts one command → the writes to check, or unknown
       capture/adapters/claude-bash.ts Bash payload → cwd and command, nothing kept
+      tree-state.ts what changed between two looks at the tree (git/blobs.ts
+      treeStateSince takes a look against the start commit)
 ../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
 ```
 
@@ -1023,10 +1025,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  61 passed (61)
-      Tests  2168 passed (2168)
-   Start at  11:00:35
-   Duration  159.25s (transform 1.38s, setup 0ms, collect 5.56s, tests 727.32s, environment 5ms, prepare 2.30s)
+ Test Files  62 passed (62)
+      Tests  2174 passed (2174)
+   Start at  11:10:08
+   Duration  159.17s (transform 1.12s, setup 0ms, collect 5.34s, tests 684.83s, environment 7ms, prepare 2.50s)
 ```
 
 The generator runs the behavioral suite before writing this document, then
