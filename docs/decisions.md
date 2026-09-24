@@ -28,6 +28,8 @@ first-class, and nothing assumes Claude Code.
 - [Agreements and the write check](#agreements-and-the-write-check) — terms accepted before work, and a check that never grants
 - [What a shell command writes](#what-a-shell-command-writes) — recognised, or asked about
 - [Every tool call, recorded](#every-tool-call-recorded) — signed events, unsigned before-states, the racily-clean rule
+- [The write-check event](#the-write-check-event) — what a check answered, as a record would hold it; not yet written
+- [The Jev contract](#the-jev-contract) — an optional advisor's types, frozen for Sprint 2
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
 - [The v1 boundary](#the-v1-boundary) — the freeze retired, what v1 is, and models that propose but never judge
 - [Rejected](#rejected) — `cochange`, which measured centrality, and `prime`, and the backtest that stopped it
@@ -968,6 +970,37 @@ hit can skip work but never change an answer.
 The recorders are built and not yet wired to hooks. A warm hook costs about
 200 ms, nearly all of it git process spawns; wiring waits until that is under
 100 ms ([parking lot](parking-lot.md)).
+
+## The write-check event
+
+*24 September 2026.* One write check, as the log would hold it. The type is
+`WriteCheckEvent` in `src/write-check-event.ts`; nothing writes it to the
+chain yet.
+
+```ts
+{ type: "write-check", n: number, tool: string, path: string,
+  decision: "ask" | "deny" | "not-checked", reason: string, agent: string }
+```
+
+- `n` is the session's own counter, the one tool-call records use.
+- `path` is repo-relative.
+- `decision` has no `allow`, because the check never grants (invariant 6). When the check prints nothing and the editor's own permissions decide, the event records `not-checked`. That is not compliance either.
+- `reason` is a static string or a violation code. It never holds source text, a path or an exception message.
+- `agent` is the coding tool that asked, by name. No other vendor format goes in the event.
+
+## The Jev contract
+
+*24 September 2026.* Jev contract: types frozen for Sprint 2; changes go through master.
+
+Jev is an optional advisor module, and `src/jev/interface.ts` is all of it that
+exists so far: the questions it can be asked (suggest a scope, flag a write,
+tag a task) and the shape of each answer. There is no behaviour and no
+network code. Every answer is advisory. A developer sees it, but nothing is
+ever measured against it, and it never sets scope, drift, an outcome, a class
+or a check's answer. That is why no `allow`, `ask` or `deny` appears in the
+contract. `test/jev/architecture.test.ts` holds the boundary: `src/jev/`
+imports nothing from `src/store`, `src/chain` or `src/capture`, and nothing
+outside it imports anything of Jev's but the interface.
 
 ## Finding your way around
 
