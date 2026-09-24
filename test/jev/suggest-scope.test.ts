@@ -53,6 +53,14 @@ it("collapses duplicates keeping the highest confidence and its reason", async (
   expect(await suggestScope(input)).toEqual([suggestion("src/a.ts", 0.9, "best")]);
 });
 
+it("breaks confidence ties by path regardless of response order", async () => {
+  const ascending = [suggestion("src/a.ts"), suggestion("src/b.ts")];
+  for (const response of [ascending, [...ascending].reverse()]) {
+    respond(response);
+    expect(await suggestScope(input)).toEqual(ascending);
+  }
+});
+
 it("caps at ten after ranking and deduplication", async () => {
   const candidatePaths = Array.from({ length: 12 }, (_, index) => `src/${index}.ts`);
   const suggestions = candidatePaths.map((path, index) => suggestion(path, index / 12));

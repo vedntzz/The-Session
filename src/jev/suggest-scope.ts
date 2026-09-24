@@ -23,5 +23,7 @@ export async function suggestScope(input: SuggestScopeInput): Promise<SuggestSco
       unique.set(path, { path, confidence, reason });
     }
   }
-  return [...unique.values()].sort((a, b) => b.confidence - a.confidence).slice(0, 10);
+  return [...unique.values()]
+    .sort((a, b) => b.confidence - a.confidence || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    .slice(0, 10);
 }
