@@ -991,6 +991,8 @@ chain yet.
 
 *24 September 2026.* `allow` is left out because the event records what the check answered, and the check never answers `allow`: [Agreements and the write check](#agreements-and-the-write-check) and invariant 6 in [Claude.md](../Claude.md). A union with `allow` in it would let a record claim a grant the check cannot give.
 
+*24 September 2026.* **Migration rule: logs are never migrated.** When write-check events arrive, they arrive as new records appended to the chain. No record written before them is rewritten, re-signed, backfilled or given a version bump. `verify` hashes `set` as an opaque value and never reads its keys, so an old record and a new event chain the same way. A session with no write-check events means "none recorded", not "none happened". Editing any event breaks its hash, just as editing any other record does. `test/write-check-migration.test.ts` holds this against `test/fixtures/pre-write-check/`, which is a log the writer produced before the event existed: a pre-signing line and two signed records. Its keypair is for tests only. The tests carry the event under `set.writeCheck`. The key name is settled when the writer lands.
+
 ## The Jev contract
 
 *24 September 2026.* Jev contract: types frozen for Sprint 2; changes go through master.
