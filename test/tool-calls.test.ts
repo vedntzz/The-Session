@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, realpath, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -223,7 +223,7 @@ describe("tool calls, recorded", () => {
     expect(await findCallScratch("stale", options)).toBeUndefined();
     expect(await findCallScratch("fresh", options)).toBeDefined();
     // Everything a day old, and the directory with it; run through the sweep itself.
-    for (const name of ["call-fresh.json", "session.json"]) await utimes(path.join(dir, name), old, old);
+    for (const name of await readdir(dir)) await utimes(path.join(dir, name), old, old);
     await sweep(options, Date.now());
     await expect(stat(dir)).rejects.toMatchObject({ code: "ENOENT" });
   });

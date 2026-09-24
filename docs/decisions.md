@@ -11,7 +11,7 @@ first-class, and nothing assumes Claude Code.
 
 ## Contents
 
-- [The record](#the-record) — the nine fields everything else is a query over, [one repo, two logs](#one-repo-two-logs), [where a primed intent goes](#where-a-primed-intent-goes) and [what the record keeps of a proposal](#what-the-record-keeps-of-a-proposal) — both superseded
+- [The record](#the-record) — the fields everything else is a query over, [one repo, two logs](#one-repo-two-logs), [where a primed intent goes](#where-a-primed-intent-goes) and [what the record keeps of a proposal](#what-the-record-keeps-of-a-proposal) — both superseded
 - [Colour](#colour)
 - [What it cost](#what-it-cost) — why money leads, and where the prices come from
 - [Did it ship?](#did-it-ship) — outcomes decided on content, not commit shas
@@ -25,6 +25,9 @@ first-class, and nothing assumes Claude Code.
 - [Sharing them with the team](#sharing-them-with-the-team) — sync over git refs
 - [What never leaves the machine](#what-never-leaves-the-machine) — invariant 2, amended for a team layer that sees metadata only
 - [Hook capabilities](#hook-capabilities) — what a PreToolUse hook can show, and what it cannot
+- [Agreements and the write check](#agreements-and-the-write-check) — terms accepted before work, and a check that never grants
+- [What a shell command writes](#what-a-shell-command-writes) — recognised, or asked about
+- [Every tool call, recorded](#every-tool-call-recorded) — signed events, unsigned before-states, the racily-clean rule
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
 - [The v1 boundary](#the-v1-boundary) — the freeze retired, what v1 is, and models that propose but never judge
 - [Rejected](#rejected) — `cochange`, which measured centrality, and `prime`, and the backtest that stopped it
@@ -33,13 +36,16 @@ first-class, and nothing assumes Claude Code.
 
 ## The record
 
-Nine fields. Everything else is a query over them.
+The fields everything else is a query over. `Session` in `src/store/record.ts`
+is the whole shape; these are the ones a reader needs.
 
 - **intent** — what you said you were doing, in your own words. Written once, never editable.
 - **intentSource** — **declared** if you typed the declaration at `session start`, **primed** if you reviewed the scope through Prime, **captured** if the hook took the intent off your first prompt. Prime keeps your words verbatim. Fixed when the session opens, like the intent itself.
 - **scope** — the files you expected to change. Path prefixes, matched at directory boundaries: `api/middleware/` covers everything beneath it, `api/order` never covers `api/orders.py`.
-- **baseline** — what was already modified when the session opened, so you are not billed for work that was sitting there before it.
-- **reality** — the files that actually changed, less the baseline.
+- **agreement** — optional terms accepted before work: paths, actions, sensitive paths and a policy. Signed into the first record, never patched; its paths are the scope.
+- **baseline** and **baselineState** — what was already modified when the session opened, and a blob id for each of those files at that moment.
+- **reality** — the files the session changed: the diff against the start commit, less the baseline, plus any baseline file whose content the session changed again.
+- **toolCalls** — each tool call the recorders saw, numbered, with what it changed. Built; the hooks that write it are not wired yet.
 - **cost** — four token counters, kept apart because cache reads, cache writes, input and output all bill differently; plus how much of the work produced nothing, and what those tokens came to in dollars.
 - **outcome** — merged, abandoned, open, or empty. Worked out from the repository every time it is shown, not taken on trust from the record.
 - **class** — what the session was working on: schema, api, ui, test, config, docs, build, other. Read off the paths it changed, by a table of rules you can edit.
@@ -891,6 +897,77 @@ through; only exit 2 or a JSON `deny` blocks. So the check denies at its own
 5-second deadline, inside the 10-second timeout it registers with, and exits 2
 on anything unexpected. Measured end to end in a real Claude Code run, with
 the failure modes it cannot close: [docs/agreements.md](agreements.md#when-the-check-cannot-answer).
+
+## Agreements and the write check
+
+*22 September 2026.* A declaration says what you meant to change; an
+agreement says what the agent may change, before it runs. `session start
+--review` shows the terms — paths, actions (`create`, `edit`, `delete`),
+sensitive paths, policy (`record`, `ask`, `deny`) — and only the word `accept`
+writes them, signed, into the session's first record. They are never patched:
+terms you could revise after seeing the diff would be a rationalisation, the
+same argument that fixes the intent.
+
+`session hook check` answers the editor before each write. It decides every
+path a write touches and keeps the strictest answer, and it answers only `ask`
+or `deny` or nothing — never `allow`, which would override the developer's own
+permission rules, and never the host's `defer`, which pauses a `-p` run. The
+repository and session come from the process's working directory, never from
+the payload, and a session is bound to the checkout it was started in.
+
+**Installed per repository, not per machine.** Outside a repository the check
+denies every supported write, so as a user-level hook it would block editing
+anywhere else. `session hook install --repo` writes it into that repository's
+`.claude/settings.local.json` and nowhere else.
+
+**How it fails.** The check is fail-closed for everything it can catch: a
+malformed payload, an unreadable log or a blocked path is a JSON `deny`
+(`src/commands/check-write.ts`); an error that escapes it exits 2, which the
+host treats as blocking (`src/program/hook.ts`); and it denies on its own
+5-second clock (`CHECK_DEADLINE_MS`), inside the 10-second timeout it registers
+with (`CHECK_HOOK` in `src/capture/hook.ts`). The host is fail-open for
+everything else: a timed-out hook, a crash that prints no JSON, or a `session`
+the editor cannot find on its `PATH` all let the write through. Measured end to
+end in a real Claude Code run; see [docs/agreements.md](agreements.md#when-the-check-cannot-answer).
+
+## What a shell command writes
+
+*22–23 September 2026.* A Bash call is text, and the check has to say what it
+writes without running it. Each recogniser answers with a list of paths or
+with *unknown*, and unknown is never "writes nothing": it becomes `ask`,
+"Can't tell what this writes." Recognition is positive only — npm, pnpm and
+yarn (to the manifest and lockfile), `sed -i` (read in both GNU and macOS
+syntax, known only when both agree), a trailing `>`, `tee`, `mv`, `cp`, `rm`,
+and a short list of programs no option of which writes a file. Exactly one
+recogniser must claim a command; two would be two readings of it.
+
+The tokenizer refuses anything a shell would chain, pipe, redirect, substitute
+or glob, and — because Claude Code's Bash tool runs zsh on macOS — an unquoted
+`^` and a word-initial `=`. What it cannot see is stated rather than
+approximated: what a dependency's install script writes, aliases, functions
+and `PATH`.
+
+## Every tool call, recorded
+
+*23 September 2026.* The diff at `stop` says what a session changed; it cannot
+say which call changed it. Each call gets two signed events: a start,
+`{callId, n, tool}`, numbered by the session's own counter under the log's
+lock, and an end with the paths it changed and their blobs. Every call is
+recorded, including calls that changed nothing. A call that ran while another
+was running is marked `overlapping` on both records and attributes no files —
+`changed: null`, never a guess.
+
+The tree state before a call is not signed. It lives in an unsigned scratch
+file under `~/.session/tmp/` until the call ends: signing it would put a full
+tree state per call into a permanent, pushable log. Snapshots run outside the
+lock, which covers only numbering and the append, and they are incremental: a
+path's cached blob is reused only when every stat field matches and its mtime
+is older than the look that cached it — git's racily-clean rule — so a cache
+hit can skip work but never change an answer.
+
+The recorders are built and not yet wired to hooks. A warm hook costs about
+200 ms, nearly all of it git process spawns; wiring waits until that is under
+100 ms ([parking lot](parking-lot.md)).
 
 ## Finding your way around
 

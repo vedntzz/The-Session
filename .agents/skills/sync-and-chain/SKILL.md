@@ -83,7 +83,8 @@ The tree state before a call is **not signed**. The start record is exactly
 hold the rest: `session.json`, once per session — the resolved log path (its
 repo identity), the start commit and the checkout it is found by — and
 `call-<id>.json` per call in flight, the before state, deleted once the end
-record is written. Signing the before state would put a full tree state per
+record is written; and `stat-cache.json`, each dirty path's stat fields and blob
+at the last look (see the racily-clean rule in `measurement-rules`). Signing the before state would put a full tree state per
 call into a permanent, pushable log. An end whose call file is gone is
 `unpaired`. **The snapshot runs outside the lock**; the lock covers reading
 the log, confirming the session is still open, assigning `n` and appending,

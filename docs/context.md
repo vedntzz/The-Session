@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `2c19c7e arch test` (`v1.0.0-53-g2c19c7e`).
+Derived at `362c88f tool calls: snapshot outside the lock, per-session cache` (`v1.0.0-54-g362c88f`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -27,9 +27,11 @@ section names its source, so regenerating beats amending.
 
 ## What it is
 
-A CLI that records AI coding sessions. The developer declares intent before an
-agent runs; the tool records what actually happened. The gap between the two is
-the product.
+The system of record for agent work. A CLI: the developer declares intent —
+and, optionally, accepted terms — before an agent runs; the tool records what
+actually changed, whether it landed and what it cost, signed, on the
+developer's own disk. The gap between the declaration and the diff is the
+product.
 
 ```console
 $ npm pkg get name version engines dependencies
@@ -59,13 +61,13 @@ bundler, no monorepo.
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
      136
-   18656
+   18755
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      65
-   19597
+      66
+   19695
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -194,6 +196,48 @@ None of the three is a new measurement. All are a surface onto what the tool alr
 The reason is that the surface outgrew the story once already, and not narrowly. `prime` was measured and never shipped; `cochange` shipped and was cut. The same fault both times: each measured something other than the distance between a declaration and a diff, and it took a backtest and a fold to see it.
 
 A freeze written down is worth more than one I remember. The next good idea will arrive with a rationale, and the rationale is the part I am bad at refusing.
+
+## What has shipped since the v1 boundary
+
+From the code and `git log`, 21–23 September 2026:
+
+| Area | What exists | Where |
+|---|---|---|
+| Agreement record | Terms (paths, actions, sensitive paths, policy) signed into the first record, never patched | `src/agreement.ts`, `src/store/` |
+| Review screen | `start --review`, `prime --start --review`; only `accept` saves | `src/commands/review.ts` |
+| Write check | `session hook check`: `ask`/`deny` or silence, never `allow`, for Edit, Write, MultiEdit and Bash | `src/commands/check-write.ts`, `src/agreement-decision.ts` |
+| Shell recognisers | npm/pnpm/yarn, `sed -i`, `>`, `tee`, `mv`, `cp`, `rm`, read-only list; unknown → ask "Can't tell what this writes." | `src/shell/`, `src/commands/resolve-shell.ts` |
+| Install | `session hook install --repo` / `--repo --uninstall`, this repository's `.claude/settings.local.json` only | `src/commands/hook.ts`, `src/capture/hook.ts` |
+| Start snapshot | Blob per dirty file at start; `stop` counts dirty files the session changed again | `src/commands/start.ts`, `src/commands/stop.ts` |
+| Per-call records | Signed `{callId, n, tool}` start and end events; unsigned before-state scratch; incremental snapshot with the racily-clean rule. **Not wired to a hook** | `src/tool-calls.ts`, `src/commands/tool-call.ts`, `src/store/scratch.ts`, `src/git/blobs.ts` |
+
+### How the write check fails
+
+Fail-closed for what the check can catch, fail-open for what the host decides:
+
+- A malformed or oversized payload, an unreadable log, a blocked path: JSON
+  `deny` (`src/commands/check-write.ts`, the `catch` in `evaluate`).
+- Its own deadline: `deny` at `CHECK_DEADLINE_MS`, 5 s
+  (`src/commands/check-write.ts`).
+- An error that escapes the check: exit 2, which blocks (`src/program/hook.ts`).
+- The host's timeout (10 s, `CHECK_HOOK` in `src/capture/hook.ts`), a crash
+  with no JSON, or `session` missing from the editor's `PATH`: Claude Code lets
+  the write through. Nothing in this repository sets that.
+- A `record` policy never blocks; an unrecognised shell command is `ask`.
+
+## The plan
+
+The three-screen prototype was dropped on 21 September. Per-call diff wiring
+is parked until a warm hook is under 100 ms (it is about 200 ms; the cost is
+git spawns) — see [the parking lot](parking-lot.md).
+
+**Sprint 2, 24 September – 2 October:** the contract; signed write-check
+events; a Codex adapter; a session agents view; the walkthrough; dogfooding
+under both agents.
+
+**Sprint 3, 3–9 October:** Jev, on branch `feat/jev`, built outside this
+repository's tooling, merged only if its backtest beats the 6–18% baseline;
+then the install flow and README.
 
 ## The record
 
@@ -341,7 +385,7 @@ to nest here and its relative links repointed at this directory.
 
 ```console
 $ wc -l .claude/skills/measurement-rules/SKILL.md
-     585 .claude/skills/measurement-rules/SKILL.md
+     603 .claude/skills/measurement-rules/SKILL.md
 ```
 
 That file is the copy a change is held to. **If the two ever disagree, the
@@ -418,6 +462,24 @@ A record without `baselineState` (before 23 September 2026) has nothing to
 compare with. Its reality is what it always was — the old subtraction, with
 the blind spot — and nothing is inferred to fill it. Never backfill the
 snapshot from a later tree: that would describe the wrong instant.
+
+### Per-call snapshots and the racily-clean rule
+
+A tool call's "what changed" is two looks at the tree compared
+(`treeStateChanges`). The looks are incremental (`treeStateCached`): a path's
+blob from the last look is reused only when its `mtimeNs`, `ctimeNs`, `size`
+and `ino` all match **and** its `mtimeNs` is older than the moment that look
+began (`writtenAtNs`, taken before any stat). A file whose mtime is at or after
+that moment is **racily clean** — written in the same tick the cache was
+taken, so its stat can match while its content does not — and is rehashed.
+This is git's rule for its index, and it is what makes a cache here safe to
+trust: a hit can only ever skip work, never change an answer.
+
+- The path list always comes from git, never the cache: new, deleted and
+  reverted paths are always resolved. Non-files are `null` and never cached.
+- A cold cache must give exactly `treeStateSince`'s answer; a test pins it.
+- Never widen a hit to fewer fields, or drop the time test to save a hash.
+  A wrong blob here is a wrong "changed during tool call N" on a signed record.
 
 ### Class
 
@@ -974,48 +1036,18 @@ rule against the history on this machine.
 Verbatim from `Claude.md`:
 
 ```
-src/  cli.ts registration   commands/ start prime stop show week scan debt survival pr sweep
-      verify key config settle intent home hook   render/ palette.ts (semantic)
-      terminal.ts html.ts markdown.ts pr.ts (a pull request body, from the record)
-      capture/ hook.ts, adapters/claude-code.ts, transcript.ts
-      (what a transcript line means — the adapter and scan.ts both read through it)
-      store.ts JSONL   outcome.ts merged/abandoned/open   classify.ts path rules
-      empty.ts which turns produced nothing, settled against the diff at stop
-      pricing.ts money   observe.ts repo facts   scan.ts aggregation   git.ts diff, HEAD
-      scope.ts what a declared scope covers (stop and debt share the one rule)
-      prime.ts exact-file scope suggestions from past unaided declarations
-      commands/prime.ts preview or start   program/prime.ts CLI registration
-      render/prime.ts original proposal, support and tracked-tree coverage
-      debt.ts paths that keep drifting and were never declared since, per repo
-      survival.ts whether merged work is still there at 14 and 30 days
-      commands/ui.ts terminal ownership, keys, refresh   program/ui.ts registration
-      render/tui/ screen.ts frame, state.ts keys and filters, text.ts widths and
-      safeText (record text is data, never a terminal command) — reads only
-      commands/sweep.ts settle + due checks, once a day per repo, silent unless written
-      chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
-      config.ts .session.json, checked in   ../rates.json prices per model, per Mtok
-      store/ record.ts types, append.ts writer, read.ts fold, paths.ts store location
-      agreement.ts accepted terms and validation — no tool names, no enforcement
-      commands/review.ts the --review screen   render/agreement.ts every term, visible
-      agreement-decision.ts pure defer/ask/deny for one attempted write
-      capture/write-request.ts normalised write   adapters/claude-write.ts Edit/Write
-      parser, keeps cwd and file path only   commands/resolve-write.ts read-only
-      path resolution against a trusted root   write-session.ts the one open session
-      bound to this checkout   commands/check-write.ts `session hook check`
-      shell/ words.ts one simple command's words, or unknown
-      package-manager.ts npm/pnpm/yarn → manifest and lockfile, or unknown
-      sed.ts redirect.ts tee.ts → paths written; move.ts copy.ts remove.ts →
-      requests, resolved read-only by commands/resolve-{move,copy,remove}.ts
-      read-only.ts the short list of commands known to write no file
-      commands/resolve-shell.ts one command → the writes to check, or unknown
-      capture/adapters/claude-bash.ts Bash payload → cwd and command, nothing kept
-      tree-state.ts what changed between two looks at the tree (git/blobs.ts
-      treeStateSince takes a look against the start commit)
-      tool-calls.ts one record per tool call: number, tool, what it changed
-      commands/tool-call.ts the before/after recorders, snapshot outside the lock
-      store/scratch.ts unsigned ~/.session/tmp/: per-session log path + start
-      commit, per-call before state (deleted at end); sweep prunes after a day
-../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
+src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything else is pure
+  store/ record.ts types · append.ts locked, signed writer · read.ts fold · paths.ts · scratch.ts tmp
+  chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
+  git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
+  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-write, claude-bash
+  scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts survival.ts debt.ts prime.ts scan.ts
+  agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
+  commands/check-write.ts resolve-{write,shell,move,copy,remove}.ts   session hook check
+  shell/ words.ts (zsh-safe) package-manager sed redirect tee move copy remove read-only
+  tree-state.ts tool-calls.ts commands/tool-call.ts   per-call records — built, not wired to a hook
+  render/ palette.ts (the only colour) terminal/ markdown.ts html.ts pr.ts agreement.ts tui/
+evidence/ gen-context.mjs (docs/context.md) prime-evaluate.mjs enforce-e2e.mjs
 ```
 
 ## Prices
@@ -1035,10 +1067,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  64 passed (64)
-      Tests  2205 passed (2205)
-   Start at  19:02:26
-   Duration  210.42s (transform 1.88s, setup 0ms, collect 9.34s, tests 1006.69s, environment 12ms, prepare 3.57s)
+ Test Files  65 passed (65)
+      Tests  2210 passed (2210)
+   Start at  19:45:12
+   Duration  216.82s (transform 1.97s, setup 0ms, collect 10.15s, tests 1060.84s, environment 10ms, prepare 3.66s)
 ```
 
 The generator runs the behavioral suite before writing this document, then
@@ -1066,8 +1098,10 @@ terminal-output
 
 Each covers one area and is loaded when that area is what is being changed:
 `measurement-rules` (outcome, class, intent source, scan, debt, survival,
-Prime, money), `sync-and-chain` (the line on disk, verify, refs),
-`terminal-output` (CLI surface, colour, Markdown, the pull request body).
+Prime, money, reality, per-call snapshots), `sync-and-chain` (the line on
+disk, unsigned scratch, verify, refs), `terminal-output` (CLI surface, colour,
+Markdown, the pull request body, the review screen), `agreements-and-enforcement`
+(terms, the write check, shell recognition).
 
 ## Regenerating this file
 

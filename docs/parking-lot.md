@@ -5,6 +5,15 @@ is picked up only by a later plan. Newest first. Record where each came from.
 
 ## From Sprint 2
 
+- **Per-call diff, part 3: wiring the recorders to hooks.** `beforeToolCall`
+  and `afterToolCall` (`src/commands/tool-call.ts`) are built and tested but
+  registered with no hook. Measured on 23 September 2026 with 200 dirty files:
+  a warm hook takes about 200 ms, one rehashed file about 240 ms; the lock is
+  held 1–6 ms. What remains is git process spawns (`diff`, `ls-files`,
+  `rev-parse`), not the log. Target before wiring: under 100 ms per hook, or
+  every tool call would cost the developer twice that.
+- **Three-screen prototype: dropped 21 September 2026.** It was Sprint 1's
+  Saturday item; it will not be built.
 - **Aliases, functions and `PATH`.** A name on the read-only list runs
   whatever the shell resolves it to: an alias or function from the user's rc
   file, or an earlier executable on `PATH`. The command text cannot show

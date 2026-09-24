@@ -77,6 +77,24 @@ compare with. Its reality is what it always was — the old subtraction, with
 the blind spot — and nothing is inferred to fill it. Never backfill the
 snapshot from a later tree: that would describe the wrong instant.
 
+## Per-call snapshots and the racily-clean rule
+
+A tool call's "what changed" is two looks at the tree compared
+(`treeStateChanges`). The looks are incremental (`treeStateCached`): a path's
+blob from the last look is reused only when its `mtimeNs`, `ctimeNs`, `size`
+and `ino` all match **and** its `mtimeNs` is older than the moment that look
+began (`writtenAtNs`, taken before any stat). A file whose mtime is at or after
+that moment is **racily clean** — written in the same tick the cache was
+taken, so its stat can match while its content does not — and is rehashed.
+This is git's rule for its index, and it is what makes a cache here safe to
+trust: a hit can only ever skip work, never change an answer.
+
+- The path list always comes from git, never the cache: new, deleted and
+  reverted paths are always resolved. Non-files are `null` and never cached.
+- A cold cache must give exactly `treeStateSince`'s answer; a test pins it.
+- Never widen a hit to fewer fields, or drop the time test to save a hash.
+  A wrong blob here is a wrong "changed during tool call N" on a signed record.
+
 ## Class
 
 Rationale: [What will this one cost?](../../../docs/decisions.md#what-will-this-one-cost).

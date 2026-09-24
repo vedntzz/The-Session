@@ -1,16 +1,19 @@
 // Unsigned working state for tool calls in flight. Never part of the signed
-// record: it is a cache the hooks need and nothing else does. Two kinds, both
-// under ~/.session/tmp/<session>/, both 0600, hashes and paths only:
+// record: it is a cache the hooks need and nothing else does. Three kinds, all
+// under ~/.session/tmp/<session>/, all 0600, hashes, stat fields and paths only:
 //
 // - session.json, one per session: where its log is (its repo identity,
 //   resolved once) and what it diffs against. Found by the hook's working
 //   directory, so the common path spawns no git and reads no log.
 // - call-<id>.json, one per call in flight: the tree state before it. Deleted
 //   when the call's end record is written.
+// - stat-cache.json, one per session: each dirty path's stat fields and blob
+//   at the last look, so the next look rehashes only what may have changed.
 //
 // Anything older than a day is removed by the sweep; see pruneScratch.
 import { mkdir, readdir, readFile, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { StatCache } from "../git/blobs.js";
 import type { TreeState } from "../tree-state.js";
 import { storeHome } from "./paths.js";
 import type { StoreOptions } from "./record.js";
@@ -31,6 +34,7 @@ export interface CallScratch {
 }
 
 const SESSION_FILE = "session.json";
+const STAT_FILE = "stat-cache.json";
 
 function scratchDir(options: StoreOptions): string {
   return path.join(storeHome(options), "tmp");
@@ -77,6 +81,19 @@ export async function findSessionCacheFor(cwd: string, options: StoreOptions): P
     if (!best || mtime > best.mtime) best = { cache, mtime };
   }
   return best?.cache;
+}
+
+/**
+ * Per path, the stat fields and blob of the last look, for the incremental
+ * snapshot. A cache, never evidence: a wrong or missing one costs a rehash,
+ * because every entry is checked against the file before it is trusted.
+ */
+export async function readStatCache(sessionId: string, options: StoreOptions): Promise<StatCache | undefined> {
+  return readJson<StatCache>(path.join(sessionDir(options, sessionId), STAT_FILE));
+}
+
+export async function writeStatCache(sessionId: string, cache: StatCache, options: StoreOptions): Promise<void> {
+  await writePrivate(path.join(sessionDir(options, sessionId), STAT_FILE), cache);
 }
 
 export async function deleteSessionCache(sessionId: string, options: StoreOptions): Promise<void> {

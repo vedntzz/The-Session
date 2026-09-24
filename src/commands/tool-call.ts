@@ -4,10 +4,11 @@
 // log, numbering the call and appending — so parallel calls do not queue
 // behind each other's snapshots.
 import { realpath } from "node:fs/promises";
-import { repoRoot, treeStateAfter, treeStateSince } from "../git.js";
+import { repoRoot, treeStateCached } from "../git.js";
 import {
   deleteCallScratch, deleteSessionCache, findCallScratch, findSessionCacheFor, foldLog, readLogAt,
-  readSessionCache, resolveStoreFile, writeCallScratch, writeRecordFrom, writeSessionCache,
+  readSessionCache, readStatCache, resolveStoreFile, writeCallScratch, writeRecordFrom, writeSessionCache,
+  writeStatCache,
   type Session, type SessionCache, type StoreOptions,
 } from "../store.js";
 import { endFor, startFor, type ToolCallEnd, type ToolCallStart } from "../tool-calls.js";
@@ -19,9 +20,20 @@ export interface CallHookInput {
   readonly tool: string;
 }
 
-/** Seams for tests. `snapshot` defaults to the git look at the start commit. */
+/** Seams for tests. `snapshot` defaults to the incremental look (see `look`). */
 export interface CallHookDeps {
   readonly snapshot?: (startCommit: string, cwd: string) => Promise<TreeState>;
+}
+
+/**
+ * A look at the tree against the session's start commit, rehashing only what
+ * the stat cache cannot vouch for, and saving the cache for the next look.
+ * `extra` adds paths that must be in the answer even if back at HEAD.
+ */
+async function look(cache: SessionCache, cwd: string, options: StoreOptions, extra: readonly string[] = []): Promise<TreeState> {
+  const result = await treeStateCached(cache.startCommit, cwd, await readStatCache(cache.sessionId, options), extra);
+  await writeStatCache(cache.sessionId, result.cache, options);
+  return result.state;
 }
 
 function openSession(sessions: readonly Session[]): Session | undefined {
@@ -54,12 +66,12 @@ export async function beforeToolCall(
   input: CallHookInput, options: StoreOptions = {}, deps: CallHookDeps = {},
 ): Promise<ToolCallStart | undefined> {
   const cwd = options.cwd ?? process.cwd();
-  const snapshot = deps.snapshot ?? treeStateSince;
+  const snapshot = deps.snapshot;
   for (const attempt of [0, 1]) {
     const cache = (attempt === 0 ? await findSessionCacheFor(cwd, options) : undefined)
       ?? await refreshSessionCache(cwd, options);
     if (!cache) return undefined;
-    const before = await snapshot(cache.startCommit, cwd);
+    const before = snapshot ? await snapshot(cache.startCommit, cwd) : await look(cache, cwd, options);
     // Set inside the builder; declared wide so the checks below are not narrowed away.
     let outcome = "taken" as "started" | "stale" | "taken";
     let started: ToolCallStart | undefined;
@@ -92,7 +104,7 @@ export async function afterToolCall(input: CallHookInput, options: StoreOptions 
     ?? await refreshSessionCache(cwd, options);
   if (!cache) return undefined;
   // No before state means nothing to compare: the end is unpaired whatever the tree holds.
-  const after = scratch ? await treeStateAfter(scratch.before, cache.startCommit, cwd) : {};
+  const after = scratch ? await look(cache, cwd, options, Object.keys(scratch.before)) : {};
   let ended: ToolCallEnd | undefined;
   await writeRecordFrom({ ...options, storeFile: cache.storeFile }, (log) => {
     const session = foldLog(log).find((item) => item.id === (scratch?.sessionId ?? cache.sessionId));

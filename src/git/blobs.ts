@@ -186,3 +186,73 @@ export async function treeStateAfter(
   const blobs = await workingBlobs(await repoRoot(cwd), restored);
   return { ...now, ...Object.fromEntries(blobs) };
 }
+
+/** One path's stat fields when its blob was taken, as decimal strings (ns precision). */
+export interface StatEntry {
+  readonly mtimeNs: string;
+  readonly ctimeNs: string;
+  readonly size: string;
+  readonly ino: string;
+  readonly blob: string;
+}
+
+/** Blobs remembered between looks, and when the look that wrote them began. */
+export interface StatCache {
+  readonly writtenAtNs: string;
+  readonly entries: Readonly<Record<string, StatEntry>>;
+}
+
+/**
+ * `treeStateSince` (plus `extra` paths, as `treeStateAfter` needs), rehashing
+ * only what may have changed. The path list always comes from git, so new and
+ * deleted paths are always resolved; a cached blob is reused only when every
+ * stat field matches **and** the file's mtime is older than the look that
+ * cached it. A file written in the same tick as that look is racily clean — its
+ * stat can match while its content does not — so it is rehashed, as git does
+ * for its index. `writtenAtNs` is taken before any stat, so an edit landing
+ * during this look is rehashed next time too. Non-files are `null`, never
+ * cached. With no cache this is exactly `treeStateSince`.
+ */
+export async function treeStateCached(
+  commit: string,
+  cwd: string,
+  cache: StatCache | undefined,
+  extra: readonly string[] = [],
+): Promise<{ state: Record<string, string | null>; cache: StatCache }> {
+  const writtenAtNs = BigInt(Date.now()) * 1_000_000n;
+  const root = await repoRoot(cwd);
+  const dirty = await changedFilesSince(commit, cwd);
+  const paths = [...new Set([...dirty, ...extra])].sort();
+  const before = cache ? BigInt(cache.writtenAtNs) : 0n;
+
+  const state = new Map<string, string | null>();
+  const entries: Record<string, StatEntry> = {};
+  const toHash: { path: string; stat: Omit<StatEntry, "blob"> }[] = [];
+  for (const path of paths) {
+    const info = await stat(join(root, path), { bigint: true }).catch(() => undefined);
+    if (!info?.isFile()) {
+      state.set(path, null);
+      continue;
+    }
+    const fields = { mtimeNs: String(info.mtimeNs), ctimeNs: String(info.ctimeNs), size: String(info.size), ino: String(info.ino) };
+    const hit = cache?.entries[path];
+    if (hit && hit.mtimeNs === fields.mtimeNs && hit.ctimeNs === fields.ctimeNs && hit.size === fields.size &&
+      hit.ino === fields.ino && info.mtimeNs < before) {
+      state.set(path, hit.blob);
+      entries[path] = hit;
+    } else {
+      state.set(path, null); // placeholder, filled below in the same order
+      toHash.push({ path, stat: fields });
+    }
+  }
+  for (const batch of chunk(toHash, ARG_CHUNK)) {
+    const stdout = await runGit(root, ["hash-object", "--", ...batch.map((item) => item.path)]);
+    const ids = stdout.split("\n").filter((line) => line.trim() !== "");
+    batch.forEach((item, index) => {
+      const blob = ids[index]?.trim();
+      state.set(item.path, blob ?? null);
+      if (blob) entries[item.path] = { ...item.stat, blob };
+    });
+  }
+  return { state: Object.fromEntries(state), cache: { writtenAtNs: String(writtenAtNs), entries } };
+}

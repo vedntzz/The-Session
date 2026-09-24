@@ -27,9 +27,11 @@ section names its source, so regenerating beats amending.
 
 ## What it is
 
-A CLI that records AI coding sessions. The developer declares intent before an
-agent runs; the tool records what actually happened. The gap between the two is
-the product.
+The system of record for agent work. A CLI: the developer declares intent —
+and, optionally, accepted terms — before an agent runs; the tool records what
+actually changed, whether it landed and what it cost, signed, on the
+developer's own disk. The gap between the declaration and the diff is the
+product.
 
 $c_pkg
 
@@ -75,6 +77,48 @@ asserts the v1 command set against a sorted list of names.
 Verbatim from `docs/decisions.md`:
 
 $v_boundary
+
+## What has shipped since the v1 boundary
+
+From the code and `git log`, 21–23 September 2026:
+
+| Area | What exists | Where |
+|---|---|---|
+| Agreement record | Terms (paths, actions, sensitive paths, policy) signed into the first record, never patched | `src/agreement.ts`, `src/store/` |
+| Review screen | `start --review`, `prime --start --review`; only `accept` saves | `src/commands/review.ts` |
+| Write check | `session hook check`: `ask`/`deny` or silence, never `allow`, for Edit, Write, MultiEdit and Bash | `src/commands/check-write.ts`, `src/agreement-decision.ts` |
+| Shell recognisers | npm/pnpm/yarn, `sed -i`, `>`, `tee`, `mv`, `cp`, `rm`, read-only list; unknown → ask "Can't tell what this writes." | `src/shell/`, `src/commands/resolve-shell.ts` |
+| Install | `session hook install --repo` / `--repo --uninstall`, this repository's `.claude/settings.local.json` only | `src/commands/hook.ts`, `src/capture/hook.ts` |
+| Start snapshot | Blob per dirty file at start; `stop` counts dirty files the session changed again | `src/commands/start.ts`, `src/commands/stop.ts` |
+| Per-call records | Signed `{callId, n, tool}` start and end events; unsigned before-state scratch; incremental snapshot with the racily-clean rule. **Not wired to a hook** | `src/tool-calls.ts`, `src/commands/tool-call.ts`, `src/store/scratch.ts`, `src/git/blobs.ts` |
+
+### How the write check fails
+
+Fail-closed for what the check can catch, fail-open for what the host decides:
+
+- A malformed or oversized payload, an unreadable log, a blocked path: JSON
+  `deny` (`src/commands/check-write.ts`, the `catch` in `evaluate`).
+- Its own deadline: `deny` at `CHECK_DEADLINE_MS`, 5 s
+  (`src/commands/check-write.ts`).
+- An error that escapes the check: exit 2, which blocks (`src/program/hook.ts`).
+- The host's timeout (10 s, `CHECK_HOOK` in `src/capture/hook.ts`), a crash
+  with no JSON, or `session` missing from the editor's `PATH`: Claude Code lets
+  the write through. Nothing in this repository sets that.
+- A `record` policy never blocks; an unrecognised shell command is `ask`.
+
+## The plan
+
+The three-screen prototype was dropped on 21 September. Per-call diff wiring
+is parked until a warm hook is under 100 ms (it is about 200 ms; the cost is
+git spawns) — see [the parking lot](parking-lot.md).
+
+**Sprint 2, 24 September – 2 October:** the contract; signed write-check
+events; a Codex adapter; a session agents view; the walkthrough; dogfooding
+under both agents.
+
+**Sprint 3, 3–9 October:** Jev, on branch `feat/jev`, built outside this
+repository's tooling, merged only if its backtest beats the 6–18% baseline;
+then the install flow and README.
 
 ## The record
 
@@ -184,8 +228,10 @@ $c_skills
 
 Each covers one area and is loaded when that area is what is being changed:
 `measurement-rules` (outcome, class, intent source, scan, debt, survival,
-Prime, money), `sync-and-chain` (the line on disk, verify, refs),
-`terminal-output` (CLI surface, colour, Markdown, the pull request body).
+Prime, money, reality, per-call snapshots), `sync-and-chain` (the line on
+disk, unsigned scratch, verify, refs), `terminal-output` (CLI surface, colour,
+Markdown, the pull request body, the review screen), `agreements-and-enforcement`
+(terms, the write check, shell recognition).
 
 ## Regenerating this file
 

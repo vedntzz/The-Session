@@ -2,7 +2,7 @@
 
 ## What this is
 
-`session` — a CLI that records AI coding sessions. The developer declares intent before an agent runs; the tool records what actually happened. The gap between the two is the product.
+`session` is the system of record for agent work. The developer declares intent — and, if they want, accepted terms — before an agent runs; the tool records what actually changed, whether it landed, and what it cost, signed, on the developer's own disk. The gap between the declaration and the diff is the product.
 
 ## Invariants — do not violate these
 
@@ -15,133 +15,58 @@
 
 ## Stack
 
-Node 20+, TypeScript, ESM. `commander` for the CLI, `picocolors` for output. Storage is `~/.session/<repo-hash>.jsonl`, one JSON object per line, append-only. No build step beyond `tsc`. No bundler, no monorepo, no Bun.
+Node 20+, TypeScript, ESM. `commander` and `picocolors` are the only runtime dependencies. `tsc` only — no bundler, no monorepo, no Bun. The log is `~/.session/<repo-key>.jsonl` (`$SESSION_HOME` overrides), one signed JSON object per line, append-only. Unsigned working files live in `~/.session/tmp/` and are never evidence.
 
 ## Layout
 
 ```
-src/  cli.ts registration   commands/ start prime stop show week scan debt survival pr sweep
-      verify key config settle intent home hook   render/ palette.ts (semantic)
-      terminal.ts html.ts markdown.ts pr.ts (a pull request body, from the record)
-      capture/ hook.ts, adapters/claude-code.ts, transcript.ts
-      (what a transcript line means — the adapter and scan.ts both read through it)
-      store.ts JSONL   outcome.ts merged/abandoned/open   classify.ts path rules
-      empty.ts which turns produced nothing, settled against the diff at stop
-      pricing.ts money   observe.ts repo facts   scan.ts aggregation   git.ts diff, HEAD
-      scope.ts what a declared scope covers (stop and debt share the one rule)
-      prime.ts exact-file scope suggestions from past unaided declarations
-      commands/prime.ts preview or start   program/prime.ts CLI registration
-      render/prime.ts original proposal, support and tracked-tree coverage
-      debt.ts paths that keep drifting and were never declared since, per repo
-      survival.ts whether merged work is still there at 14 and 30 days
-      commands/ui.ts terminal ownership, keys, refresh   program/ui.ts registration
-      render/tui/ screen.ts frame, state.ts keys and filters, text.ts widths and
-      safeText (record text is data, never a terminal command) — reads only
-      commands/sweep.ts settle + due checks, once a day per repo, silent unless written
-      chain.ts hashes  keys.ts Ed25519  verify.ts chain walk  sync.ts refs/session/*
-      config.ts .session.json, checked in   ../rates.json prices per model, per Mtok
-      store/ record.ts types, append.ts writer, read.ts fold, paths.ts store location
-      agreement.ts accepted terms and validation — no tool names, no enforcement
-      commands/review.ts the --review screen   render/agreement.ts every term, visible
-      agreement-decision.ts pure defer/ask/deny for one attempted write
-      capture/write-request.ts normalised write   adapters/claude-write.ts Edit/Write
-      parser, keeps cwd and file path only   commands/resolve-write.ts read-only
-      path resolution against a trusted root   write-session.ts the one open session
-      bound to this checkout   commands/check-write.ts `session hook check`
-      shell/ words.ts one simple command's words, or unknown
-      package-manager.ts npm/pnpm/yarn → manifest and lockfile, or unknown
-      sed.ts redirect.ts tee.ts → paths written; move.ts copy.ts remove.ts →
-      requests, resolved read-only by commands/resolve-{move,copy,remove}.ts
-      read-only.ts the short list of commands known to write no file
-      commands/resolve-shell.ts one command → the writes to check, or unknown
-      capture/adapters/claude-bash.ts Bash payload → cwd and command, nothing kept
-      tree-state.ts what changed between two looks at the tree (git/blobs.ts
-      treeStateSince takes a look against the start commit)
-      tool-calls.ts one record per tool call: number, tool, what it changed
-      commands/tool-call.ts the before/after recorders, snapshot outside the lock
-      store/scratch.ts unsigned ~/.session/tmp/: per-session log path + start
-      commit, per-call before state (deleted at end); sweep prunes after a day
-../evidence/prime-evaluate.mjs production Prime rule, walk-forward evaluation
+src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything else is pure
+  store/ record.ts types · append.ts locked, signed writer · read.ts fold · paths.ts · scratch.ts tmp
+  chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
+  git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
+  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-write, claude-bash
+  scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts survival.ts debt.ts prime.ts scan.ts
+  agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
+  commands/check-write.ts resolve-{write,shell,move,copy,remove}.ts   session hook check
+  shell/ words.ts (zsh-safe) package-manager sed redirect tee move copy remove read-only
+  tree-state.ts tool-calls.ts commands/tool-call.ts   per-call records — built, not wired to a hook
+  render/ palette.ts (the only colour) terminal/ markdown.ts html.ts pr.ts agreement.ts tui/
+evidence/ gen-context.mjs (docs/context.md) prime-evaluate.mjs enforce-e2e.mjs
 ```
 
 ## The record
 
+`Session` in `src/store/record.ts` is the whole shape; `docs/context.md` carries it verbatim. The fields a change must know:
+
 ```ts
-type Session = {
-  id: string; repo: string; startCommit: string
-  startedAt: string; endedAt: string | null
-  intent: string | null        // immutable; null until a passive session's first prompt
+  intent: string | null        // fixed; a passive session's arrives once, from its first prompt
   intentSource?: IntentSource  // 'declared' | 'primed' | 'captured'; absent reads as declared
-  proposal?: PrimeProposal    // present exactly for primed; original suggestion,
-                               // immutable and signed at start, even if scope is replaced;
-                               // proposer?: 'prime' | 'external', absent reads as prime
-  agreement?: Agreement        // { paths, actions: create|edit|delete, sensitivePaths,
-                               // policy: record|ask|deny }; only in the creating record,
-                               // absent means none was recorded — never default terms
-  checkout?: string            // canonical checkout root from git + realpath at creation;
-                               // absent when git could not say, never guessed or backfilled
-  scope: string[]              // accepted scope, may be empty; separate from proposal;
-                               // equals agreement.paths and is fixed when one exists
-  baseline: string[]           // dirty at start, subtracted from reality
-  baselineState?: Record<string, string | null>  // blob id per baseline path at
-                               // start, null = not a file; {} = clean; creating record
-                               // only. stop adds back a baseline path whose blob moved
-  reality: string[]            // observed from git diff, less baseline, plus the
-                               // baseline paths the snapshot shows the session changed
-  drift: string[]              // reality minus scope
-  class?: SessionClass         // absent is derived from reality, never guessed
-  cost: SessionCost
-  outcome: 'open' | 'merged' | 'abandoned' | 'empty'  // what settle/mark last wrote;
-                               // views recompute it — never read this one to display
-  attribution?: Attribution    // copied from .session.json at start, not patchable
-  toolCalls?: ToolCall[]       // folded from toolCallStart/toolCallEnd event records,
-                               // never a field: { n, tool, end: { files:
-                               // [{path, blob|null}], changed: bool|null, overlapping } }.
-                               // Every call, no-ops too; overlapping calls attribute nothing
-  endState?: Record<string, string | null>  // blob id per reality path at stop, null
-                               // = deleted; what makes "did it merge" answerable
-  observations?: Observation[] // { outcome, observedAt, commit, branch, source }
-  survival?: SurvivalObservation[]  // { window: 14|30, observedAt, commit, branch,
-                               // fates: path -> survived|rewritten|deleted }. The one
-                               // figure that cannot be recomputed: the branch says what
-                               // it holds today, never what it held on day 14
-}
-// Four counters, never one sum: each bills at a different rate, so a total cannot be
-// converted back into money. Turns are prompts; calls are what each one set off.
-type TokenCounts = { inputTokens: number; cacheReadTokens: number
-                     cacheCreationTokens: number; outputTokens: number }
-type SessionCost = TokenCounts & {
-  turns: number; emptyTurns?: number  // turns that wrote no files; absent = the
-                                // record cannot say, which is every session that
-                                // changed files. Read it through empty.ts, never raw
-  apiCalls: number; callsWithoutEdits?: number  // a call is the fragments sharing a
-                                // requestId. The second is never written or shown
-                                // again: no transcript can say what a call wrote
-  model: string                 // the model that did the most calls
-  emptyTurnTokens?: TokenCounts // the four counters over the turns that wrote nothing
-  emptySource?: EmptySource     // 'git' | 'tools'; absent reads as tools, the old
-                                // rule that called a turn empty when it named no
-                                // Edit/Write tool — wrong for anything using a shell
-}
+  agreement?, proposal?, checkout?, baselineState?, attribution?  // creating record only, never patched
+  reality: string[]            // diff vs startCommit, less baseline, plus baseline paths whose blob moved
+  drift: string[]              // reality outside scope
+  outcome                      // what settle/mark last wrote; views recompute it
+  toolCalls?: ToolCall[]       // folded from signed {callId, n, tool} start/end events; changed null = unattributed
+  cost: SessionCost            // four token counters, never one sum; empty turns via empty.ts only
 ```
 
 ## Style
 
-- Small pure functions; side effects only in `commands/` and `store.ts`. Errors state what happened and what to do: `No scope set. Run session start before your agent.`
-- No emoji in CLI output — the one exception is the tick in `--md`, which is not CLI output. No spinners. No "Oops!". Colour only through `render/palette.ts`, and only as an addition to output that reads correctly without it — `!` still marks drift where colour cannot.
-- Never anthropomorphise the agent — it ran, it changed files, it cost money. Prefer adding a test over adding a log line.
+- Small pure functions; side effects in `commands/` and `store/`. Errors say what happened, then what to do.
+- No emoji in CLI output (the `--md` tick excepted), no spinners. Colour only through `render/palette.ts`, and output must read correctly without it.
+- Never anthropomorphise the agent. Prefer a test to a log line. Unknown is never rendered as nought.
 
 ## Don't
 
-- Don't let `session config` grow past attribution: who the work was for is a fact about the repo and the team, so it lives in a checked-in [`.session.json`](docs/decisions.md#who-the-work-was-for) where everyone spells the client the same way. This replaced a flat "no config files" ban, which held until attribution needed a home a team could share — don't read it as licence for a second config. `~/.session/rates.json` holds prices and nothing else. No user-level config, no `--format`, no default flags file.
-- Don't build a spec language — scope is a list of path prefixes, matched at directory boundaries.
-- Don't make the CLI phone home, and don't add a web server or anything to log into. Invariant 2 permits a team layer that receives metadata; it does not permit this tool to acquire an account, a network dependency, or a second database. `session knowledge` is a read-only graph and compact context export derived from existing records, never a second database, an inferred dependency graph, or an LLM summary. A generated file the user opens or sends is not a service.
-- Don't add a command for a second view of something another already shows, or one that measures anything other than the distance between a declaration and a diff. The freeze is retired; [the v1 boundary](docs/decisions.md#the-v1-boundary) replaced it. `show` is `week <id>`, `debt` is in `prime`, and `estimate` is gone.
+- Grow `session config` past attribution, or add any other config file. `~/.session/rates.json` holds prices only.
+- Build a spec language: scope is path prefixes at directory boundaries.
+- Phone home, run a server, or add an account. Generated files the user opens are not a service.
+- Add a command for a second view of what another shows (see [the v1 boundary](docs/decisions.md#the-v1-boundary)).
+- Emit `allow` from the check, or let an unrecognised shell command read as "writes nothing".
 
 ## The rest
 
-Rules for one area each, loaded when that area is what you are changing: `.claude/skills/measurement-rules` (outcome, class, intent source, scan, debt, survival, Prime, money), `.claude/skills/sync-and-chain` (the line on disk, verify, refs), `.claude/skills/terminal-output` (CLI surface, colour, Markdown, Prime's preview, the pull request body, the review screen), `.claude/skills/agreements-and-enforcement` (accepted terms, the write decision, payload parsing, path resolution, `session hook check`). Why any of it is this way: [docs/decisions.md](docs/decisions.md); the agreement contract in full: [docs/agreements.md](docs/agreements.md).
+Load the skill for the area you change: `.claude/skills/measurement-rules` (outcome, class, source, scan, debt, survival, Prime, money, reality, per-call snapshots), `sync-and-chain` (the line on disk, scratch, verify, refs), `terminal-output` (what a person reads), `agreements-and-enforcement` (terms, the write check, shell recognition). Why: [docs/decisions.md](docs/decisions.md). Contract: [docs/agreements.md](docs/agreements.md). Plan and current state: [docs/context.md](docs/context.md).
 
 ## Working in this repo
 
-One milestone at a time: implement it, test it, write the handoff in `claudehand off/README.md` (archiving the previous one as a numbered file beside it), then stop. Vedant reviews, stages, commits and pushes — an agent never does, and never starts the next milestone unasked. A handoff reports what was actually run: which tests, how many passed, what failed and how it was fixed. A targeted run is not called a full-suite run.
+One milestone at a time: implement, test, stop. Vedant reviews, stages, commits and pushes — an agent never does, and never starts the next milestone unasked. Report what was actually run: which tests, how many passed, what failed. A targeted run is not a full-suite run. Handoff notes in `claudehand off/` are local and untracked.
