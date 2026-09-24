@@ -988,6 +988,8 @@ chain yet.
 - `reason` is a static string or a violation code. It never holds source text, a path or an exception message.
 - `agent` is the coding tool that asked, by name. No other vendor format goes in the event.
 
+*24 September 2026.* `allow` is left out because the event records what the check answered, and the check never answers `allow`: [Agreements and the write check](#agreements-and-the-write-check) and invariant 6 in [Claude.md](../Claude.md). A union with `allow` in it would let a record claim a grant the check cannot give.
+
 ## The Jev contract
 
 *24 September 2026.* Jev contract: types frozen for Sprint 2; changes go through master.
