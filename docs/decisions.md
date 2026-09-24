@@ -979,12 +979,13 @@ chain yet.
 
 ```ts
 { type: "write-check", n: number, tool: string, path: string,
-  decision: "ask" | "deny" | "not-checked", reason: string, agent: string }
+  decision: "ask" | "deny" | "silent" | "not-checked", reason: string, agent: string }
 ```
 
 - `n` is the session's own counter, the one tool-call records use.
 - `path` is repo-relative.
-- `decision` has no `allow`, because the check never grants (invariant 6). When the check prints nothing and the editor's own permissions decide, the event records `not-checked`. That is not compliance either.
+- `decision` has no `allow`, because the check never grants (invariant 6). `silent` means the check completed and had no objection, so it printed nothing and the editor's own permissions decide. That is not compliance either.
+- `not-checked` means the check did not complete: it hit its deadline or crashed. It is kept apart from `silent` so a check that never ran cannot read as one that found nothing.
 - `reason` is a static string or a violation code. It never holds source text, a path or an exception message.
 - `agent` is the coding tool that asked, by name. No other vendor format goes in the event.
 
