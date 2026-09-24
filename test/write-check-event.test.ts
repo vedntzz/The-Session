@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { WriteCheckDecision, WriteCheckEvent } from "../src/write-check-event.js";
 
 describe("write-check event", () => {
-  it("holds ask, deny and not-checked", () => {
-    const decisions: WriteCheckDecision[] = ["ask", "deny", "not-checked"];
+  it("holds ask, deny, silent and not-checked", () => {
+    const decisions: WriteCheckDecision[] = ["ask", "deny", "silent", "not-checked"];
     const events: WriteCheckEvent[] = decisions.map((decision, n) => ({
       type: "write-check", n, tool: "Edit", path: "src/a.ts", decision, reason: "outside-paths", agent: "claude-code",
     }));

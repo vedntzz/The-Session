@@ -1,8 +1,11 @@
 // What one write check answered, as a record would hold it. Type only: not yet
 // written to the chain. Schema and reasons in docs/decisions.md.
 
-/** The check's answer. Never `allow` (invariant 6); silence is `not-checked`. */
-export type WriteCheckDecision = "ask" | "deny" | "not-checked";
+/**
+ * The check's answer. Never `allow` (invariant 6). `silent`: the check completed
+ * with no objection; `not-checked`: it hit its deadline or crashed.
+ */
+export type WriteCheckDecision = "ask" | "deny" | "silent" | "not-checked";
 
 export interface WriteCheckEvent {
   readonly type: "write-check";
