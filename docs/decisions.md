@@ -31,7 +31,7 @@ first-class, and nothing assumes Claude Code.
 - [The write-check event](#the-write-check-event) — what each check answered, signed into the chain; a crash leaves none
 - [The Jev contract](#the-jev-contract) — an optional advisor's types, frozen for Sprint 2
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
-- [The v1 boundary](#the-v1-boundary) — the freeze retired, what v1 is, and models that propose but never judge
+- [The v1 boundary](#the-v1-boundary) — the freeze retired, what v1 is, and models that propose but never judge; invariant 3, amended for an optional advisor
 - [Rejected](#rejected) — `cochange`, which measured centrality, and `prime`, and the backtest that stopped it
 
 ---
@@ -1074,7 +1074,15 @@ Nothing is removed by this. Every command below still runs, and `session help al
 
 The short `--help` is unchanged: the bare screen, `start`, `week` and `help all`.
 
-**Models may propose; they never judge.** [Invariant 3](../Claude.md) still holds in full: no model is asked whether code is good, whether scope was met, whether work shipped, or what a session meant, and no model writes prose about any of it. What it now permits is a *proposal* — a scope, an agreement, a list of sensitive paths — put in front of the developer to accept, edit or reject before the work starts. The line between the two is the one Prime already draws: a proposal is recorded whole and apart from what was accepted, it is labelled for what it is, it records its proposer — `prime` for Prime's rule, `external` for anything else that suggested it (written on every new proposal; older records without it read as prime, their bytes untouched) — and only what the developer accepted is ever measured against. A proposal that could clear drift, settle an outcome or colour a figure would be a judgement arriving by another door. This tool never calls a model.
+> **Invariant 3 amended, 25 September 2026.** It read: a model may propose
+> for the developer to accept, edit or reject, and "this tool never calls a
+> model." It now reads: an optional advisor, Jev, may be called when
+> `JEV_API_KEY` and an https `JEV_ENDPOINT` are set, and is off by default. It
+> may propose a scope, label a write for the developer, or tag a task. It never
+> decides: no allow, ask or deny, no drift, outcome, class or measured figure
+> comes from it. Only intent text and repo-relative paths leave the machine.
+
+**Models may propose; they never judge.** [Invariant 3](../Claude.md) holds as amended above: no model is asked whether code is good, whether scope was met, whether work shipped, or what a session meant, and no model writes prose about any of it. What it now permits is a *proposal* — a scope, an agreement, a list of sensitive paths — put in front of the developer to accept, edit or reject before the work starts. The line between the two is the one Prime already draws: a proposal is recorded whole and apart from what was accepted, it is labelled for what it is, it records its proposer — `prime` for Prime's rule, `external` for anything else that suggested it (written on every new proposal; older records without it read as prime, their bytes untouched) — and only what the developer accepted is ever measured against. A proposal that could clear drift, settle an outcome or colour a figure would be a judgement arriving by another door. An optional advisor (Jev, src/jev/) may be called when JEV_API_KEY and an https JEV_ENDPOINT are set; off by default. It may propose a scope, label a write for the developer, or tag a task. It never decides: no allow/ask/deny, no drift, outcome, class or measured figure comes from it. Only intent text and repo-relative paths leave the machine.
 
 ### The freeze, as it was
 
