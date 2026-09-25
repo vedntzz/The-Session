@@ -3,7 +3,7 @@ import { suggestScope } from "../../src/jev/suggest-scope.js";
 
 const fetchMock = vi.fn<typeof fetch>();
 const input = { intent: "fix CLI", candidatePaths: ["src/a.ts", "src/b.ts", "src/c.ts"] };
-const suggestion = (path = "src/a.ts", confidence = 0.5, reason = "related") => ({ path, confidence, reason });
+const suggestion = (path = "src/a.ts", confidence = 0.5, reason = "noul") => ({ path, confidence, reason });
 
 beforeEach(() => {
   vi.stubEnv("JEV_ENDPOINT", "https://jev.example/advice");
@@ -18,31 +18,34 @@ afterEach(() => {
 });
 
 function respond(value: unknown): void {
-  fetchMock.mockResolvedValue(new Response(JSON.stringify(value)));
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ answers: value })));
 }
 
+const noul = (noul: unknown) => ({ type: "noul", noul });
+
 it("requests scope with exactly the supplied intent and candidates", async () => {
-  respond([suggestion()]);
-  expect(await suggestScope(input)).toEqual([suggestion()]);
+  respond({ q0: noul(0.5) });
+  expect(await suggestScope({ ...input, candidatePaths: ["src/a.ts"] })).toEqual([suggestion()]);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({
-    question: "scope", intent: input.intent, paths: input.candidatePaths,
+    model: "jev-1.13.0", state: { intent: input.intent, files: ["src/a.ts"] },
+    questions: { q0: { type: "noul", instructions: "Will the work in `intent` edit src/a.ts?" } },
   });
 });
 
 it("never returns a path outside the exact candidates", async () => {
-  respond([suggestion(), suggestion("src/"), suggestion("src/a.ts/child"), suggestion("elsewhere")]);
-  expect(await suggestScope(input)).toEqual([suggestion()]);
+  respond({ q0: { ...noul(0.5), path: "elsewhere" }, outside: noul(1) });
+  expect(await suggestScope({ ...input, candidatePaths: ["src/a.ts"] })).toEqual([suggestion()]);
   expect(await suggestScope({ ...input, candidatePaths: [] })).toEqual([]);
 });
 
-it.each([-0.1, 1.1, "0.5", null])("drops invalid confidence %s", async (confidence) => {
-  respond([{ ...suggestion(), confidence }, suggestion("src/b.ts")]);
-  expect(await suggestScope(input)).toEqual([suggestion("src/b.ts")]);
+it.each([-0.1, 1.1, "0.5", null])("rejects invalid noul %s", async (confidence) => {
+  respond({ q0: noul(confidence), q1: noul(0.5), q2: noul(0.5) });
+  expect(await suggestScope(input)).toEqual([]);
 });
 
 it("accepts confidence boundaries and sorts descending", async () => {
-  respond([suggestion("src/a.ts", 0), suggestion("src/b.ts", 1), suggestion("src/c.ts", 0.5)]);
+  respond({ q0: noul(0), q1: noul(1), q2: noul(0.5) });
   expect(await suggestScope(input)).toEqual([
     suggestion("src/b.ts", 1), suggestion("src/c.ts", 0.5), suggestion("src/a.ts", 0),
   ]);
@@ -50,16 +53,16 @@ it("accepts confidence boundaries and sorts descending", async () => {
 
 it("breaks confidence ties by path regardless of response order", async () => {
   const ascending = [suggestion("src/a.ts"), suggestion("src/b.ts")];
-  for (const response of [ascending, [...ascending].reverse()]) {
-    respond(response);
-    expect(await suggestScope(input)).toEqual(ascending);
+  for (const keys of [["q0", "q1"], ["q1", "q0"]]) {
+    respond(Object.fromEntries(keys.map((key) => [key, noul(0.5)])));
+    expect(await suggestScope({ ...input, candidatePaths: ["src/b.ts", "src/a.ts"] })).toEqual(ascending);
   }
 });
 
 it("returns exactly the ten highest-confidence suggestions from twelve valid suggestions", async () => {
   const candidatePaths = Array.from({ length: 12 }, (_, index) => `src/${index}.ts`);
   const suggestions = candidatePaths.map((path, index) => suggestion(path, index / 11));
-  respond(suggestions);
+  respond(Object.fromEntries(suggestions.map((item, index) => [`q${index}`, noul(item.confidence)])));
   const result = await suggestScope({ ...input, candidatePaths });
   expect(result).toHaveLength(10);
   expect(result).toEqual(suggestions.slice(2).reverse());
@@ -81,3 +84,9 @@ it("returns an empty list for invalid JSON", async () => {
   expect(await suggestScope(input)).toEqual([]);
 });
 
+
+it("keeps the highest noul for duplicate candidate paths", async () => {
+  respond({ q0: noul(0.2), q1: noul(0.9), q2: noul(0.4) });
+  expect(await suggestScope({ ...input, candidatePaths: ["src/a.ts", "src/a.ts", "src/a.ts"] }))
+    .toEqual([suggestion("src/a.ts", 0.9)]);
+});
