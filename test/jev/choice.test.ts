@@ -28,3 +28,7 @@ it.each([{ a: 1 }, { a: 0.8, b: -0.2 }, { a: 1, b: 1 }, { a: "1", b: 0 }, { a: 1
 it.each(["A", "unknown", "toString"])("rejects unknown choices %s", async (choice) => {
   expect(await evaluate({ type: "choice", choice, confidence: 1, probabilities: { a: 1, b: 0 } })).toBeNull();
 });
+
+it.each([-1, 2, null, "1"])("rejects invalid API confidence %j", async (confidence) => {
+  expect(await evaluate({ type: "choice", choice: "a", confidence, probabilities: { a: 1, b: 0 } })).toBeNull();
+});

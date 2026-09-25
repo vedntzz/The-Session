@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { requestScope } from "../../src/jev/scope-answers.js";
+import { suggestScope } from "../../src/jev/suggest-scope.js";
 
 const fetchMock = vi.fn<typeof fetch>();
 const input = { intent: "fix CLI", candidatePaths: ["src/a.ts"] };
@@ -46,4 +47,19 @@ it("times out concurrent batches together after one second", async () => {
 it("makes no request for no candidates", async () => {
   expect(await requestScope({ ...input, candidatePaths: [] })).toEqual([]);
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("returns no partial ranking when one batch fails", async () => {
+  fetchMock.mockImplementation(async (_url, options) => {
+    const { questions } = JSON.parse(options!.body as string);
+    if ("q200" in questions) throw new Error("offline");
+    return new Response(JSON.stringify({ answers: Object.fromEntries(Object.keys(questions)
+      .map((key) => [key, { type: "noul", noul: 0.9 }])) }));
+  });
+  expect(await suggestScope({ ...input, candidatePaths: Array.from({ length: 201 }, (_, i) => `${i}.ts`) })).toEqual([]);
+});
+
+it("rejects a noul that overflows to infinity", async () => {
+  fetchMock.mockResolvedValue(new Response('{"answers":{"q0":{"type":"noul","noul":1e400}}}'));
+  expect(await requestScope(input)).toBeNull();
 });

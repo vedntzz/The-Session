@@ -33,3 +33,9 @@ it("returns null on transport failure", async () => {
   fetchMock.mockRejectedValue(new Error("offline"));
   expect(await requestJev("fix CLI", [], questions)).toBeNull();
 });
+
+it.each([0, 201])("makes no request for %s questions", async (count) => {
+  const batch = Object.fromEntries(Array.from({ length: count }, (_, i) => [`q${i}`, questions.q0]));
+  expect(await requestJev("fix CLI", [], batch)).toBeNull();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
