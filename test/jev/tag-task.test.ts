@@ -22,21 +22,30 @@ afterEach(() => {
 });
 
 function respond(value: unknown): void {
-  fetchMock.mockResolvedValue(new Response(JSON.stringify(value)));
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ answers: { choice: value } })));
+}
+
+function choice(label: unknown, confidence: unknown) {
+  return { type: "choice", choice: label, confidence: 1, probabilities: {
+    ...Object.fromEntries(taskTypes.map((type) => [type, 0])), [String(label)]: confidence,
+    [label === "fix" ? "docs" : "fix"]: typeof confidence === "number" ? 1 - confidence : 0,
+  } };
 }
 
 it.each(taskTypes)("returns exact TaskType %s", async (label) => {
-  respond({ label, confidence: 0.5 });
+  respond(choice(label, 0.5));
   expect(await tagTask(input)).toBe(label);
 });
 
 it("sends the tag question, intent and changed paths", async () => {
-  respond({ label: "fix", confidence: 0.8 });
+  respond(choice("fix", 0.8));
   await tagTask(input);
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({
-    question: "tag", intent: input.intent, paths: input.changedPaths,
-  });
+  const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+  expect(body.state).toEqual({ intent: input.intent, files: input.changedPaths });
+  expect(body.questions.choice.type).toBe("choice");
+  expect(body.questions.choice.instructions).toContain("`intent`");
+  expect(Object.keys(body.questions.choice.criteria)).toEqual(taskTypes);
 });
 
 it("uses the default 1000 ms timeout", async () => {
@@ -56,23 +65,23 @@ it("uses the default 1000 ms timeout", async () => {
 
 it.each(["unknown", "Fix", "bugfix", "FIX", " fix", "fix ", "", null, 42])(
   "rejects unknown or near-miss label %j", async (label) => {
-    respond({ label, confidence: 0.5 });
+    respond(choice(label, 0.5));
     expect(await tagTask(input)).toBeNull();
   },
 );
 
 it.each([0, 1])("accepts confidence boundary %s", async (confidence) => {
-  respond({ label: "fix", confidence });
+  respond(choice("fix", confidence));
   expect(await tagTask(input)).toBe("fix");
 });
 
 it.each([-0.1, 1.1, "0.5", null, true])("rejects bad confidence %j", async (confidence) => {
-  respond({ label: "fix", confidence });
+  respond(choice("fix", confidence));
   expect(await tagTask(input)).toBeNull();
 });
 
 it("rejects a JSON number that overflows to infinity", async () => {
-  fetchMock.mockResolvedValue(new Response('{"label":"fix","confidence":1e400}'));
+  fetchMock.mockResolvedValue(new Response('{"answers":{"choice":{"type":"choice","choice":"fix","confidence":1,"probabilities":{"feature":0,"fix":1e400,"refactor":0,"test":0,"docs":0,"chore":0}}}}'));
   expect(await tagTask(input)).toBeNull();
 });
 
