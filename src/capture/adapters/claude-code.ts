@@ -11,6 +11,7 @@ import {
   type Call,
   type TranscriptLine,
 } from "../transcript.js";
+import { CLAUDE_CODE } from "./claude-name.js";
 
 /** Claude Code keeps one JSONL transcript per session, grouped by project. */
 export function defaultTranscriptRoot(): string {
@@ -145,7 +146,7 @@ export function createClaudeCodeAdapter(options: ClaudeCodeOptions = {}): Adapte
   const root = options.root ?? defaultTranscriptRoot();
 
   return {
-    name: "claude-code",
+    name: CLAUDE_CODE,
     isAvailable: () => isDirectory(root),
     capture: (window) => captureWindow(root, window),
   };

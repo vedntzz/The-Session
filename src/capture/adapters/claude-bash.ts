@@ -9,7 +9,7 @@ export interface ShellCommandRequest {
 }
 
 export type ShellRequestResult =
-  | { kind: "shell"; request: ShellCommandRequest }
+  | { kind: "shell"; tool: string; request: ShellCommandRequest }
   | { kind: "unsupported" }
   | { kind: "invalid"; reason: "payload-too-large" | "invalid-json" | "invalid-event" | "invalid-input" };
 
@@ -38,5 +38,5 @@ export function parseClaudeBash(payload: string): ShellRequestResult {
   if (typeof value.cwd !== "string" || !value.cwd || !object(input) || typeof input.command !== "string") {
     return { kind: "invalid", reason: "invalid-input" };
   }
-  return { kind: "shell", request: { cwd: value.cwd, command: input.command } };
+  return { kind: "shell", tool: value.tool_name, request: { cwd: value.cwd, command: input.command } };
 }

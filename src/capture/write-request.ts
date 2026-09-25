@@ -6,6 +6,7 @@ export interface FileWriteRequest {
 
 /** Invalid payloads are distinct from tools this adapter does not handle. */
 export type WriteRequestResult =
-  | { kind: "write"; request: FileWriteRequest }
+  /** `tool` is the editor's own name for the call, kept for the check's record. */
+  | { kind: "write"; tool: string; request: FileWriteRequest }
   | { kind: "unsupported" }
   | { kind: "invalid"; reason: "payload-too-large" | "invalid-json" | "invalid-event" | "invalid-input" };

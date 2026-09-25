@@ -14,7 +14,7 @@ describe("Claude file-write adapter", () => {
     { tool: "MultiEdit", input: { file_path: "/repo/a.ts", edits: [edit, { ...edit, replace_all: false }] } },
   ])("extracts only metadata from $tool", ({ tool, input }) => {
     const result = parseClaudeWrite(payload(tool, input));
-    expect(result).toEqual({ kind: "write", request: { cwd: "/repo", filePath: "/repo/a.ts" } });
+    expect(result).toEqual({ kind: "write", tool, request: { cwd: "/repo", filePath: "/repo/a.ts" } });
     expect(JSON.stringify(result)).not.toContain("private");
   });
 
