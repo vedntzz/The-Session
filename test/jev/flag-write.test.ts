@@ -20,16 +20,25 @@ afterEach(() => {
 });
 
 function respond(value: unknown): void {
-  fetchMock.mockResolvedValue(new Response(JSON.stringify(value)));
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ answers: { choice: value } })));
+}
+
+function choice(label: unknown, confidence: unknown) {
+  return { type: "choice", choice: label, confidence: 1, probabilities: {
+    related: 0, unrelated: 0, unsure: 0, [String(label)]: confidence,
+    [label === "related" ? "unrelated" : "related"]: typeof confidence === "number" ? 1 - confidence : 0,
+  } };
 }
 
 it("sends the attempted path first, followed by the agreed paths", async () => {
-  respond({ label: "related", confidence: 0.8 });
+  respond(choice("related", 0.8));
   await flagWrite(input);
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({
-    question: "flag", intent: "fix CLI", paths: ["src/cli.ts", "src/", "test/"],
-  });
+  const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+  expect(body.state).toEqual({ intent: "fix CLI", files: ["src/cli.ts", "src/", "test/"] });
+  expect(body.questions.choice.type).toBe("choice");
+  expect(body.questions.choice.instructions).toContain("`intent`");
+  expect(Object.keys(body.questions.choice.criteria)).toEqual(["related", "unrelated", "unsure"]);
 });
 
 it("times out at 300 ms instead of the client default", async () => {
@@ -52,22 +61,22 @@ it.each([
   { label: "unrelated", confidence: 1 },
   { label: "unsure", confidence: 0.5 },
 ])("returns the advisory label and confidence: %j", async (response) => {
-  respond(response);
+  respond(choice(response.label, response.confidence));
   expect(await flagWrite(input)).toEqual(response);
 });
 
 it.each(["unexpected", "RELATED", "", null, 42])("rejects unknown label %j", async (label) => {
-  respond({ label, confidence: 0.5 });
+  respond(choice(label, 0.5));
   expect(await flagWrite(input)).toBeNull();
 });
 
 it.each([-0.1, 1.1, "0.5", null, true])("rejects bad confidence %j", async (confidence) => {
-  respond({ label: "related", confidence });
+  respond(choice("related", confidence));
   expect(await flagWrite(input)).toBeNull();
 });
 
 it("rejects a JSON number that overflows to infinity", async () => {
-  fetchMock.mockResolvedValue(new Response('{"label":"related","confidence":1e400}'));
+  fetchMock.mockResolvedValue(new Response('{"answers":{"choice":{"type":"choice","choice":"related","confidence":1,"probabilities":{"related":1e400,"unrelated":0,"unsure":0}}}}'));
   expect(await flagWrite(input)).toBeNull();
 });
 
@@ -79,7 +88,7 @@ it.each([null, [], {}, "bad", 1, true, { label: "related" }, { confidence: 0.5 }
 );
 
 it("returns only label and confidence, without a decision field", async () => {
-  respond({ label: "related", confidence: 0.8, decision: "ignored", extra: "ignored" });
+  respond({ ...choice("related", 0.8), decision: "ignored", extra: "ignored" });
   const result = await flagWrite(input);
   expect(result).toEqual({ label: "related", confidence: 0.8 });
   expect(result).not.toHaveProperty("decision");

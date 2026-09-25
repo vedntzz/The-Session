@@ -1,12 +1,10 @@
-import { requestJev } from "./client.js";
+import { requestChoice } from "./choice.js";
 import type { FlagWriteInput, FlagWriteOutput } from "./interface.js";
 
 export async function flagWrite(input: FlagWriteInput): Promise<FlagWriteOutput> {
-  const response = await requestJev("flag", input.intent, [input.attemptedPath, ...input.agreedPaths], 300);
-  if (typeof response !== "object" || response === null || Array.isArray(response)) return null;
-  if (!("label" in response) || !("confidence" in response)) return null;
-  const { label, confidence } = response;
-  if (label !== "related" && label !== "unrelated" && label !== "unsure") return null;
-  if (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) return null;
-  return { label, confidence };
+  const result = await requestChoice(input.intent, [input.attemptedPath, ...input.agreedPaths],
+    "How is the attempted edit in `files[0]` related to the work in `intent`, considering the agreed paths in the rest of `files`?",
+    { related: "Related to the declared work", unrelated: "Unrelated to the declared work", unsure: "Insufficient information" }, 300);
+  if (!result || (result.label !== "related" && result.label !== "unrelated" && result.label !== "unsure")) return null;
+  return { label: result.label, confidence: result.confidence };
 }
