@@ -22,7 +22,13 @@ export function registerHook(program: Command, options: ProgramOptions): void {
         process.exitCode = 2;
       } finally {
         // An answer given at the deadline must not wait on a stdin that never closed.
-        if (options.stdin === undefined) process.stdin.destroy();
+        if (options.stdin === undefined) {
+          process.stdin.destroy();
+          // Work abandoned at a deadline — a read, a wait on the log's lock —
+          // must not hold the process open past the host's timeout, which lets
+          // the write through. Exit once the answer is flushed.
+          process.stdout.write("", () => process.exit());
+        }
       }
     });
 

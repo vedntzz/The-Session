@@ -316,7 +316,7 @@ export function foldRecord(
   const existing = sessions.get(record.id);
   // Tool calls are events, not fields: folded into a list, and a `toolCalls`
   // value in any record is ignored — the list only ever comes from events.
-  const { toolCallStart, toolCallEnd, ...rest } = record.set as RecordFields & { toolCalls?: unknown };
+  const { toolCallStart, toolCallEnd, writeCheck: _event, ...rest } = record.set as RecordFields & { toolCalls?: unknown };
   const { toolCalls: _ignored, ...fields } = rest;
   const merged: Partial<Session> = {
     ...existing, ...fields, ...keptIntent(existing, record),

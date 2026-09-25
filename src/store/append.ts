@@ -255,8 +255,8 @@ export async function updateSession(
  * caller cannot quietly become the one that edits an intent.
  */
 function refusePatch(patch: SessionPatch): void {
-  if ("toolCalls" in patch || "toolCallStart" in patch || "toolCallEnd" in patch) {
-    throw new Error("Tool calls are recorded by the tool-call hooks and cannot be patched.");
+  if ("toolCalls" in patch || "toolCallStart" in patch || "toolCallEnd" in patch || "writeCheck" in patch) {
+    throw new Error("Tool calls and write checks are recorded by their hooks and cannot be patched.");
   }
   if ("baselineState" in patch) {
     throw new Error("The starting snapshot is taken at start and cannot be added or edited later.");

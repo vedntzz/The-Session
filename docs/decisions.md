@@ -28,7 +28,7 @@ first-class, and nothing assumes Claude Code.
 - [Agreements and the write check](#agreements-and-the-write-check) — terms accepted before work, and a check that never grants
 - [What a shell command writes](#what-a-shell-command-writes) — recognised, or asked about
 - [Every tool call, recorded](#every-tool-call-recorded) — signed events, unsigned before-states, the racily-clean rule
-- [The write-check event](#the-write-check-event) — what a check answered, as a record would hold it; not yet written
+- [The write-check event](#the-write-check-event) — what each check answered, signed into the chain; a crash leaves none
 - [The Jev contract](#the-jev-contract) — an optional advisor's types, frozen for Sprint 2
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
 - [The v1 boundary](#the-v1-boundary) — the freeze retired, what v1 is, and models that propose but never judge
@@ -974,22 +974,43 @@ The recorders are built and not yet wired to hooks. A warm hook costs about
 ## The write-check event
 
 *24 September 2026.* One write check, as the log would hold it. The type is
-`WriteCheckEvent` in `src/write-check-event.ts`; nothing writes it to the
-chain yet.
+`WriteCheckEvent` in `src/write-check-event.ts`. Written from 24 September;
+see [Every check, recorded](#every-check-recorded) below.
 
 ```ts
-{ type: "write-check", n: number, tool: string, path: string,
+{ type: "write-check", n: number, tool: string | null, path: string | null,
   decision: "ask" | "deny" | "silent" | "not-checked", reason: string, agent: string }
 ```
 
 - `n` is the session's own counter, the one tool-call records use.
-- `path` is repo-relative.
+- `path` is repo-relative. `path` and `tool` are `null` when not known, never `""` (24 September, before any event was written).
 - `decision` has no `allow`, because the check never grants (invariant 6). `silent` means the check completed and had no objection, so it printed nothing and the editor's own permissions decide. That is not compliance either.
-- `not-checked` means the check did not complete: it hit its deadline or crashed. It is kept apart from `silent` so a check that never ran cannot read as one that found nothing.
+- `not-checked` means the check's own deadline fired before it finished. It is kept apart from `silent` so a check that never ran cannot read as one that found nothing. A crash does not produce one; see [A crash leaves no event](#a-crash-leaves-no-event).
 - `reason` is a static string or a violation code. It never holds source text, a path or an exception message.
 - `agent` is the coding tool that asked, by name. No other vendor format goes in the event.
 
 *24 September 2026.* `allow` is left out because the event records what the check answered, and the check never answers `allow`: [Agreements and the write check](#agreements-and-the-write-check) and invariant 6 in [Claude.md](../Claude.md). A union with `allow` in it would let a record claim a grant the check cannot give.
+
+*24 September 2026.* **Migration rule: logs are never migrated.** When write-check events arrive, they arrive as new records appended to the chain. No record written before them is rewritten, re-signed, backfilled or given a version bump. `verify` hashes `set` as an opaque value and never reads its keys, so an old record and a new event chain the same way. A session with no write-check events means "none recorded", not "none happened". Editing any event breaks its hash, just as editing any other record does. `test/write-check-migration.test.ts` holds this against `test/fixtures/pre-write-check/`, which is a log the writer produced before the event existed: a pre-signing line and two signed records. Its keypair is for tests only. The tests carry the event under `set.writeCheck`. The key name is settled when the writer lands.
+
+### Every check, recorded
+
+*24 September 2026.* `session hook check` writes what it answered as a signed record, `set.writeCheck`, against the session it selected. This supersedes "the check writes nothing" in [Agreements and the write check](#agreements-and-the-write-check). The response to the host is unchanged, and so is fail-closed.
+
+- **`decision`.** `ask` and `deny` are the check's completed verdict, exactly what the host was sent. `silent` means the check completed and printed nothing. `not-checked` means `CHECK_DEADLINE_MS` fired first. At the deadline the host still gets `deny`, as before; only the event says `not-checked`, with reason `deadline`.
+- **`reason`** is a static code, never text the check read. The codes are: violation codes joined by `,`; `unknown-writes`; a blocked target's code (`invalid-path`, `outside-repo`, `not-file`, `hard-linked-file`, `filesystem-error`); a bad payload's code (`payload-too-large`, `invalid-json`, `invalid-event`, `invalid-input`); `check-failed` for any other caught error; `no-agreement`, `record-only`, `compliant` and `no-writes` for silence; and `deadline`. The host's prose reason stays in the response and is not recorded.
+- **`agent`** is the check adapter's `name`, `claude-code` today (`src/capture/check-adapter.ts`). The check has no other way to learn it.
+- **`n`** is one counter per session, shared with tool-call records: one past the highest `n` either kind holds, taken under the log's lock. The tool-call recorders now take theirs from the same counter.
+- **One event per path.** A check that resolved several paths, like `mv a b`, writes one event per path. They all share one `n` and carry the check's single answer. A check that resolved no path writes one event with `path: null`. That covers input it never read, a command whose writes are unknown, a blocked target and record-only. `tool` is `null` when the payload was never parsed.
+- **Where no event is written.** No event is written for a tool the check does not look at: `Read` is not a write check. None is written when no session is open in this checkout, because there is no chain to write to. None is written when the session cannot be chosen (two open, or an unbound agreement): the check denies, and picking one to record against would be a guess.
+- **Bounded.** Recording has its own budget, `RECORD_DEADLINE_MS` (3 s), after the check's 5 s, and a test holds the total inside the hook's 10 s timeout. A recorder that outlived the timeout would turn a denial into a timed-out hook, which the host lets through. When the budget runs out or recording fails, there is no event, never a guessed one. The CLI exits as soon as its answer is flushed, so work abandoned at either deadline cannot hold the process open.
+- **An event, not a field.** `writeCheck` is in `RecordFields`, and `updateSession` refuses it like the tool-call keys. The fold skips it, so a session carries no write-check field. No view reads events yet; one that needs them folds them into a list, as tool calls are.
+
+### A crash leaves no event
+
+*24 September 2026.* A check that dies without printing leaves nothing in the chain: no `not-checked`, no event of any kind. That covers a process that is killed, one that never starts because `session` is not on the editor's `PATH`, and an error that escapes to exit 2. Writing the event is part of the check, and whatever stops the check stops the write too. The host lets a write through in the first two cases ([docs/agreements.md](agreements.md#when-the-check-cannot-answer)). So a write can happen with no event for it.
+
+This is not papered over. A missing event is not recorded as `not-checked`: that would claim the check started and ran out of time, which nobody observed. Nothing is backfilled later from the diff either. A session's write-check events are what the check answered, not every write that happened. The diff at `stop` is still what says what happened, and a path in `reality` with no event beside it is the visible trace of this gap. Closing it would take a second process watching the first, and that is a service.
 
 ## The Jev contract
 

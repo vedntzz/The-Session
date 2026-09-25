@@ -13,6 +13,7 @@ import {
 } from "../store.js";
 import { endFor, startFor, type ToolCallEnd, type ToolCallStart } from "../tool-calls.js";
 import type { TreeState } from "../tree-state.js";
+import { nextEventNumber } from "../write-checks.js";
 
 export interface CallHookInput {
   /** The call id the editor's hook payload carries; it pairs start and end. */
@@ -78,7 +79,7 @@ export async function beforeToolCall(
     await writeRecordFrom({ ...options, storeFile: cache.storeFile }, (log) => {
       const session = foldLog(log).find((item) => item.id === cache.sessionId);
       if (!session || session.endedAt !== null) { outcome = "stale"; return undefined; }
-      started = startFor(session.toolCalls ?? [], input.callId, input.tool);
+      started = startFor(session.toolCalls ?? [], input.callId, input.tool, nextEventNumber(log, session.id));
       if (!started) return undefined;
       outcome = "started";
       return { id: session.id, set: { toolCallStart: started } };
@@ -109,7 +110,7 @@ export async function afterToolCall(input: CallHookInput, options: StoreOptions 
   await writeRecordFrom({ ...options, storeFile: cache.storeFile }, (log) => {
     const session = foldLog(log).find((item) => item.id === (scratch?.sessionId ?? cache.sessionId));
     if (!session) return undefined;
-    ended = endFor(session.toolCalls ?? [], input.callId, input.tool, scratch?.before, after);
+    ended = endFor(session.toolCalls ?? [], input.callId, input.tool, scratch?.before, after, nextEventNumber(log, session.id));
     return ended ? { id: session.id, set: { toolCallEnd: ended } } : undefined;
   });
   if (scratch) await deleteCallScratch(scratch.sessionId, input.callId, options);

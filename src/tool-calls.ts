@@ -47,10 +47,14 @@ export function nextCallNumber(calls: readonly ToolCall[]): number {
   return calls.reduce((max, call) => Math.max(max, call.n), 0) + 1;
 }
 
-/** The call a start record opens, or undefined if that call id is already open. */
-export function startFor(calls: readonly ToolCall[], callId: string, tool: string): ToolCallStart | undefined {
+/**
+ * The call a start record opens, or undefined if that call id is already open.
+ * `next` is the session's shared counter (write-checks.ts nextEventNumber),
+ * which write-check events also take numbers from.
+ */
+export function startFor(calls: readonly ToolCall[], callId: string, tool: string, next = 1): ToolCallStart | undefined {
   if (calls.some((call) => call.callId === callId)) return undefined;
-  return { callId, n: nextCallNumber(calls), tool };
+  return { callId, n: Math.max(nextCallNumber(calls), next), tool };
 }
 
 /**
@@ -64,12 +68,12 @@ export function startFor(calls: readonly ToolCall[], callId: string, tool: strin
  */
 export function endFor(
   calls: readonly ToolCall[], callId: string, tool: string,
-  before: TreeState | undefined, after: TreeState,
+  before: TreeState | undefined, after: TreeState, next = 1,
 ): ToolCallEnd | undefined {
   const call = calls.find((item) => item.callId === callId);
   if (call?.end) return undefined;
   if (!call || before === undefined || call.startSeq === undefined) {
-    return { callId, n: call?.n ?? nextCallNumber(calls), tool, files: [], changed: null, overlapping: false, unpaired: true };
+    return { callId, n: call?.n ?? Math.max(nextCallNumber(calls), next), tool, files: [], changed: null, overlapping: false, unpaired: true };
   }
   const startSeq = call.startSeq;
   const overlapping = calls.some((other) => other.callId !== callId && other.startSeq !== undefined &&

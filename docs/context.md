@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `362c88f tool calls: snapshot outside the lock, per-session cache` (`v1.0.0-54-g362c88f`).
+Derived at `cea8eb1 verify: pre-write-check logs still verify; migration rule: logs are never migrated` (`v1.0.0-62-gcea8eb1`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -50,7 +50,7 @@ $ npm pkg get name version engines dependencies
 
 ```console
 $ npm ls --omit=dev --depth=0
-@vedantzz/session@0.6.0 /Users/vedant/dev-session
+@vedantzz/session@0.6.0 /Users/vedant/dev-session-record
 ├── commander@14.0.3
 └── picocolors@1.1.1
 ```
@@ -60,14 +60,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     136
-   18755
+     144
+   19018
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      66
-   19695
+      74
+   20151
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -1044,6 +1044,7 @@ src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything el
   scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts survival.ts debt.ts prime.ts scan.ts
   agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
   commands/check-write.ts resolve-{write,shell,move,copy,remove}.ts   session hook check
+  write-check-event.ts write-checks.ts commands/record-write-check.ts capture/check-adapter.ts   its signed events
   shell/ words.ts (zsh-safe) package-manager sed redirect tee move copy remove read-only
   tree-state.ts tool-calls.ts commands/tool-call.ts   per-call records — built, not wired to a hook
   render/ palette.ts (the only colour) terminal/ markdown.ts html.ts pr.ts agreement.ts tui/
@@ -1067,10 +1068,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  65 passed (65)
-      Tests  2210 passed (2210)
-   Start at  19:45:12
-   Duration  216.82s (transform 1.97s, setup 0ms, collect 10.15s, tests 1060.84s, environment 10ms, prepare 3.66s)
+ Test Files  73 passed (73)
+      Tests  2237 passed (2237)
+   Start at  15:29:58
+   Duration  154.23s (transform 1.94s, setup 0ms, collect 7.83s, tests 706.51s, environment 6ms, prepare 2.99s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

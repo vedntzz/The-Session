@@ -38,6 +38,6 @@ export function parseClaudeWrite(payload: string): WriteRequestResult {
         edit(item) && Object.keys(item as Record<string, unknown>).every((key) =>
           ["old_string", "new_string", "replace_all"].includes(key)));
   return valid
-    ? { kind: "write", request: { cwd: value.cwd, filePath: input.file_path } }
+    ? { kind: "write", tool: value.tool_name, request: { cwd: value.cwd, filePath: input.file_path } }
     : { kind: "invalid", reason: "invalid-input" };
 }
