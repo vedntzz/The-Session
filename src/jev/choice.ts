@@ -1,4 +1,4 @@
-import { requestSystemOne } from "./client.js";
+import { requestJev } from "./client.js";
 
 function probability(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
@@ -19,6 +19,6 @@ function chosenAnswer(value: unknown, criteria: Readonly<Record<string, string |
 
 export async function requestChoice(intent: string, files: readonly string[], instructions: string, criteria: Readonly<Record<string, string | null>>, timeoutMs = 1000) {
   const questions = { choice: { type: "choice", instructions, criteria } };
-  const answers = await requestSystemOne(intent, files, questions, timeoutMs);
+  const answers = await requestJev(intent, files, questions, timeoutMs);
   return chosenAnswer(answers?.choice, criteria);
 }

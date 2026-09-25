@@ -1,8 +1,4 @@
-export async function requestJev(question: "scope" | "flag" | "tag", intent: string, paths: readonly string[], timeoutMs = 1000): Promise<unknown | null> {
-  return postJev({ question, intent, paths }, timeoutMs);
-}
-
-export async function requestSystemOne(intent: string, files: readonly string[], questions: Readonly<Record<string, unknown>>, timeoutMs = 1000): Promise<Record<string, unknown> | null> {
+export async function requestJev(intent: string, files: readonly string[], questions: Readonly<Record<string, unknown>>, timeoutMs = 1000): Promise<Record<string, unknown> | null> {
   const response = await postJev({ model: "jev-1.13.0", state: { intent, files }, questions }, timeoutMs);
   if (typeof response !== "object" || response === null || !("answers" in response)) return null;
   const { answers } = response;

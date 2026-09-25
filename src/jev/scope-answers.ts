@@ -1,4 +1,4 @@
-import { requestSystemOne } from "./client.js";
+import { requestJev } from "./client.js";
 import type { ScopeSuggestion, SuggestScopeInput } from "./interface.js";
 
 function decodeAnswers(answers: Record<string, unknown> | null, paths: readonly string[], offset: number): ScopeSuggestion[] | null {
@@ -19,7 +19,7 @@ async function requestBatch(input: SuggestScopeInput, offset: number) {
   const questions = Object.fromEntries(paths.map((path, index) => [`q${offset + index}`, {
     type: "noul", instructions: `Will the work in \`intent\` edit ${path}?`,
   }]));
-  const answers = await requestSystemOne(input.intent, input.candidatePaths, questions);
+  const answers = await requestJev(input.intent, input.candidatePaths, questions);
   return decodeAnswers(answers, paths, offset);
 }
 
