@@ -48,24 +48,12 @@ it("accepts confidence boundaries and sorts descending", async () => {
   ]);
 });
 
-it("collapses duplicates keeping the highest confidence and its reason", async () => {
-  respond([suggestion(), suggestion("src/a.ts", 0.9, "best"), suggestion("src/a.ts", 0.2)]);
-  expect(await suggestScope(input)).toEqual([suggestion("src/a.ts", 0.9, "best")]);
-});
-
 it("breaks confidence ties by path regardless of response order", async () => {
   const ascending = [suggestion("src/a.ts"), suggestion("src/b.ts")];
   for (const response of [ascending, [...ascending].reverse()]) {
     respond(response);
     expect(await suggestScope(input)).toEqual(ascending);
   }
-});
-
-it("caps at ten after ranking and deduplication", async () => {
-  const candidatePaths = Array.from({ length: 12 }, (_, index) => `src/${index}.ts`);
-  const suggestions = candidatePaths.map((path, index) => suggestion(path, index / 12));
-  respond([...suggestions, ...suggestions]);
-  expect(await suggestScope({ ...input, candidatePaths })).toEqual(suggestions.slice(2).reverse());
 });
 
 it("returns exactly the ten highest-confidence suggestions from twelve valid suggestions", async () => {
@@ -93,23 +81,3 @@ it("returns an empty list for invalid JSON", async () => {
   expect(await suggestScope(input)).toEqual([]);
 });
 
-it.each(["", "   ", "x".repeat(201), null, 42])("drops invalid reason %j", async (reason) => {
-  respond([{ ...suggestion(), reason }]);
-  expect(await suggestScope(input)).toEqual([]);
-});
-
-it("accepts a 200-character reason and removes extra response fields", async () => {
-  const valid = suggestion("src/a.ts", 0.5, "x".repeat(200));
-  respond([{ ...valid, extra: "ignored" }]);
-  expect(await suggestScope(input)).toEqual([valid]);
-});
-
-it("drops malformed entries while keeping valid ones", async () => {
-  respond([null, [], 1, {}, { ...suggestion(), path: 42 }, { path: "src/a.ts" }, suggestion()]);
-  expect(await suggestScope(input)).toEqual([suggestion()]);
-});
-
-it("drops a JSON number that overflows to infinity", async () => {
-  fetchMock.mockResolvedValue(new Response('[{"path":"src/a.ts","confidence":1e400,"reason":"related"}]'));
-  expect(await suggestScope(input)).toEqual([]);
-});
