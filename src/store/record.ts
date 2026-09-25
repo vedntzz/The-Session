@@ -236,6 +236,8 @@ export type RecordFields = Partial<Omit<Session, "id" | "toolCalls">> & {
   toolCallStart?: import("../tool-calls.js").ToolCallStart;
   /** A tool call that ran; folded into `Session.toolCalls`. */
   toolCallEnd?: import("../tool-calls.js").ToolCallEnd;
+  /** What one write check answered. An event, never a field: the fold skips it. */
+  writeCheck?: import("../write-check-event.js").WriteCheckEvent;
 };
 
 /**
@@ -251,7 +253,7 @@ export type RecordFields = Partial<Omit<Session, "id" | "toolCalls">> & {
 export type SessionPatch = Omit<
   RecordFields,
   "intent" | "intentSource" | "repo" | "attribution" | "proposal" | "agreement" | "checkout" | "baselineState"
-  | "toolCallStart" | "toolCallEnd"
+  | "toolCallStart" | "toolCallEnd" | "writeCheck"
 >;
 
 /**
