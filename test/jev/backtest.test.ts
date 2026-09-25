@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { scoreSessions } from "../../evidence/jev-backtest.mjs";
+import { test } from "vitest";
+import type { BacktestSession, ScopeSuggestion } from "../../src/jev/interface.js";
 
-const session = (changedPaths) => ({ intent: "test", candidatePaths: [], changedPaths });
-const ranked = (paths) => paths.map((path) => ({ path, confidence: 1, reason: "test" }));
+const scoringModule = "../../evidence/jev-backtest.mjs";
+const { scoreSessions } = await import(scoringModule);
+
+const session = (changedPaths: BacktestSession["changedPaths"]): BacktestSession => ({ intent: "test", candidatePaths: [], changedPaths });
+const ranked = (paths: readonly string[]): readonly ScopeSuggestion[] => paths.map((path) => ({ path, confidence: 1, reason: "test" }));
 
 test("recall uses changed files as its denominator at the exact cutoffs", () => {
   const scores = scoreSessions([session(["a", "b", "c", "d"])], [ranked(["a", "x", "y", "b", "z", "u", "v", "w", "q", "c", "d"])]);
