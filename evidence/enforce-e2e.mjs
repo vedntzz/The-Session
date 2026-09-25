@@ -6,7 +6,7 @@
 // under ~/.session is read or written. The agent step spends a few cents on
 // the caller's Claude account; --no-agent skips it and measures latency only.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -63,6 +63,17 @@ if (!process.argv.includes("--no-agent")) {
   console.log(`\nsrc/a.ts edited: ${b ? "yes (expected)" : "NO"}`);
   console.log(`notes.txt created: ${notes ? "YES (enforcement failed)" : "no (expected)"}\n`);
   if (!b || notes) process.exitCode = 1;
+
+  // What the check recorded: one signed write-check event per path it checked.
+  const store = env.SESSION_HOME;
+  const events = readdirSync(store).filter((name) => name.endsWith(".jsonl"))
+    .flatMap((name) => readFileSync(path.join(store, name), "utf8").split("\n").filter(Boolean))
+    .map((line) => JSON.parse(line).set.writeCheck).filter(Boolean);
+  console.log("write-check events");
+  for (const e of events) console.log(`  n=${e.n} ${e.tool} ${e.path ?? "(unknown)"} ${e.decision} ${e.reason} ${e.agent}`);
+  const verify = run("session", ["verify"]);
+  console.log(`\nsession verify: exit ${verify.status}\n${verify.stdout.trim()}\n`);
+  if (!events.some((e) => e.decision === "deny") || verify.status !== 0) process.exitCode = 1;
 }
 
 // Latency: a fresh process per check, as the editor runs it.

@@ -132,7 +132,13 @@ only when both agree; don't pick a dialect from the platform.
 - **Echo what it read.** Reasons are static strings and violation codes. No
   source text, no path, no exception message — invariant 2 applies to a hook
   response as much as to a network call.
-- **Write.** No record, no attempt log, no settings, no files. Record-only
+- **Write anything but its own event.** One signed `writeCheck` record per
+  path checked (`write-checks.ts`, `commands/record-write-check.ts`), bounded
+  by `RECORD_DEADLINE_MS` so the check plus recording stays inside the hook's
+  timeout — a test pins the sum. Reasons in it are static codes, like the
+  response's. At the deadline the host still gets `deny`; the event says
+  `not-checked`. A crash writes no event and nothing may invent one after the
+  fact. No settings, no files, no other records. Record-only
   measurement is the stop-time diff, as before.
 
 ## What it does not promise — keep saying so

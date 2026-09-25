@@ -107,8 +107,12 @@ selects the trusted repository and canonical checkout; the payload cannot select
 another repository. The check selects the single open session bound to that
 checkout, never the newest session from another checkout sharing the same remote.
 It checks every requested and resolved path, retaining the strictest decision.
-The command does not install itself, change settings, append attempt records,
-or modify files.
+The command does not install itself, change settings or modify files. It
+appends one signed write-check event per path it checked to the selected
+session's log — the answer, a static reason code, the tool and the adapter's
+name, never content — within its own 3-second budget after the check. No
+session open here, an unsupported tool, or a session it cannot choose writes
+none. Schema and codes: [decisions](decisions.md#every-check-recorded).
 
 `session hook install --repo` registers it for the current repository only,
 in `<root>/.claude/settings.local.json`, under the matcher
@@ -352,10 +356,10 @@ cases it can reach:
 
 | Failure | What happens |
 |---|---|
-| A step is slow or stdin never closes | Denied at the 5-second internal deadline (`CHECK_DEADLINE_MS`), inside the registered 10-second timeout; the process exits without waiting on stdin |
+| A step is slow or stdin never closes | Denied at the 5-second internal deadline (`CHECK_DEADLINE_MS`), inside the registered 10-second timeout; a `not-checked` event, reason `deadline`, is recorded within 3 more seconds if it can be; the process exits without waiting on stdin or abandoned work |
 | A caught error in the check | A static JSON denial, exit 0 |
 | An error escaping the check (e.g. stdout fails) | A static stderr reason, exit 2, which blocks |
-| `session` is not on the editor's `PATH`, Node cannot start, or the process is killed | **The write goes through.** Nothing inside the check can answer for a process that never ran |
+| `session` is not on the editor's `PATH`, Node cannot start, or the process is killed | **The write goes through, and no event is recorded.** Nothing inside the check can answer for a process that never ran ([why no event](decisions.md#a-crash-leaves-no-event)) |
 
 Enforcement is therefore only as reliable as the `session` command being
 installed where the editor can run it. When several PreToolUse hooks match,
@@ -365,18 +369,24 @@ conflicting decisions from different hooks are combined.
 #### Measured
 
 `node evidence/enforce-e2e.mjs` reproduces this in a temporary repository with
-its own `SESSION_HOME`. Run on 22 September 2026 with Claude Code 2.1.280 and
+its own `SESSION_HOME`. Run on 25 September 2026 with Claude Code 2.1.282 and
 Haiku, under a deny agreement accepting only edits under `src/`: the agent's
-Edit to `src/a.ts` went through, its Write of `notes.txt` was blocked with the
-check's reason, and the file was never created. The user-level `SessionEnd`
-hook then closed the session with everything inside scope, and `session
-verify` found the chain intact. `--no-agent` skips the paid step.
+Edit to `src/a.ts` went through and was recorded as `n=1 Edit src/a.ts silent
+compliant`; its Write of `notes.txt` was blocked with the check's reason, the
+file was never created, and it was recorded as `n=2 Write notes.txt deny
+outside-paths,action-not-accepted`. `session verify` found the chain intact.
+The script exits non-zero if no `deny` event was recorded or verify fails.
+`--no-agent` skips the paid step.
 
-One check takes about 190 ms at p95 on an Apple-silicon Mac, allowed or denied:
-roughly 30 ms of Node starting, 45 ms of loading the CLI, and the rest the git
-calls and log read that pick the checkout and session. That is 4% of the
-5-second deadline. An `ask` policy was not exercised: `claude -p` has no one to
-ask, so it needs an interactive session.
+One check, with its event recorded, takes 184 ms at p50 and 190–194 ms at p95
+on an Apple-silicon Mac, allowed or denied — against about 190 ms at p95 before
+checks were recorded. All 60 timed checks wrote their events, so the figures
+include the lock, signing and append. Of the rest, roughly 30 ms is Node
+starting, 45 ms loading the CLI, and the remainder the git calls and log read
+that pick the checkout and session. That is under 4% of the 5-second deadline.
+
+An `ask` policy is not exercised end to end: `claude -p` has no one to ask, so
+it needs an interactive session.
 
 New records capture optional immutable `checkout` metadata from Git's root and
 filesystem realpath at creation, independent of caller-supplied record fields.
