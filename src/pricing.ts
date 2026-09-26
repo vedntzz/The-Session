@@ -296,11 +296,11 @@ export function unpricedThroughout(
  * reason and cannot be the test.
  *
  * A session with turns whose tokens come to nothing is the other case, and it
- * keeps `$0.00`: that figure was measured. Nought is a claim, and this is the
- * function that decides which sessions are entitled to make it.
+ * keeps `$0.00`: that figure was measured. Turns counted without tokens
+ * (`untokenedTurns`) were not, so any of them leaves the money unknown.
  */
-export function wasMeasured(cost: Pick<SessionCost, "turns">): boolean {
-  return cost.turns > 0;
+export function wasMeasured(cost: Pick<SessionCost, "turns" | "untokenedTurns">): boolean {
+  return cost.turns > 0 && (cost.untokenedTurns ?? 0) === 0;
 }
 
 /**

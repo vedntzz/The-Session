@@ -70,6 +70,12 @@ export interface SessionCost extends TokenCounts {
    * two are told apart; no view reads this field directly.
    */
   emptySource?: EmptySource;
+  /** Turns an adapter counted but could not tokenise; any makes the money unknown. */
+  untokenedTurns?: number;
+  /** Each turn's model, in order, from adapters that record one per turn; null where none was named. */
+  turnModels?: (string | null)[];
+  /** History a tool imported into a thread, seen in the window: not a turn, never priced. */
+  importedTurnsSkipped?: number;
 }
 
 /**
