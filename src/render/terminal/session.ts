@@ -13,6 +13,7 @@ import { plainPalette, type Palette } from "../palette.js";
 import { emptyTurnsOf } from "../../empty.js";
 import {
   breakdown,
+  callsCell,
   costCell,
   NO_RATES,
   outcomeInk,
@@ -268,7 +269,7 @@ function costLines(session: Session, palette: Palette, view: View): string[] {
     return [];
   }
   const price = priceSession(session.cost, view.rates ?? NO_RATES);
-  const lines = [spentLine(session, palette, price), wasteLine(session, palette, price)];
+  const lines = [spentLine(session, palette, price), wasteLine(session, palette, price, callsCell(session.cost, view))];
   if (view.tokens) {
     lines.push(`${INDENT}${palette.meta(label("tokens"))}${palette.meta(breakdown(session.cost))}`);
   }
@@ -326,11 +327,9 @@ function spentLine(session: Session, palette: Palette, price: Price): string {
  * disk, so the figure was the tool-name guess with a number's face on. Kept on
  * old records, printed nowhere.
  */
-function wasteLine(session: Session, palette: Palette, price: Price): string {
-  const { apiCalls } = session.cost;
+function wasteLine(session: Session, palette: Palette, price: Price, counts: string): string {
   const waste = wasteCell(session, price);
   const wasted = `${INDENT}${label("no edits")}${waste.text}`;
-  const counts = plural(apiCalls, "api call", "api calls");
   return (
     `${INDENT}${palette.meta(label("no edits"))}${waste.spent ? palette.waste(waste.text) : waste.text}` +
     `${gap(wasted)}` +

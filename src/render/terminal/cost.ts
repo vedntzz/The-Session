@@ -1,9 +1,10 @@
 // The cost cells and the ink every view puts them in.
+import { callsOf, type AgentInfo } from "../../agents.js";
 import { formatUsd, rateStub, USER_RATES_FILE, type Price, type RateTable } from "../../pricing.js";
 import { emptyTokensOf } from "../../empty.js";
 import { totalTokens, type Session, type SessionCost, type SessionOutcome } from "../../store.js";
 import type { Palette } from "../palette.js";
-import { figure, INDENT } from "./text.js";
+import { figure, INDENT, plural } from "./text.js";
 
 /**
  * What a view knows beyond the sessions themselves. Both fields are absent in
@@ -28,6 +29,8 @@ export interface View {
    * `terminalWidth` for why those are not measured.
    */
   width?: number;
+  /** The agents adapters describe, so a call count none of them made reads as unknown. */
+  agents?: readonly AgentInfo[];
 }
 
 export const NO_RATES: RateTable = new Map();
@@ -53,6 +56,15 @@ export const NO_PRICE = "—";
  */
 export function pricesChecked(checked: string): string {
   return `prices checked ${checked} — override in ${RATES_HINT}`;
+}
+
+/** Stands in for a call count an agent never reported. */
+export const NO_CALLS = "— api calls";
+
+/** A session's API calls, or a dash where an agent in it counts none: unknown is never nought. */
+export function callsCell(cost: SessionCost, view: Pick<View, "agents">): string {
+  const calls = callsOf(cost, view.agents ?? []);
+  return calls === undefined ? NO_CALLS : plural(calls, "api call", "api calls");
 }
 
 /** The money, or the tokens and the reason there is no money. */
