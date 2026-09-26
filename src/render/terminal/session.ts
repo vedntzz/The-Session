@@ -21,6 +21,7 @@ import {
   type View,
 } from "./cost.js";
 import { DRIFT_MARKER, intentOf, INTENT_NOTE, NO_SCOPE, SCOPE_HINT } from "./intent.js";
+import { turnModelRows } from "./turn-models.js";
 import {
   clock,
   figure,
@@ -62,7 +63,7 @@ export function formatSession(
   // always there.
   const footer = [
     idLine(session, palette),
-    ...costLines(session, palette, view),
+    ...costLines(session, palette, view), ...turnModelRows(session, palette),
     ...attributionLines(session, palette),
     ...pricesLines(session, palette, view),
   ];
@@ -118,7 +119,6 @@ function headingLine(session: Session, palette: Palette, limit?: number): string
   const intent = flatten(intentOf(session));
   const ended = session.endedAt === null ? "still running" : clock(session.endedAt);
   const times = `${clock(session.startedAt)} → ${ended}`;
-
   // Measured off the plain text and inked afterwards: `gap` and the wrap both
   // count the characters a reader sees, and an escape code is not one.
   const lines = wrapSegments([{ text: intent, ink: palette.intent }], limit);

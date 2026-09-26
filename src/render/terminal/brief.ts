@@ -14,6 +14,7 @@ import { costCell, NO_RATES, wasteCell, type View } from "./cost.js";
 import { headOf, intentOf } from "./intent.js";
 import { summarizePaths } from "./paths.js";
 import { flatten, INDENT, plural, shortId, wrapSegments } from "./text.js";
+import { turnModelNote } from "./turn-models.js";
 
 // --- the brief views -----------------------------------------------------
 
@@ -238,7 +239,6 @@ export function formatBrief(
 ): string[] {
   const asked = askedFor(session);
   const outside = wentOutside(session);
-
   const limit = view.width;
   const lines = [
     "",
@@ -268,6 +268,6 @@ export function formatBrief(
     ),
   ];
 
-  lines.push("", `${INDENT}${palette.meta(bottomLine(session, view.rates ?? NO_RATES))}`);
+  lines.push("", `${INDENT}${palette.meta(bottomLine(session, view.rates ?? NO_RATES))}`, ...turnModelNote(session, palette));
   return lines;
 }
