@@ -1,14 +1,6 @@
-import {
-  formatUsd,
-  sessionFigure,
-  spendOf,
-  unpricedThroughout,
-  USER_RATES_FILE,
-  wasMeasured,
-  type RateTable,
-  type Spend,
-} from "../pricing.js";
+import { formatUsd, sessionFigure, spendOf, wasMeasured, type RateTable, type Spend } from "../pricing.js";
 import type { Session } from "../store.js";
+import { coverageNote, emptyNote } from "./markdown/unpriced.js";
 import { intentLegends, markedIntent, spentFigure, type View } from "./terminal.js";
 
 /**
@@ -59,9 +51,6 @@ const WORK_WIDTH = 60;
 
 /** Stands in for the part of an intent that did not fit. */
 const ELLIPSIS = "…";
-
-/** Where a reader who wants these sessions priced is sent. */
-const RATES_HINT = USER_RATES_FILE;
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -187,7 +176,7 @@ export function renderMarkdownWeek(
     headline(shown, merged, unplanned),
     weekTable(shown, rates, merged, unplanned),
     emptyNote(empties, rates),
-    coverageNote(spend, shown.length),
+    coverageNote(shown, rates, spend),
     ...intentNotes(shown),
     spentClosing(spend, merged),
   ]);
@@ -286,9 +275,9 @@ function totalRow(count: number, merged: number, unplanned: number): string {
  * record: nothing was found to price, no rate would fill it, and calling it
  * `$0.00` would say a session that may well have changed files was free.
  *
- * Both are accounted for by `coverageNote` below, from the same counters. A
- * cell whose word no note underneath counts is a hole the reader can see and
- * the report will not admit to.
+ * Both are accounted for by `coverageNote` in `markdown/unpriced.ts`, from the
+ * same counters. A cell whose word no note underneath counts is a hole the
+ * reader can see and the report will not admit to.
  *
  * The figure itself is `sessionFigure`, beside the rates it needs and shared
  * with the terminal table. Only the words are decided here: a document read
@@ -301,105 +290,6 @@ function priced(session: Session, rates: RateTable): string {
     return figure;
   }
   return wasMeasured(session.cost) ? "unpriced" : "not captured";
-}
-
-/**
- * What the sessions that changed nothing cost.
- *
- * They are not in the table — nothing was attempted, so there is no row of
- * work to write — but the money was spent, and a report that dropped it would
- * be a report whose total is smaller than the bill.
- *
- * Three shapes, for the same reason the headline has two. These sessions are
- * not in `shown`, so `coverageNote` never counts them: this line is the only
- * place the document can admit that some of the bill has no rate behind it,
- * and staying silent would drop the money exactly where it cannot be totalled.
- * A clause omitted because nothing was spent and a clause omitted because
- * nothing could be priced would read the same, which is the confusion this
- * whole rule exists to prevent.
- */
-function emptyNote(empties: readonly Session[], rates: RateTable): string | undefined {
-  if (empties.length === 0) {
-    return undefined;
-  }
-  const spend = spendOf(empties, rates);
-  const cost = emptyCost(spend);
-  return (
-    `${plural(empties.length, "session", "sessions")} changed no files and ` +
-    `${empties.length === 1 ? "is" : "are"} not in the table${cost}.`
-  );
-}
-
-/**
- * What that money was, where there is a figure for it at all.
- *
- * Three ways to have none, and each says which. A model with no rate names the
- * model; a session with nothing captured names no model, because there is no
- * model on the record to name — a clause reading `an amount no rate covers ()`
- * would be this document admitting a gap and then failing to say what it was.
- * A window that simply cost nothing says nothing, since the sentence above it
- * has already said these sessions are not in the table.
- */
-function emptyCost(spend: Spend): string {
-  if (unpricedThroughout(spend)) {
-    return spend.unpriced > 0
-      ? `, costing an amount no rate covers (${spend.unpricedModels.join(", ")})`
-      : ", and nothing was captured to say what they cost";
-  }
-  return spend.usd > 0 ? `, costing ${formatUsd(spend.usd)}` : "";
-}
-
-/**
- * How much of the table the money covers, and what it leaves out.
- *
- * Said outright rather than folded in. The figure below is a total over the
- * sessions that could be priced, and a total with a silent hole in it is the
- * kind of number that ends up in an invoice — the whole reason `pricing.ts`
- * refuses to guess a rate.
- *
- * Both holes are named, and named apart. A missing rate is somebody's next
- * five minutes; a session with nothing captured is not, and pointing that
- * reader at a rates file would be pointing them at a fix for a different
- * problem. Between them they account for every cell in the column that is not
- * a figure.
- *
- * "Below", because the money is the closing line. The count is dropped where
- * nothing could be priced at all: "the cost below covers 0 of 2 sessions"
- * points at a cost the document deliberately did not print, and the closing
- * line already says so itself.
- */
-function coverageNote(spend: Spend, shown: number): string | undefined {
-  const missing = spend.unpriced + spend.uncaptured;
-  if (missing === 0) {
-    return undefined;
-  }
-
-  const nothingPriced = unpricedThroughout(spend);
-  const parts: string[] = [];
-
-  // Dropped where nothing could be priced at all: "the cost below covers 0 of
-  // 2 sessions" points at a figure the document deliberately did not print,
-  // and the closing line says so itself.
-  if (!nothingPriced) {
-    parts.push(`The cost below covers ${shown - missing} of ${shown} sessions.`);
-  }
-  if (spend.unpriced > 0) {
-    const models = spend.unpricedModels.join(", ");
-    parts.push(
-      `${plural(spend.unpriced, "session", "sessions")} ran on a model with no rate (${models}).`,
-    );
-    if (nothingPriced) {
-      parts.push(`Add one to ${RATES_HINT}.`);
-    }
-  }
-  if (spend.uncaptured > 0) {
-    parts.push(
-      `${plural(spend.uncaptured, "session", "sessions")} had no turns on the record, ` +
-        "so nothing was captured to price.",
-    );
-  }
-
-  return parts.join(" ");
 }
 
 /**
