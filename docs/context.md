@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `9937fb7 merge: jev advisor (off by default)` (`v1.0.0-80-g9937fb7`).
+Derived at `63b0de6 docs: record what Codex rollouts actually hold` (`v1.0.0-82-g63b0de6`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -82,7 +82,7 @@ document is downstream of these.
 
 1. **`intent` is immutable, and so are the accepted terms.** Written once at `session start`, never edited afterward. A declaration you can revise after seeing the result is a rationalisation. No `--edit-intent` flag, ever. The same holds for `agreement`, `proposal` and `checkout`: signed into the creating record, never patched, never added to a session that began without them, never backfilled onto an old one.
 2. **Source code, prompts and transcripts never leave the machine.** Data lives in JSONL on the user's disk. `sync.ts` moves records over a git remote the team already has, by git talking to git — nothing this project runs is a service. The tool itself needs no account, reaches no network but that remote, and sends nothing. An [optional hosted team layer](docs/decisions.md#what-never-leaves-the-machine) may take metadata only — paths, counts, decisions, outcomes, costs — and does not exist yet, so anything in this repo reaching for one is wrong. Content never crosses, under any flag.
-3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else. A model may *propose* — a scope, an agreement — for the developer to accept, edit or reject before the work; the proposal records its proposer (`prime` or `external`; older proposals without the field read as `prime` through `proposerOf`, their bytes untouched) and is recorded apart from what was accepted, as Prime's is, and only what was accepted is ever measured against. An optional advisor (Jev, src/jev/) may be called when JEV_API_KEY is set; off by default. It may propose a scope, label a write for the developer, or tag a task. It never decides: no allow/ask/deny, no drift, outcome, class or measured figure comes from it. Only intent text and repo-relative paths leave the machine. [Models propose, never judge](docs/decisions.md#the-v1-boundary).
+3. **Deterministic only.** File diffs, test exit codes, token counts from the transcript. No LLM is called to judge whether code is good, whether scope was met, or what a session "meant" — nor to write prose about any of it. `session pr` is the standing test of this: a pull request body is exactly where a generated paragraph would be most welcome and most expensive, so it is a transcription of the record and nothing else. A model may *propose* — a scope, an agreement — for the developer to accept, edit or reject before the work; the proposal records its proposer (`prime` or `external`; older proposals without the field read as `prime` through `proposerOf`, their bytes untouched) and is recorded apart from what was accepted, as Prime's is, and only what was accepted is ever measured against. An optional advisor (Jev, src/jev/) may be called when JEV_API_KEY and an https JEV_ENDPOINT are set; off by default. It may propose a scope, label a write for the developer, or tag a task. It never decides: no allow/ask/deny, no drift, outcome, class or measured figure comes from it. Only intent text and repo-relative paths leave the machine. [Models propose, never judge](docs/decisions.md#the-v1-boundary).
 4. **Turns that produced nothing are first-class.** Turns that changed no files are counted and displayed, never dropped — and where the record cannot say which turns those were, *that* is displayed rather than a nought. A transcript names the tool a call used, never what it did to the disk, so the question goes to git: `empty.ts` is the one rule, and no view reads `cost.emptyTurns` itself.
 5. **Cross-tool.** Nothing may assume a specific coding tool. Adapters go behind an interface; the core reads a normalised shape.
 6. **The write check never grants.** `session hook check` answers `ask` or `deny`, or prints nothing and leaves the editor's own permissions in charge — never `allow`, never the host's literal `defer`, never rewritten tool input. A failure it can catch is a denial, not a guess, and no response echoes source content, paths or a raw error. The payload never chooses the repository; the process cwd does.
@@ -172,12 +172,12 @@ The short `--help` is unchanged: the bare screen, `start`, `week` and `help all`
 > **Invariant 3 amended, 25 September 2026.** It read: a model may propose
 > for the developer to accept, edit or reject, and "this tool never calls a
 > model." It now reads: an optional advisor, Jev, may be called when
-> `JEV_API_KEY` is set, and is off by default. It may propose a scope, label a
-> write for the developer, or tag a task. It never decides: no allow, ask or
-> deny, no drift, outcome, class or measured figure comes from it. Only intent
-> text and repo-relative paths leave the machine.
+> `JEV_API_KEY` and an https `JEV_ENDPOINT` are set, and is off by default. It
+> may propose a scope, label a write for the developer, or tag a task. It never
+> decides: no allow, ask or deny, no drift, outcome, class or measured figure
+> comes from it. Only intent text and repo-relative paths leave the machine.
 
-**Models may propose; they never judge.** [Invariant 3](../Claude.md) still holds in full: no model is asked whether code is good, whether scope was met, whether work shipped, or what a session meant, and no model writes prose about any of it. What it now permits is a *proposal* — a scope, an agreement, a list of sensitive paths — put in front of the developer to accept, edit or reject before the work starts. The line between the two is the one Prime already draws: a proposal is recorded whole and apart from what was accepted, it is labelled for what it is, it records its proposer — `prime` for Prime's rule, `external` for anything else that suggested it (written on every new proposal; older records without it read as prime, their bytes untouched) — and only what the developer accepted is ever measured against. A proposal that could clear drift, settle an outcome or colour a figure would be a judgement arriving by another door. An optional advisor (Jev, src/jev/) may be called when JEV_API_KEY is set; off by default. It may propose a scope, label a write for the developer, or tag a task. It never decides: no allow/ask/deny, no drift, outcome, class or measured figure comes from it. Only intent text and repo-relative paths leave the machine.
+**Models may propose; they never judge.** [Invariant 3](../Claude.md) holds as amended above: no model is asked whether code is good, whether scope was met, whether work shipped, or what a session meant, and no model writes prose about any of it. What it now permits is a *proposal* — a scope, an agreement, a list of sensitive paths — put in front of the developer to accept, edit or reject before the work starts. The line between the two is the one Prime already draws: a proposal is recorded whole and apart from what was accepted, it is labelled for what it is, it records its proposer — `prime` for Prime's rule, `external` for anything else that suggested it (written on every new proposal; older records without it read as prime, their bytes untouched) — and only what the developer accepted is ever measured against. A proposal that could clear drift, settle an outcome or colour a figure would be a judgement arriving by another door. An optional advisor (Jev, src/jev/) may be called when JEV_API_KEY and an https JEV_ENDPOINT are set; off by default. It may propose a scope, label a write for the developer, or tag a task. It never decides: no allow/ask/deny, no drift, outcome, class or measured figure comes from it. Only intent text and repo-relative paths leave the machine.
 
 ### The freeze, as it was
 
@@ -1078,8 +1078,8 @@ model's rate. A release of this tool is not a price update.
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
  Test Files  78 passed (78)
       Tests  2352 passed (2352)
-   Start at  17:37:41
-   Duration  211.10s (transform 2.58s, setup 0ms, collect 11.18s, tests 1051.66s, environment 18ms, prepare 4.36s)
+   Start at  00:10:59
+   Duration  217.92s (transform 2.54s, setup 0ms, collect 11.67s, tests 1131.58s, environment 11ms, prepare 4.95s)
 ```
 
 The generator runs the behavioral suite before writing this document, then
