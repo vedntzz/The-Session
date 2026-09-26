@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `f66da41 docs: correct Codex rollout turn counts; imports excluded by prefix` (`v1.0.0-87-gf66da41`).
+Derived at `1ee06a2 week --open: the API calls counter reads — where an agent counts none, never 0` (`v1.0.0-99-g1ee06a2`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -60,14 +60,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     154
-   19449
+     159
+   19742
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      85
-   21071
+      94
+   21537
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -95,8 +95,8 @@ of it, and not from the Readme, which is prose.
 
 ```console
 $ node evidence/verbs.mjs
-top-level verbs:        20
-including subcommands:  27
+top-level verbs:        21
+including subcommands:  28
 
 start [intent]            Begin a new session
                           --scope <paths...>  --review  --passive
@@ -108,6 +108,8 @@ stop                      End the active session
                           --if-open
 week [id]                 Summarize recent sessions, or one session by its id
                           --days <n>  --client <name>  --project <name>  --outcome <state>  --class [name]  --intent <source>  --tokens  --full  --md  --copy  --open
+agents                    Each coding agent's sessions: writes checked, merged, survived 30 days, cost
+                          --days <n>
 ui                        Browse sessions in an interactive terminal interface
                           --days <n>
 knowledge                 Explore recorded session relationships and export agent context
@@ -1055,6 +1057,7 @@ src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything el
   write-check-event.ts write-checks.ts commands/record-write-check.ts capture/check-adapter.ts   its signed events
   shell/ words.ts (zsh-safe) package-manager sed redirect tee move copy remove read-only
   tree-state.ts tool-calls.ts commands/tool-call.ts   per-call records — built, not wired to a hook
+  agents.ts (which adapter captured a session; calls unknown, not nought) agents-report.ts commands/agents.ts render/terminal/agents.ts   session agents
   render/ palette.ts (the only colour) terminal/ markdown.ts html.ts pr.ts agreement.ts tui/
 evidence/ gen-context.mjs (docs/context.md) prime-evaluate.mjs enforce-e2e.mjs
 ```
@@ -1076,10 +1079,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  84 passed (84)
-      Tests  2396 passed (2396)
-   Start at  11:21:30
-   Duration  152.35s (transform 1.93s, setup 0ms, collect 7.93s, tests 685.72s, environment 8ms, prepare 3.43s)
+ Test Files  92 passed (92)
+      Tests  2438 passed (2438)
+   Start at  13:18:47
+   Duration  148.52s (transform 1.60s, setup 0ms, collect 7.86s, tests 673.90s, environment 9ms, prepare 3.34s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

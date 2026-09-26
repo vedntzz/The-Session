@@ -31,6 +31,7 @@ src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything el
   write-check-event.ts write-checks.ts commands/record-write-check.ts capture/check-adapter.ts   its signed events
   shell/ words.ts (zsh-safe) package-manager sed redirect tee move copy remove read-only
   tree-state.ts tool-calls.ts commands/tool-call.ts   per-call records — built, not wired to a hook
+  agents.ts (which adapter captured a session; calls unknown, not nought) agents-report.ts commands/agents.ts render/terminal/agents.ts   session agents
   render/ palette.ts (the only colour) terminal/ markdown.ts html.ts pr.ts agreement.ts tui/
 evidence/ gen-context.mjs (docs/context.md) prime-evaluate.mjs enforce-e2e.mjs
 ```
