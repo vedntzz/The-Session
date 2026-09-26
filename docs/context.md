@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `0fbe09f docs: agents files in the layout; regenerate context` (`v1.0.0-100-g0fbe09f`).
+Derived at `84b1bba Merge pull request #7 from vedntzz/fix/md-unpriced-reason` (`v1.0.0-105-g84b1bba`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -60,14 +60,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     159
-   19742
+     160
+   19790
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      94
-   21537
+      96
+   21601
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -1058,7 +1058,7 @@ src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything el
   shell/ words.ts (zsh-safe) package-manager sed redirect tee move copy remove read-only
   tree-state.ts tool-calls.ts commands/tool-call.ts   per-call records — built, not wired to a hook
   agents.ts (which adapter captured a session; calls unknown, not nought) agents-report.ts commands/agents.ts render/terminal/agents.ts   session agents
-  render/ palette.ts (the only colour) terminal/ markdown.ts html.ts pr.ts agreement.ts tui/
+  render/ palette.ts (the only colour) terminal/ markdown.ts markdown/ (unpriced.ts: why a cost is missing) html.ts pr.ts agreement.ts tui/
 evidence/ gen-context.mjs (docs/context.md) prime-evaluate.mjs enforce-e2e.mjs
 ```
 
@@ -1079,10 +1079,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  92 passed (92)
-      Tests  2438 passed (2438)
-   Start at  13:23:07
-   Duration  153.33s (transform 1.63s, setup 0ms, collect 7.84s, tests 686.10s, environment 7ms, prepare 3.30s)
+ Test Files  93 passed (93)
+      Tests  2442 passed (2442)
+   Start at  16:23:30
+   Duration  220.49s (transform 2.12s, setup 0ms, collect 14.53s, tests 1119.64s, environment 21ms, prepare 5.96s)
 ```
 
 The generator runs the behavioral suite before writing this document, then
