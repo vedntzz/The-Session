@@ -10,7 +10,9 @@ import { defaultAdapters } from "../src/capture/index.js";
 import { startSession } from "../src/commands/start.js";
 import { stopSession } from "../src/commands/stop.js";
 import { emptyTurnsOf } from "../src/empty.js";
-import { wasMeasured } from "../src/pricing.js";
+import { priceSession, wasMeasured } from "../src/pricing.js";
+
+const RATE = { input: 1, cacheRead: 1, cacheCreation: 1, output: 1 };
 
 const git = promisify(execFile);
 let root: string;
@@ -67,7 +69,8 @@ describe("stop with the Codex adapter", () => {
     const stopped = await stopSession(options());
     expect(stopped.cost).toMatchObject({ turns: 2, untokenedTurns: 2, turnModels: ["gpt-5.6-sol", "gpt-6-astra"] });
     expect(emptyTurnsOf(stopped)).toBe(2);
-    expect(wasMeasured(stopped.cost)).toBe(false);
+    expect(wasMeasured(stopped.cost)).toBe(true); // captured: turns were seen
+    expect(priceSession(stopped.cost, new Map([["gpt-5.6-sol", RATE], ["gpt-6-astra", RATE]])).priced).toBe(false);
   });
 
   it("takes reality from git, whatever the rollout said", async () => {

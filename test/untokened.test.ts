@@ -15,16 +15,16 @@ function session(cost: SessionCost, reality: string[] = []): Session {
 }
 
 describe("untokened turns", () => {
-  it("leave a session unmeasured, so no view prices it at nought", () => {
-    expect(wasMeasured(untokened(3))).toBe(false);
+  it("leave a session captured but unpriced, so no view prices it at nought", () => {
+    expect(wasMeasured(untokened(3))).toBe(true);
     expect(sessionFigure(untokened(3), RATES)).toBeUndefined();
-    expect(spendOf([session(untokened(3))], RATES)).toMatchObject({ usd: 0, uncaptured: 1 });
+    expect(spendOf([session(untokened(3))], RATES)).toMatchObject({ usd: 0, unpriced: 1, uncaptured: 0 });
   });
 
   it("keep a mixed session's partial tokens from reading as its whole cost", () => {
     const merged = mergeCosts([tokened, untokened(2)]);
     expect(merged).toMatchObject({ turns: 4, untokenedTurns: 2, inputTokens: 100 });
-    expect(wasMeasured(merged)).toBe(false);
+    expect(sessionFigure(merged, new Map([["claude-x", RATES.get("gpt-5.6-sol")!]]))).toBeUndefined();
   });
 
   it("stay absent through a merge where no adapter had any", () => {

@@ -57,7 +57,7 @@ export function pricesChecked(checked: string): string {
 
 /** The money, or the tokens and the reason there is no money. */
 export function costCell(cost: SessionCost, price: Price): string {
-  return price.priced ? formatUsd(price.usd) : unpricedTokens(cost);
+  return price.priced ? formatUsd(price.usd) : unpricedTokens(cost, price.model, price.reason);
 }
 
 /**
@@ -70,8 +70,9 @@ export function costCell(cost: SessionCost, price: Price): string {
  * A cost with no model at all reads `model unpriced` rather than naming an
  * empty string — nothing was captured to say which model ran.
  */
-export function unpricedTokens(cost: SessionCost): string {
-  const model = cost.model === "" ? "model" : cost.model;
+export function unpricedTokens(cost: SessionCost, named = cost.model, reason?: string): string {
+  if (reason !== undefined) return `${figure(totalTokens(cost))} tokens, unpriced: ${reason}`;
+  const model = named === "" ? "model" : named;
   return `${figure(totalTokens(cost))} tokens, ${model} unpriced`;
 }
 

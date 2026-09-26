@@ -280,7 +280,7 @@ function spendOfDebt(sessions: readonly Session[], rates: RateTable): DebtSpend 
       usd += price.usd;
     } else {
       unpriced += 1;
-      models.add(session.cost.model === "" ? "unknown" : session.cost.model);
+      models.add(price.reason ?? (price.model === "" ? "unknown" : price.model));
     }
   }
 
