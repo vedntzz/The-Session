@@ -1,0 +1,14 @@
+Jev scope backtest
+Sessions scored: 7; skipped: 0
+Session | Recall@3 (hits/changed) | Recall@10 (hits/changed)
+1 | 0.0% (0/13) | 7.7% (1/13)
+2 | 0.0% (0/13) | 7.7% (1/13)
+3 | 0.0% (0/61) | 3.3% (2/61)
+4 | 0.0% (0/1) | 0.0% (0/1)
+5 | 0.0% (0/1) | 0.0% (0/1)
+6 | 14.3% (1/7) | 71.4% (5/7)
+7 | 0.0% (0/25) | 4.0% (1/25)
+Median recall@3: 0.0%; median recall@10: 4.0%
+Old per-session baseline (supplied): 6%, 18%, 12%; median 12% (range 6–18%); sessions not matched.
+Secondary hits-per-session: top-3 1/7 (14.3%); top-10 5/7 (71.4%)
+Recall is calculated per session; empty suggestions score zero. Files are not pooled.
