@@ -25,9 +25,10 @@ beforeEach(async () => {
 const capture = (window: { from: string; to: string; cwd?: string }) => createCodexAdapter({ root }).capture(window);
 
 describe("the Codex adapter", () => {
-  it("counts every turn a rollout opened inside the window, none of them tokenised", async () => {
+  it("counts every turn a rollout started inside the window, each with the tokens it recorded", async () => {
     const cost = await capture(WHOLE);
-    expect(cost).toMatchObject({ turns: 3, untokenedTurns: 3, apiCalls: 0, inputTokens: 0, outputTokens: 0 });
+    expect(cost).toMatchObject({ turns: 3, apiCalls: 0 });
+    expect(cost.untokenedTurns).toBeUndefined();
   });
 
   it("records the model per turn when it switches mid-thread", async () => {
@@ -88,7 +89,7 @@ describe("a rollout line", () => {
   it("counts a prompt with no turn_context as one turn with a null model", () => {
     const user = line("response_item", { type: "message", role: "user", content: [] });
     const turns = fold([line("session_meta", { id: "x", cwd: "/work/repo" }), started("t9"), user]);
-    expect(turns).toEqual([{ id: "t9", at: Date.parse(at), model: null }]);
+    expect(turns).toEqual([{ id: "t9", at: Date.parse(at), model: null, tokens: null }]);
     expect(costOfTurns(turns)).toMatchObject({ turns: 1, untokenedTurns: 1, turnModels: [null], model: "" });
   });
 

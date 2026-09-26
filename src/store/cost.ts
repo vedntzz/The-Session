@@ -74,6 +74,8 @@ export interface SessionCost extends TokenCounts {
   untokenedTurns?: number;
   /** Each turn's model, in order, from adapters that record one per turn; null where none was named. */
   turnModels?: (string | null)[];
+  /** Each turn's four counters, aligned with `turnModels`; null where the turn recorded none. */
+  turnTokens?: (TokenCounts | null)[];
   /** History a tool imported into a thread, seen in the window: not a turn, never priced. */
   importedTurnsSkipped?: number;
 }

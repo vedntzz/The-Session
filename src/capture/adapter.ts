@@ -63,6 +63,7 @@ function addPerTurn(total: SessionCost, part: SessionCost): void {
   }
   if (part.turnModels !== undefined && part.turnModels.length > 0) {
     total.turnModels = [...(total.turnModels ?? []), ...part.turnModels];
+    total.turnTokens = [...(total.turnTokens ?? []), ...(part.turnTokens ?? part.turnModels.map(() => null))];
   }
   if ((part.importedTurnsSkipped ?? 0) > 0) {
     total.importedTurnsSkipped = (total.importedTurnsSkipped ?? 0) + part.importedTurnsSkipped!;
