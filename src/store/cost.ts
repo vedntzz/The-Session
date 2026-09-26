@@ -78,6 +78,8 @@ export interface SessionCost extends TokenCounts {
   turnTokens?: (TokenCounts | null)[];
   /** History a tool imported into a thread, seen in the window: not a turn, never priced. */
   importedTurnsSkipped?: number;
+  /** Adapters that found turns or calls, sorted; absent on records stopped before it — see `agentsOf`. */
+  agents?: string[];
 }
 
 /**

@@ -178,7 +178,7 @@ describe("stopSession", () => {
 
     // Reconciled even when nothing was captured: the diff still settles that
     // this session wrote a file, so the record says which rule looked.
-    expect(stopped.cost).toEqual({ ...zeroCost(), emptySource: "git" });
+    expect(stopped.cost).toEqual({ ...zeroCost(), emptySource: "git", agents: [] });
     expect(stopped.outcome).toBe("open");
   });
 
@@ -216,7 +216,7 @@ describe("stopSession", () => {
       emptyTurns: 3,
       emptySource: "git",
       apiCalls: 41,
-      model: "claude-opus-5",
+      model: "claude-opus-5", agents: ["stub"],
       emptyTurnTokens: {
         inputTokens: 1_200,
         cacheReadTokens: 70_000,
@@ -299,7 +299,7 @@ describe("stopSession", () => {
 
     expect(stopped.endedAt).not.toBeNull();
     expect(stopped.cost).toEqual({ ...zeroCost(), emptySource: "git", emptyTurns: 0,
-      emptyTurnTokens: zeroTokens() });
+      emptyTurnTokens: zeroTokens(), agents: [] });
   });
 
   it("preserves intent and scope from start", async () => {

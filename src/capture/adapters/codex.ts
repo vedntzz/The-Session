@@ -1,6 +1,7 @@
 // Codex rollouts: turns, the model each ran on, and what each spent from its token_count events.
 import { homedir } from "node:os";
 import path from "node:path";
+import type { AgentInfo } from "../../agents.js";
 import { zeroCost, type SessionCost } from "../../store.js";
 import { addTokens, dominant, NO_COST, type Adapter, type CaptureWindow } from "../adapter.js";
 import { readRollout, turnsOf, type Rollout, type RolloutTurn } from "./codex-rollout.js";
@@ -77,8 +78,11 @@ export interface CodexOptions {
   root?: string;
 }
 
+/** A rollout names no API calls; only this adapter writes a per-turn model, which marks older records. */
+export const CODEX_AGENT: AgentInfo = { name: "codex", reportsCalls: false, recognises: (cost) => (cost.turnModels?.length ?? 0) > 0 };
+
 /** Reads Codex rollouts for turns and per-turn models; reality stays git's, never FileChange's. */
 export function createCodexAdapter(options: CodexOptions = {}): Adapter {
   const root = options.root ?? defaultCodexRoot();
-  return { name: "codex", isAvailable: () => isDirectory(root), capture: (window) => captureWindow(root, window) };
+  return { name: CODEX_AGENT.name, isAvailable: () => isDirectory(root), capture: (window) => captureWindow(root, window) };
 }

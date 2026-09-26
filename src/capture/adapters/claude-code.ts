@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { SessionCost } from "../../store.js";
+import type { AgentInfo } from "../../agents.js";
 import { NO_COST, type Adapter, type CaptureWindow } from "../adapter.js";
 import {
   costOfCalls,
@@ -97,6 +98,9 @@ function inAnotherRepo(entry: Record<string, unknown>, window: CaptureWindow): b
   const entryCwd = entry["cwd"];
   return typeof entryCwd === "string" && !relatedPaths(entryCwd, window.cwd);
 }
+
+/** Counts every call; a record without `cost.agents` was captured here if it holds calls. */
+export const CLAUDE_CODE_AGENT: AgentInfo = { name: CLAUDE_CODE, reportsCalls: true, recognises: (cost) => cost.apiCalls > 0 };
 
 export interface ClaudeCodeOptions {
   /** Transcript root. Defaults to `~/.claude/projects`. */
