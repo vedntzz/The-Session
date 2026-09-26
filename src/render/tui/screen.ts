@@ -1,3 +1,4 @@
+import { callsOf, type AgentInfo } from "../../agents.js";
 import { emptyTurnsOf } from "../../empty.js";
 import { sessionFigure, spendOf, wasMeasured, type RateTable } from "../../pricing.js";
 import { hasDeclaredScope, intentSourceOf, type Session } from "../../store.js";
@@ -9,7 +10,8 @@ import { OUTCOMES, parseQuery, visibleSessions, type UiState } from "./state.js"
 import { cellWidth, fit, fold } from "./text.js";
 
 interface Line { text: string; role?: UiRole; prefix?: string; selected?: boolean }
-export interface UiData { sessions: Session[]; rates: RateTable; repo: string; days: number }
+/** `agents` lets a call count no agent made read as unknown; absent, calls print as recorded. */
+export interface UiData { sessions: Session[]; rates: RateTable; repo: string; days: number; agents?: readonly AgentInfo[] }
 
 function drift(session: Session): string {
   if (!hasDeclaredScope(session)) return "No scope declared · drift is not measured";
@@ -48,7 +50,7 @@ function costLine(session: Session, rates: RateTable): string {
     ? `${sessionFigure(session.cost, rates) ?? `unpriced (${session.cost.model})`} · ${session.cost.turns} turns`
     : "Not captured; cost and turns are unknown.";
 }
-function evidence(session: Session): Line[] {
+function evidence(session: Session, agents: readonly AgentInfo[]): Line[] {
   const lines: Line[] = [
     { text: "USAGE & EVIDENCE", role: "focus" },
     { text: `ID ${session.id}` },
@@ -65,7 +67,7 @@ function evidence(session: Session): Line[] {
   if (wasMeasured(session.cost)) {
     const empty = emptyTurnsOf(session);
     lines.push(
-      { text: `${session.cost.apiCalls} API calls · ${session.cost.model}` },
+      { text: `${callsOf(session.cost, agents) ?? "—"} API calls · ${session.cost.model}` },
       { text: empty === undefined ? "Turns that changed no files: not measured" : `${empty} turns changed no files` },
       { text: `Input: ${session.cost.inputTokens} · Cache read: ${session.cost.cacheReadTokens}` },
       { text: `Cache creation: ${session.cost.cacheCreationTokens} · Output: ${session.cost.outputTokens}` },
@@ -75,7 +77,7 @@ function evidence(session: Session): Line[] {
   return lines;
 }
 
-function entry(session: Session, selected: boolean, state: UiState, rates: RateTable, width: number): Line[] {
+function entry(session: Session, selected: boolean, state: UiState, data: UiData, width: number): Line[] {
   const expanded = selected && state.expanded;
   const rail = "         │   ";
   const first = `${clock(session.startedAt)}    ${selected ? "■" : "□"}   `;
@@ -96,11 +98,11 @@ function entry(session: Session, selected: boolean, state: UiState, rates: RateT
       for (const path of session.scope) add(path);
       if (!session.scope.length) add("No paths named.");
     }
-    add(""); add(costLine(session, rates));
+    add(""); add(costLine(session, data.rates));
     add(`[e] ${state.evidence ? "Hide" : "Usage &"} evidence`, "focus");
     if (state.evidence) {
       add("");
-      for (const line of evidence(session)) add(line.text, line.role);
+      for (const line of evidence(session, data.agents ?? [])) add(line.text, line.role);
     }
   } else if (selected) add("Enter to expand", "focus");
   lines.push({ text: "", selected }, { text: "─".repeat(width), role: "meta" }, { text: "" });
@@ -155,7 +157,7 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
   if (state.help) content.push(...HELP.flatMap((text) => fold(text, inset).map((part) => ({ text: part }))));
   else sessions.forEach((session, index) => {
     if (index === state.selected) anchor = content.length;
-    content.push(...entry(session, index === state.selected, state, data.rates, inset));
+    content.push(...entry(session, index === state.selected, state, data, inset));
   });
   if (!sessions.length && !state.help) content.push(...fold(data.sessions.length ? "No matches. Esc clears filters." : 'No sessions. Run session start "your intent" --scope <paths>.', inset).map((text) => ({ text })));
   const maxScroll = Math.max(0, content.length - anchor - height);
