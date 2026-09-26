@@ -1,5 +1,6 @@
 import { emitKeypressEvents } from "node:readline";
 import type { ReadStream, WriteStream } from "node:tty";
+import { knownAgents } from "../capture/index.js";
 import { loadRates } from "../pricing.js";
 import { repoIdentity, repoName, storeHome, type StoreOptions } from "../store.js";
 import { screenControl, plainPalette, plainUiTheme, uiThemeFor, type Palette } from "../render/palette.js";
@@ -12,7 +13,7 @@ export async function loadUi(days: number, options: StoreOptions = {}): Promise<
   const [sessions, rates, identity] = await Promise.all([
     weekSessions(days, options), loadRates(storeHome(options)), repoIdentity(options.cwd ?? process.cwd()),
   ]);
-  return { sessions: sessions.reverse(), rates, repo: repoName(identity), days };
+  return { sessions: sessions.reverse(), rates, repo: repoName(identity), days, agents: knownAgents() };
 }
 
 export interface UiTerminal { input: ReadStream; output: WriteStream }

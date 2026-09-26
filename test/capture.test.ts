@@ -450,7 +450,7 @@ describe("captureCost", () => {
       ...zeroCost(),
       outputTokens: 150,
       apiCalls: 4,
-      model: "a",
+      model: "a", agents: ["a", "b"],
     });
   });
 
@@ -461,7 +461,7 @@ describe("captureCost", () => {
       capture: async () => ({ ...zeroCost(), outputTokens: 999, apiCalls: 9, model: "nope" }),
     };
 
-    await expect(captureCost(WINDOW, [absent])).resolves.toEqual(NO_COST);
+    await expect(captureCost(WINDOW, [absent])).resolves.toEqual({ ...NO_COST, agents: [] });
   });
 
   it("treats a failing adapter as zero rather than failing the stop", async () => {
@@ -473,7 +473,7 @@ describe("captureCost", () => {
       },
     };
 
-    await expect(captureCost(WINDOW, [broken])).resolves.toEqual(NO_COST);
+    await expect(captureCost(WINDOW, [broken])).resolves.toEqual({ ...NO_COST, agents: [] });
   });
 });
 

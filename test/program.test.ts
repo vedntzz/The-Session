@@ -721,7 +721,7 @@ describe("session", () => {
       .commands.map((command) => command.name())
       .sort();
     expect(names).toEqual([
-      "config",
+      "agents", "config",
       "help",
       "hook",
       "intent",

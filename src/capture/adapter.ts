@@ -29,8 +29,9 @@ export interface Adapter {
 
 /**
  * Adds costs from several adapters together. The reported model is whichever
- * did the most calls, so a session that mixed tools still names the one that
- * did the bulk of the work; ties break alphabetically to stay deterministic.
+ * did the most calls, or with no calls the most turns, so a session that mixed
+ * tools still names the one that did the bulk of the work; ties break
+ * alphabetically to stay deterministic.
  *
  * Only what an adapter can observe on its own is added up here: tokens, turns
  * and calls. **Nothing about what was produced**, which no adapter reports any
@@ -45,13 +46,37 @@ export function mergeCosts(costs: readonly SessionCost[]): SessionCost {
     addTokens(total, cost);
     total.turns += cost.turns;
     total.apiCalls += cost.apiCalls;
+    addPerTurn(total, cost);
     if (cost.model !== "") {
       callsByModel.set(cost.model, (callsByModel.get(cost.model) ?? 0) + cost.apiCalls);
     }
   }
 
-  total.model = dominant(callsByModel);
+  total.model = dominant(callsByModel) || dominantByTurns(costs);
   return total;
+}
+
+/** Carries per-turn fields across, leaving each absent where no adapter had any. */
+function addPerTurn(total: SessionCost, part: SessionCost): void {
+  if ((part.untokenedTurns ?? 0) > 0) {
+    total.untokenedTurns = (total.untokenedTurns ?? 0) + part.untokenedTurns!;
+  }
+  if (part.turnModels !== undefined && part.turnModels.length > 0) {
+    total.turnModels = [...(total.turnModels ?? []), ...part.turnModels];
+    total.turnTokens = [...(total.turnTokens ?? []), ...(part.turnTokens ?? part.turnModels.map(() => null))];
+  }
+  if ((part.importedTurnsSkipped ?? 0) > 0) {
+    total.importedTurnsSkipped = (total.importedTurnsSkipped ?? 0) + part.importedTurnsSkipped!;
+  }
+}
+
+/** The model most turns ran on, for costs that name a model per turn and make no calls. */
+function dominantByTurns(costs: readonly SessionCost[]): string {
+  const byModel = new Map<string, number>();
+  for (const model of costs.flatMap((cost) => cost.turnModels ?? [])) {
+    if (model !== null) byModel.set(model, (byModel.get(model) ?? 0) + 1);
+  }
+  return dominant(byModel);
 }
 
 /**

@@ -1,5 +1,6 @@
 // One session as a row, and the detail it opens. No script anywhere on the
 // page: the disclosure is a `<details>`, which a keyboard already operates.
+import type { AgentInfo } from "../../agents.js";
 import { emptyTurnsOf } from "../../empty.js";
 import { priceSession, formatUsd, wasMeasured, type RateTable } from "../../pricing.js";
 import { hasDeclaredScope, intentSourceOf, totalTokens, type Session } from "../../store.js";
@@ -144,14 +145,14 @@ function summaryCells(session: Session, rates: RateTable, tokens: boolean): stri
 }
 
 /** Everything the row opens: the declaration, the diff, and the counters. */
-function detailBody(session: Session, rates: RateTable): string {
+function detailBody(session: Session, rates: RateTable, agents: readonly AgentInfo[]): string {
   return (
     `<div class="detail">` +
     sourceNote(session) +
     `<div class="panes"><div>${declaredPane(session)}</div>` +
     `<div>${changedPane(session)}</div></div>` +
     outsideBlock(session) +
-    counterBlock(session, rates) +
+    counterBlock(session, rates, agents) +
     tokenBlock(session) +
     observationBlock(session) +
     "</div>"
@@ -164,12 +165,13 @@ export function renderRow(
   heaviest: number,
   rates: RateTable,
   tokens: boolean,
+  agents: readonly AgentInfo[] = [],
 ): string {
   const height = rowHeight(weight, heaviest);
   const classes = session.outcome === "abandoned" ? "row abandoned" : "row";
   return (
     `<li class="${classes}"><details><summary class="cells" style="height:${height}px">` +
     summaryCells(session, rates, tokens) +
-    `</summary>${detailBody(session, rates)}</details></li>`
+    `</summary>${detailBody(session, rates, agents)}</details></li>`
   );
 }

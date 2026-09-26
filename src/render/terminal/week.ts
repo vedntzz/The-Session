@@ -25,11 +25,10 @@ import {
   NO_RATES,
   outcomeInk,
   pricesChecked,
-  RATES_HINT,
-  stubLines,
   type View,
 } from "./cost.js";
 import { intentLegends } from "./intent.js";
+import { unpricedNotes } from "./unpriced.js";
 import { figure, INDENT, note, plural } from "./text.js";
 import {
   cellsFor,
@@ -370,23 +369,6 @@ function uncapturedNote(spend: Spend, palette: Palette, limit?: number): string[
   const sessions = plural(spend.uncaptured, "session", "sessions");
   const what = "no turns on the record, so nothing to price";
   return note(`${sessions} uncaptured: ${what}`, palette.meta, limit);
-}
-
-/**
- * Sessions whose model no rate covers, and the file that would fix them.
- *
- * The stub is not wrapped: it is JSON the reader is meant to copy into a file,
- * and a line break through the middle of it is one they would have to take
- * back out.
- */
-function unpricedNotes(spend: Spend, palette: Palette, limit?: number): string[] {
-  if (spend.unpriced === 0) {
-    return [];
-  }
-  const sessions = plural(spend.unpriced, "session", "sessions");
-  const models = spend.unpricedModels.join(", ");
-  const what = `${sessions} unpriced: ${models} — save this as ${RATES_HINT}`;
-  return [...note(what, palette.meta, limit), ...stubLines(spend.unpricedModels, palette)];
 }
 
 /**

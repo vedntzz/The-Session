@@ -1,5 +1,6 @@
 // The week as a page: the window split by source, the rows, and what the rows
 // leave out.
+import type { AgentInfo } from "../../agents.js";
 import { describeFilter, type View } from "../terminal.js";
 import type { SessionFilter } from "../../commands/week.js";
 import { formatUsd, shippedNote, spendOf, type RateTable, type Spend } from "../../pricing.js";
@@ -47,7 +48,7 @@ export function renderBody(sessions: readonly Session[], window: string, view: V
     sourceTable(sessions, rates) +
     `<p class="nopool">${escapeHtml(NO_POOL_NOTE)}</p>` +
     `<p class="basis">${escapeHtml(basisNote(sessions, rates))}</p>` +
-    rowsBlock(sessions, rates, showTokens) +
+    rowsBlock(sessions, rates, showTokens, view.agents) +
     footerBlock(sessions, spendOf(sessions, rates))
   );
 }
@@ -57,11 +58,12 @@ export function rowsBlock(
   sessions: readonly Session[],
   rates: RateTable,
   showTokens: boolean,
+  agents: readonly AgentInfo[] = [],
 ): string {
   const weights = weigh(sessions, rates);
   const heaviest = Math.max(...weights);
   const rows = sessions
-    .map((session, index) => renderRow(session, weights[index] ?? 0, heaviest, rates, showTokens))
+    .map((session, index) => renderRow(session, weights[index] ?? 0, heaviest, rates, showTokens, agents))
     .join("");
   return `<ol class="week${showTokens ? " with-tokens" : ""}">${rows}</ol>`;
 }

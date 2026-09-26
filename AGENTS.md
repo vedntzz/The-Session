@@ -24,13 +24,14 @@ src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything el
   store/ record.ts types · append.ts locked, signed writer · read.ts fold · paths.ts · scratch.ts tmp
   chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
   git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
-  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-write, claude-bash
-  scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts survival.ts debt.ts prime.ts scan.ts
+  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-write, claude-bash, codex, codex-rollout, files
+  scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
   agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
   commands/check-write.ts resolve-{write,shell,move,copy,remove}.ts   session hook check
   write-check-event.ts write-checks.ts commands/record-write-check.ts capture/check-adapter.ts   its signed events
   shell/ words.ts (zsh-safe) package-manager sed redirect tee move copy remove read-only
   tree-state.ts tool-calls.ts commands/tool-call.ts   per-call records — built, not wired to a hook
+  agents.ts (which adapter captured a session; calls unknown, not nought) agents-report.ts commands/agents.ts render/terminal/agents.ts   session agents
   render/ palette.ts (the only colour) terminal/ markdown.ts html.ts pr.ts agreement.ts tui/
 evidence/ gen-context.mjs (docs/context.md) prime-evaluate.mjs enforce-e2e.mjs
 ```

@@ -66,8 +66,8 @@ export function emptyTurnsOf(session: Pick<Session, "cost" | "reality">): number
  */
 export function emptyTokensOf(session: Pick<Session, "cost" | "reality">): TokenCounts | undefined {
   const { cost } = session;
-  if (emptyTurnsOf(session) === undefined) {
-    return undefined;
+  if (emptyTurnsOf(session) === undefined || (cost.untokenedTurns ?? 0) > 0) {
+    return undefined; // some turns carried no tokens: the counters are not the turns' cost
   }
   if (session.reality.length === 0) {
     return {
@@ -104,6 +104,9 @@ export function emptyTokenTotal(session: Pick<Session, "cost" | "reality">): num
 export function reconcileEmpty(cost: SessionCost, wroteFiles: boolean): SessionCost {
   if (wroteFiles) {
     return { ...cost, emptySource: "git" };
+  }
+  if ((cost.untokenedTurns ?? 0) > 0) {
+    return { ...cost, emptySource: "git", emptyTurns: cost.turns }; // tokens unknown, not nought
   }
   return {
     ...cost,

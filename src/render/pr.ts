@@ -360,7 +360,7 @@ function costLine(session: Session, rates: RateTable): string {
   }
 
   const price = priceSession(cost, rates);
-  const spent = isPriced(price) ? formatUsd(price.usd) : unpricedTokens(cost);
+  const spent = isPriced(price) ? formatUsd(price.usd) : unpricedTokens(cost, price.model, price.reason);
   const turns = cost.turns === 1 ? "1 turn" : `${cost.turns} turns`;
   const empty = emptyTurnsOf(session);
   return empty === undefined

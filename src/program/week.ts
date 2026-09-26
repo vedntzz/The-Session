@@ -1,6 +1,7 @@
 // `session week`, the three renderings it can end in, and `session week <id>`,
 // one session of it.
 import type { Command } from "commander";
+import { knownAgents } from "../capture/index.js";
 import { parseClass } from "../classify.js";
 import {
   copyToClipboard,
@@ -114,8 +115,7 @@ async function emitSession(
   options: ProgramOptions,
   palette: Palette,
 ): Promise<void> {
-  // Silent unless it wrote something, and its facts are what this view
-  // resolves the outcome from — see `sweepFirst`.
+  // Silent unless it wrote something; its facts resolve the outcome — see `sweepFirst`.
   const { notice, facts } = await sweepFirst(options);
   const session = await showSession(id === LAST ? undefined : id, options, facts);
   const view = {
@@ -123,8 +123,7 @@ async function emitSession(
     // Only `--tokens` prints it: the brief line and the plain `--full` layout
     // carry no room for a note about where prices come from.
     ...(flags.tokens === true ? { checked: await loadChecked() } : {}),
-    tokens: flags.tokens,
-    width: terminalWidth(),
+    tokens: flags.tokens, width: terminalWidth(), agents: knownAgents(),
   };
   const full = flags.full === true || flags.tokens === true;
   const render = full ? formatSession : formatBrief;
@@ -167,7 +166,7 @@ async function emitWeek(
     rates: await loadRates(storeHome(options)),
     // What the money under the table is quoted at, and how old that is.
     checked: await loadChecked(),
-    tokens: flags.tokens,
+    tokens: flags.tokens, agents: knownAgents(),
     classes: flags.class !== undefined,
     // Measured once, here, like the palette: whether stdout is a terminal and
     // how wide it is do not change between two lines of the same run. Only

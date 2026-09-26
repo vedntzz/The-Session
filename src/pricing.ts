@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Session, SessionCost, SessionOutcome, TokenCounts } from "./store.js";
-
+import { priceByTurn } from "./pricing-turns.js";
 /**
  * What a session cost in money.
  *
@@ -96,7 +96,7 @@ export type Price =
        */
       emptyUsd?: number;
     }
-  | { priced: false; model: string };
+  | { priced: false; model: string; reason?: string };
 
 export function isPriced(price: Price): price is Extract<Price, { priced: true }> {
   return price.priced;
@@ -104,11 +104,11 @@ export function isPriced(price: Price): price is Extract<Price, { priced: true }
 
 /** What a session cost. Unpriced when no entry covers the model it ran on. */
 export function priceSession(cost: SessionCost, rates: RateTable): Price {
+  if (cost.turnTokens !== undefined || (cost.untokenedTurns ?? 0) > 0) return priceByTurn(cost, rates);
   const found = rateFor(cost.model, rates);
   if (!found) {
     return { priced: false, model: cost.model };
   }
-
   return {
     priced: true,
     model: cost.model,
@@ -188,7 +188,7 @@ export function spendOf(sessions: readonly Session[], rates: RateTable): Spend {
       addSpend(spend, price.usd, session.outcome);
     } else {
       spend.unpriced += 1;
-      models.add(session.cost.model === "" ? "unknown" : session.cost.model);
+      models.add(price.reason ?? (price.model === "" ? "unknown" : price.model));
     }
   }
 
@@ -296,8 +296,8 @@ export function unpricedThroughout(
  * reason and cannot be the test.
  *
  * A session with turns whose tokens come to nothing is the other case, and it
- * keeps `$0.00`: that figure was measured. Nought is a claim, and this is the
- * function that decides which sessions are entitled to make it.
+ * keeps `$0.00`: that figure was measured. A turn with no tokens is still a
+ * turn captured; `priceSession` leaves its money unpriced, never nought.
  */
 export function wasMeasured(cost: Pick<SessionCost, "turns">): boolean {
   return cost.turns > 0;

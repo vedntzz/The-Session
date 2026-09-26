@@ -61,3 +61,16 @@ export function writeCheckEvents(
   const paths = [...new Set(progress.paths ?? [])];
   return paths.length === 0 ? [{ ...base, path: null }] : paths.map((path) => ({ ...base, path }));
 }
+
+/** Every write-check event in the logs, by session id; a line that is not one is skipped. */
+export function checksBySession(logs: readonly RawLog[]): Map<string, WriteCheckEvent[]> {
+  const bySession = new Map<string, WriteCheckEvent[]>();
+  for (const line of logs.flatMap((log) => log.lines)) {
+    let record: { id?: unknown; set?: { writeCheck?: WriteCheckEvent } };
+    try { record = JSON.parse(line.text); } catch { continue; }
+    const event = record?.set?.writeCheck;
+    if (typeof record?.id !== "string" || event?.type !== "write-check") continue;
+    bySession.set(record.id, [...(bySession.get(record.id) ?? []), event]);
+  }
+  return bySession;
+}

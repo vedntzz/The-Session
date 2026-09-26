@@ -1,7 +1,8 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { SessionCost } from "../../store.js";
+import type { AgentInfo } from "../../agents.js";
 import { NO_COST, type Adapter, type CaptureWindow } from "../adapter.js";
 import {
   costOfCalls,
@@ -12,6 +13,7 @@ import {
   type TranscriptLine,
 } from "../transcript.js";
 import { CLAUDE_CODE } from "./claude-name.js";
+import { isDirectory, listDir, relatedPaths, touchedSince } from "./files.js";
 
 /** Claude Code keeps one JSONL transcript per session, grouped by project. */
 export function defaultTranscriptRoot(): string {
@@ -24,17 +26,6 @@ interface Fold {
   nextTurn: number;
 }
 
-/**
- * True when two working directories belong to the same checkout. Compared
- * both ways because `session stop` may run from a subdirectory of the repo
- * the agent was started in, or the other way round.
- */
-function relatedPaths(a: string, b: string): boolean {
-  const left = path.resolve(a);
-  const right = path.resolve(b);
-  return left === right || left.startsWith(right + path.sep) || right.startsWith(left + path.sep);
-}
-
 /** Transcript files that could hold activity in the window, newest first. */
 export async function transcriptsTouchedIn(root: string, from: number): Promise<string[]> {
   const found: string[] = [];
@@ -42,15 +33,6 @@ export async function transcriptsTouchedIn(root: string, from: number): Promise<
     found.push(...(await transcriptsIn(path.join(root, project), from)));
   }
   return found;
-}
-
-/** What a directory holds, or nothing where there is no directory to read. */
-async function listDir(dir: string): Promise<string[]> {
-  try {
-    return await readdir(dir);
-  } catch {
-    return []; // Claude Code has never run here
-  }
 }
 
 /** One project's transcripts, less the ones written before the window opened. */
@@ -63,18 +45,6 @@ async function transcriptsIn(dir: string, from: number): Promise<string[]> {
     }
   }
   return found;
-}
-
-/**
- * True when the file was last written inside the window. A file older than
- * that cannot contain anything inside it, so this skips most history cheaply.
- */
-async function touchedSince(file: string, from: number): Promise<boolean> {
-  try {
-    return (await stat(file)).mtimeMs >= from;
-  } catch {
-    return false;
-  }
 }
 
 /** Parses a transcript into timestamped entries, dropping what we cannot read. */
@@ -129,6 +99,9 @@ function inAnotherRepo(entry: Record<string, unknown>, window: CaptureWindow): b
   return typeof entryCwd === "string" && !relatedPaths(entryCwd, window.cwd);
 }
 
+/** Counts every call; a record without `cost.agents` was captured here if it holds calls. */
+export const CLAUDE_CODE_AGENT: AgentInfo = { name: CLAUDE_CODE, reportsCalls: true, recognises: (cost) => cost.apiCalls > 0 };
+
 export interface ClaudeCodeOptions {
   /** Transcript root. Defaults to `~/.claude/projects`. */
   root?: string;
@@ -150,14 +123,6 @@ export function createClaudeCodeAdapter(options: ClaudeCodeOptions = {}): Adapte
     isAvailable: () => isDirectory(root),
     capture: (window) => captureWindow(root, window),
   };
-}
-
-async function isDirectory(dir: string): Promise<boolean> {
-  try {
-    return (await stat(dir)).isDirectory();
-  } catch {
-    return false;
-  }
 }
 
 /** Every call any transcript reports inside the window, added up. */
