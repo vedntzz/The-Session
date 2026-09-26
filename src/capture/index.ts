@@ -1,12 +1,13 @@
 import type { SessionCost } from "../store.js";
 import { mergeCosts, NO_COST, type Adapter, type CaptureWindow } from "./adapter.js";
 import { createClaudeCodeAdapter } from "./adapters/claude-code.js";
+import { createCodexAdapter } from "./adapters/codex.js";
 
 export { NO_COST, type Adapter, type CaptureWindow } from "./adapter.js";
 
 /** Every tool `session` knows how to read. Add new adapters here. */
 export function defaultAdapters(): Adapter[] {
-  return [createClaudeCodeAdapter()];
+  return [createClaudeCodeAdapter(), createCodexAdapter()];
 }
 
 /**
