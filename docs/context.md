@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `1ee06a2 week --open: the API calls counter reads — where an agent counts none, never 0` (`v1.0.0-99-g1ee06a2`).
+Derived at `0fbe09f docs: agents files in the layout; regenerate context` (`v1.0.0-100-g0fbe09f`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -1081,8 +1081,8 @@ model's rate. A release of this tool is not a price update.
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
  Test Files  92 passed (92)
       Tests  2438 passed (2438)
-   Start at  13:18:47
-   Duration  148.52s (transform 1.60s, setup 0ms, collect 7.86s, tests 673.90s, environment 9ms, prepare 3.34s)
+   Start at  13:23:07
+   Duration  153.33s (transform 1.63s, setup 0ms, collect 7.84s, tests 686.10s, environment 7ms, prepare 3.30s)
 ```
 
 The generator runs the behavioral suite before writing this document, then
