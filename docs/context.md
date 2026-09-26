@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `134f96f jev: reject invalid batches and distributions` (`v1.0.0-89-g134f96f`).
+Derived at `b2f33b8 docs: regenerate context after jev System One rewrite` (`v1.0.0-90-gb2f33b8`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -1078,8 +1078,8 @@ model's rate. A release of this tool is not a price update.
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
  Test Files  81 passed (81)
       Tests  2381 passed (2381)
-   Start at  22:34:23
-   Duration  147.21s (transform 1.51s, setup 0ms, collect 6.62s, tests 665.73s, environment 7ms, prepare 2.99s)
+   Start at  23:03:22
+   Duration  142.20s (transform 1.36s, setup 0ms, collect 6.05s, tests 636.72s, environment 6ms, prepare 2.61s)
 ```
 
 The generator runs the behavioral suite before writing this document, then
