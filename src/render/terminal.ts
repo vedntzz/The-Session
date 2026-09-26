@@ -21,6 +21,7 @@ export {
 export { describePaths, summarizePaths, PATHS_NAMED, type PathSummary } from "./terminal/paths.js";
 export { unpricedTokens, type View } from "./terminal/cost.js";
 export { formatSession } from "./terminal/session.js";
+export { formatAgents } from "./terminal/agents.js";
 export { formatBrief } from "./terminal/brief.js";
 export { formatHome, type Home } from "./terminal/home.js";
 export { formatCommands, type CommandEntry } from "./terminal/commands.js";
