@@ -19,7 +19,7 @@ export {
   type WidthSignals,
 } from "./terminal/text.js";
 export { describePaths, summarizePaths, PATHS_NAMED, type PathSummary } from "./terminal/paths.js";
-export { unpricedTokens, type View } from "./terminal/cost.js";
+export { callsCell, unpricedTokens, type View } from "./terminal/cost.js";
 export { formatSession } from "./terminal/session.js";
 export { formatAgents } from "./terminal/agents.js";
 export { formatBrief } from "./terminal/brief.js";

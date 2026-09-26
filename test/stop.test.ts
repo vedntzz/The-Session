@@ -577,7 +577,7 @@ describe("formatStopped", () => {
       ...options,
       adapters: [
         {
-          name: "stub",
+          name: "claude-code",
           isAvailable: async () => true,
           capture: async () => ({
             ...zeroCost(),

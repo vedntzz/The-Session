@@ -1,4 +1,4 @@
-import { captureCost, type Adapter } from "../capture/index.js";
+import { captureCost, knownAgents, type Adapter } from "../capture/index.js";
 import { classifyPaths } from "../classify.js";
 import { changedFilesSince, endStateOf, repoRoot, workingBlobs } from "../git.js";
 import {
@@ -13,7 +13,7 @@ import {
 } from "../store.js";
 import { isPriced, priceSession, type RateTable } from "../pricing.js";
 import { inScope } from "../scope.js";
-import { describePaths, intentOf, unpricedTokens } from "../render/terminal.js";
+import { callsCell, describePaths, intentOf, unpricedTokens } from "../render/terminal.js";
 import { plural } from "../render/terminal/text.js";
 import { emptyTurnsOf, reconcileEmpty } from "../empty.js";
 
@@ -205,8 +205,8 @@ export function formatStopped(session: Session, rates?: RateTable): string[] {
   if (session.drift.length > 0) {
     lines.push(`  outside  ${describePaths(session.drift, "  ")}`);
   }
-  if (session.cost.apiCalls > 0) {
-    const { turns, apiCalls } = session.cost;
+  if (session.cost.turns > 0 || session.cost.apiCalls > 0) {
+    const { turns } = session.cost;
     // No count of calls that changed nothing, here or anywhere: a transcript
     // cannot say which call wrote a file, and the figure it used to print was
     // the tool-name guess. The turn figure is dropped the same way when the
@@ -215,7 +215,7 @@ export function formatStopped(session: Session, rates?: RateTable): string[] {
     const produced = empty === undefined ? "" : `, ${empty} that produced nothing`;
     lines.push(
       `  cost     ${tokensSpent(session.cost, rates)}  ` +
-        `${plural(turns, "turn", "turns")}${produced}  (${plural(apiCalls, "api call", "api calls")})`,
+        `${plural(turns, "turn", "turns")}${produced}  (${callsCell(session.cost, { agents: knownAgents() })})`,
     );
   }
   return lines;
