@@ -30,6 +30,7 @@ first-class, and nothing assumes Claude Code.
 - [Every tool call, recorded](#every-tool-call-recorded) — signed events, unsigned before-states, the racily-clean rule
 - [The write-check event](#the-write-check-event) — what each check answered, signed into the chain; a crash leaves none
 - [The Jev contract](#the-jev-contract) — an optional advisor's types, frozen for Sprint 2
+- [What Codex records](#what-codex-records) — six public claims checked against real rollouts: confirmed, refuted, unknown
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
 - [The v1 boundary](#the-v1-boundary) — the freeze retired, what v1 is, and models that propose but never judge; invariant 3, amended for an optional advisor
 - [Rejected](#rejected) — `cochange`, which measured centrality, and `prime`, and the backtest that stopped it
@@ -1025,6 +1026,27 @@ or a check's answer. That is why no `allow`, `ask` or `deny` appears in the
 contract. `test/jev/architecture.test.ts` holds the boundary: `src/jev/`
 imports nothing from `src/store`, `src/chain` or `src/capture`, and nothing
 outside it imports anything of Jev's but the interface.
+
+## What Codex records
+
+*25 September 2026.* These are six public claims about Codex that an adapter would rely on, checked against one machine's `~/.codex`. The tool used is the desktop app (`originator: codex_work_desktop`, `source: vscode`), not the standalone CLI. Two rollouts were read in full: `~/.codex/sessions/2026/09/24/rollout-2026-09-24T14-03-51-01a0d496-8b44-7e71-b580-7fd481c80b11.jsonl` (A) and `~/.codex/sessions/2026/09/22/rollout-2026-09-22T12-49-25-01a0ca05-af12-7652-af8d-2e7ba556107d.jsonl` (B). The two newest files, from 25 September, hold one turn each and no tool calls, so they could not answer questions 2 or 4. Only record types, keys and counts were read. No prompt or message text is quoted here.
+
+1. **Path `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`: confirmed.** All 79 rollouts on this machine match it, with nothing outside that layout. Each file name adds a timestamp and the thread id: `rollout-<YYYY-MM-DDTHH-MM-SS>-<uuid>.jsonl`. In the first record, `session_meta.payload.id` equals `session_id` in every file checked, so one file is one thread.
+2. **`token_count` is cumulative per thread: confirmed, with a caveat.** Each `event_msg`/`token_count` carries `info.total_token_usage`, which is cumulative, and `info.last_token_usage`, which covers one request. Both have `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens`, `reasoning_output_tokens` and `total_tokens`. Across 178 events in A and 161 in B, the total never decreases. Summing `last` over each distinct total reproduces the final total exactly. The caveat: the same total is sometimes emitted twice in a row (twice in A, four times in B). Summing `last` over every event would double-count, so the adapter should read the final `total_token_usage`. Some `token_count` events have `info: null`. `input_tokens` includes `cached_input_tokens`, so these are not four disjoint counters like Claude Code's.
+3. **A concrete model ID is recorded: confirmed, per turn rather than per session.** `session_meta` has `model_provider` (`openai`) but no model. Each `turn_context` record carries `model` and `effort`. In B the model changes mid-thread: one turn on `gpt-5.6-sol`, then 24 on `gpt-6-astra`. A thread can therefore span models, and cost has to be priced turn by turn. `token_count` events do not carry the model; they belong to whichever `turn_context` came before them.
+4. **How `apply_patch` and shell writes appear: the public description is refuted for this build.** Neither appears as a tool call of its own. Every call is a `response_item`/`custom_tool_call` named `exec` whose `input` is a script that calls `tools.apply_patch(...)`, `tools.exec_command(...)` and `tools.write_stdin(...)` (A: 145 `exec` calls; B: 135). No `patch_apply_end` or `exec_command_end` event appears in either file. The structured record is `event_msg`/`item_completed`:
+   - An `apply_patch` produces a `FileChange` item. Its `changes` field maps an **absolute** path to either `{type: "add", content}` or `{type: "update", unified_diff, move_path}` (A: 26 paths, B: 106), and the item has a `status`. B's patch text contains one `*** Delete File:` header, but no FileChange entry has a delete type, and the cause is unknown.
+   - A shell command produces a `CommandExecution` item with `command` (an argv list), `cwd`, `exit_code`, `parsed_cmd` and output. `parsed_cmd` sorts commands into `read`, `search`, `list_files` or `unknown`. Commands that write through `tee` or `>`, and `git commit`, are all `unknown`, and they produce no FileChange. A shell write is visible only as command text, which is the same position as a Claude Code Bash call. The adapter has to recognise it (see [What a shell command writes](#what-a-shell-command-writes)) or leave it to the git diff.
+5. **`hooks.json`: confirmed that it exists.** `~/.codex/hooks.json` (640 bytes, dated 10 September) has the same `{hooks: {<Event>: [{hooks: [{type, command, timeout}]}]}}` shape as Claude Code. It registers `SessionStart` → `session start --passive`, `SessionEnd` → `session stop --if-open` and `UserPromptSubmit` → `session intent --from-prompt`. It registers no pre-tool event. This establishes only that the file exists and has this shape. It does not show that Codex runs these hooks, which event names it supports, or what payload it sends. `~/.codex/config.toml` has no hook entries.
+6. **`codex --version`: unknown.** `codex` is not on `PATH`. The binary inside the app, `/Applications/Codex.app/Contents/Resources/codex` (Mach-O arm64), was killed with exit 137 when run with `--version` and printed nothing. What was recorded instead: the app bundle is `26.212.1823` (`CFBundleShortVersionString`), and the rollouts report `session_meta.cli_version` as `0.155.0-alpha.16.3` (A and the 25 September files) and `0.155.0-alpha.9.2` (B). The version is recorded in every rollout, so an adapter can read it there instead of running the binary.
+
+**Reported publicly, not verified here.** Three limits on Codex hooks have been reported. None was tested on this machine:
+
+- A pre-tool hook can block a call but cannot answer `ask` or `allow`.
+- In one report, a deny on `apply_patch` was not enforced.
+- No hooks run under `codex exec`.
+
+Whether any of these holds for the build above is unknown. If one does, `session hook check` cannot hold a Codex session to its agreement the way it holds a Claude Code session. Until a real Codex run shows otherwise, the diff at `stop` is the only record of what Codex wrote.
 
 ## Finding your way around
 
