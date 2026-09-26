@@ -2,6 +2,7 @@
 // the figures in the row. Every meaning here is imported — `emptyTurnsOf` for
 // which turns produced nothing, `priceSession` for money, `observations` for
 // where the work went. Nothing is worked out a second time on the page.
+import { callsOf, type AgentInfo } from "../../agents.js";
 import { emptyTurnsOf } from "../../empty.js";
 import { observations } from "../../outcome.js";
 import { formatUsd, isPriced, priceSession, wasMeasured, type RateTable } from "../../pricing.js";
@@ -168,13 +169,7 @@ function costCounter(session: Session, rates: RateTable): string {
   return counter("Cost", formatUsd(price.usd), session.cost.model);
 }
 
-/**
- * Turns that produced nothing, or `unknown` where the record cannot say.
- *
- * Never a nought: a nought has the shape of a measurement and would say
- * nothing was wasted. `emptyTurnsOf` is the one place that decides which of
- * the two this is.
- */
+/** Turns that produced nothing, or `unknown` where the record cannot say — never a nought; `emptyTurnsOf` decides. */
 function emptyCounter(session: Session): string {
   const empty = wasMeasured(session.cost) ? emptyTurnsOf(session) : undefined;
   if (empty === undefined) {
@@ -186,21 +181,23 @@ function emptyCounter(session: Session): string {
 }
 
 /** Turns and calls, kept as two counters. A call is not a turn. */
-function workCounters(session: Session): string {
+function workCounters(session: Session, agents: readonly AgentInfo[]): string {
   if (!wasMeasured(session.cost)) {
     return (
       counter("Turns", "unknown", "No transcript reached the record.", "quiet") +
       counter("API calls", "unknown", "No transcript reached the record.", "quiet")
     );
   }
+  const calls = callsOf(session.cost, agents);
   return (
     counter("Turns", figure(session.cost.turns), "Prompts sent. One turn sets off one or more calls.") +
-    counter("API calls", figure(session.cost.apiCalls), "Fragments sharing a request id, counted as one.")
+    (calls === undefined ? counter("API calls", "—", "An agent in this session does not report its calls: unknown, not zero.", "quiet")
+      : counter("API calls", figure(calls), "Fragments sharing a request id, counted as one."))
   );
 }
 
-export function counterBlock(session: Session, rates: RateTable): string {
-  return `<dl class="counters">${costCounter(session, rates)}${workCounters(session)}${emptyCounter(session)}</dl>`;
+export function counterBlock(session: Session, rates: RateTable, agents: readonly AgentInfo[] = []): string {
+  return `<dl class="counters">${costCounter(session, rates)}${workCounters(session, agents)}${emptyCounter(session)}</dl>`;
 }
 
 const TOKEN_LABELS: ReadonlyArray<[string, keyof Session["cost"]]> = [

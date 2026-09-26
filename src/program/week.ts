@@ -166,7 +166,7 @@ async function emitWeek(
     rates: await loadRates(storeHome(options)),
     // What the money under the table is quoted at, and how old that is.
     checked: await loadChecked(),
-    tokens: flags.tokens,
+    tokens: flags.tokens, agents: knownAgents(),
     classes: flags.class !== undefined,
     // Measured once, here, like the palette: whether stdout is a terminal and
     // how wide it is do not change between two lines of the same run. Only
