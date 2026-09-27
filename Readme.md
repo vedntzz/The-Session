@@ -35,7 +35,12 @@ added 3 packages in 185ms
 $ session hook install --repo
   wrote    …/demo/.claude/settings.local.json
   hook     PreToolUse (Edit|Write|MultiEdit|Bash) → session hook check
+  via      /…/bin/node /…/@vedantzz/session/dist/cli.js
 ```
+
+Hooks run under `/bin/sh` without your shell's `PATH`, so they name node and
+the CLI by absolute path. After you upgrade node or reinstall the package, run
+the install again.
 
 **3. Declare what the agent is about to do, and where.** The intent cannot be
 edited afterwards.
@@ -52,7 +57,7 @@ $ session start "add a farewell function next to greet" --scope src
 $ claude
 ```
 
-With Codex, approve the hooks with `/hooks` in the Codex CLI, or a session's intent is captured only at `session stop`.
+With Codex, `session hook install` writes the same hooks to `~/.codex/hooks.json` if Codex is installed. Approve them with `/hooks` in the Codex CLI. Until you do, a session's intent is captured only at `session stop`.
 
 **5. Close the record.** It shows what changed, what fell outside the declared
 scope, and the cost read from the transcript.

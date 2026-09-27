@@ -153,8 +153,9 @@ only when both agree; don't pick a dialect from the platform.
   checkout share one agreement.
 - The reader tolerates a truncated last line and does not verify signatures on
   each read. This is not an integrity guarantee.
-- A process that never starts (`session` not on the editor's `PATH`) or is
-  killed is let through by the host. The check covers what it can: a denial
+- A process that never starts (the node or `cli.js` the hook names has moved
+  since install; hooks never run a bare `session`, which a hook's `/bin/sh`
+  cannot find) or is killed is let through by the host. The check covers what it can: a denial
   at `CHECK_DEADLINE_MS`, inside `CHECK_HOOK.timeout`, and exit 2 for anything
   that escapes it — never exit 1, which the host reads as "carry on". Keep the
   deadline under the timeout; a test pins it.
