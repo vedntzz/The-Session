@@ -52,7 +52,7 @@ $ session start "add a farewell function next to greet" --scope src
 $ claude
 ```
 
-With Codex, approve the hooks in `~/.codex/config.toml`, or a session's intent is captured only at `session stop`.
+With Codex, approve the hooks with `/hooks` in the Codex CLI, or a session's intent is captured only at `session stop`.
 
 **5. Close the record.** It shows what changed, what fell outside the declared
 scope, and the cost read from the transcript.
