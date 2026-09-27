@@ -4,6 +4,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/**/*.test.ts"],
+    // No test reaches the machine's own ~/.claude, ~/.codex or ~/.session.
+    setupFiles: ["test/setup/isolate-home.ts"],
     /**
      * Most of this suite drives real git repositories in temp directories, and
      * files run in parallel: a test that spawns a dozen git processes is fast

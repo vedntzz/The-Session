@@ -15,6 +15,8 @@ const execFileAsync = promisify(execFile);
 
 let root: string;
 let store: ProgramOptions;
+const LAUNCHER = { node: "/usr/local/bin/node", cli: "/opt/session/dist/cli.js" };
+const VIA = "  via      /usr/local/bin/node /opt/session/dist/cli.js";
 /** Files `--open` was asked to hand to the desktop. No browser is launched. */
 let opened: string[];
 /** What `--copy` was asked to put on the clipboard. Nobody's is touched. */
@@ -36,6 +38,7 @@ beforeEach(async () => {
     home: path.join(root, "store"),
     cwd,
     adapters: [],
+    launcher: LAUNCHER,
     tmp: root,
     launch: async (file) => {
       opened.push(file);
@@ -985,8 +988,23 @@ describe("session", () => {
       "  hook     SessionEnd → session stop --if-open",
       "  hook     SessionStart → session start --passive",
       "  hook     UserPromptSubmit → session intent --from-prompt",
+      VIA,
     ]);
     await expect(readFile(settings, "utf8")).resolves.toContain('"SessionEnd"');
+  });
+
+  it("hook install says so when it replaces a hook that ran a bare session", async () => {
+    const settings = path.join(root, "settings.json");
+    await writeFile(settings, JSON.stringify({
+      hooks: { SessionEnd: [{ hooks: [{ type: "command", command: "session stop --if-open", timeout: 30 }] }] },
+    }), "utf8");
+    store.settings = settings;
+
+    const lines = await run("hook", "install", "--no-passive");
+
+    expect(lines.at(-1)).toBe(
+      "  note     replaced 1 hook that ran a bare session, which a hook's /bin/sh may not find",
+    );
   });
 
   it("hook install --passive=false registers the closer alone", async () => {
@@ -999,6 +1017,7 @@ describe("session", () => {
     expect(lines).toEqual([
       `  wrote    ${settings}`,
       "  hook     SessionEnd → session stop --if-open",
+      VIA,
     ]);
     const written = await readFile(settings, "utf8");
     expect(written).not.toContain("SessionStart");
@@ -1012,7 +1031,7 @@ describe("session", () => {
 
     const lines = await run("hook", "install", "--no-passive");
 
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
   });
 
   it("hook install refuses a --passive value that is neither", async () => {

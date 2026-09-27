@@ -1,7 +1,9 @@
 import { chmod, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+  bareSessionCommands,
   CHECK_HOOK,
   hasEntry,
   hasHook,
@@ -11,7 +13,9 @@ import {
   withHooks,
   withoutHook,
   withoutHooks,
+  launcherLine,
   type HookSpec,
+  type Launcher,
   type Settings,
 } from "../capture/hook.js";
 import { repoRoot } from "../git.js";
@@ -20,6 +24,8 @@ import { repoRoot } from "../git.js";
 export interface HookOptions {
   /** The Claude Code settings file. Defaults to ~/.claude/settings.json. */
   settings?: string;
+  /** What the hooks run. Defaults to this process's node and this package's cli.js. */
+  launcher?: Launcher;
   /**
    * Whether to register the two hooks that record sessions nobody declared.
    * Defaults to on. `--passive=false` is the manual flow and nothing else:
@@ -38,6 +44,23 @@ export interface HookResult {
   /** False when the file already said what was asked for. */
   changed: boolean;
   action: "installed" | "removed";
+  /** What the hooks now run in place of `session`. Absent when they were removed. */
+  launcher?: Launcher;
+  /** Commands in the file that ran a bare `session` before, and that still do. */
+  bare: { before: number; after: number };
+}
+
+/**
+ * The node running this and the `cli.js` beside this module, both absolute —
+ * `import.meta.url` is already the real path, past any `bin` symlink. See
+ * `Launcher` for why a hook cannot say `session`.
+ */
+export function currentLauncher(): Launcher {
+  return { node: process.execPath, cli: fileURLToPath(new URL("../cli.js", import.meta.url)) };
+}
+
+function launcherOf(options: { launcher?: Launcher }): Launcher {
+  return options.launcher ?? currentLauncher();
 }
 
 /**
@@ -121,25 +144,44 @@ async function writeSettings(file: string, settings: Settings): Promise<void> {
   }
 }
 
+interface Target {
+  file: string;
+  /** True where a missing file is the normal case rather than a machine without the editor. */
+  absentIsEmpty: boolean;
+}
+
 async function apply(
+  target: Target,
   action: HookResult["action"],
-  options: HookOptions,
   hooks: HookSpec[],
+  launcher: Launcher | undefined,
   settled: (settings: Settings) => boolean,
   edit: (settings: Settings) => Settings,
 ): Promise<HookResult> {
-  const file = settingsFile(options);
-  const settings = await readSettings(file);
+  const { file } = target;
+  const settings = await readSettings(file, target.absentIsEmpty);
   const changed = !settled(settings);
+  const before = bareSessionCommands(settings);
+  let after = before;
 
   // Nothing to say means nothing to write: an unchanged settings file keeps
   // its modification time, and no other tool watching it is disturbed.
   if (changed) {
-    await writeSettings(file, edit(settings));
+    let next: Settings;
+    try {
+      next = edit(settings);
+    } catch (error) {
+      // The surgery does not know which file it is in, so the refusal says.
+      throw new Error(`${file}: ${(error as Error).message}`, { cause: error });
+    }
+    after = bareSessionCommands(next);
+    await writeSettings(file, next);
   }
 
-  return { file, hooks, changed, action };
+  return { file, hooks, changed, action, ...(launcher ? { launcher } : {}), bare: { before, after } };
 }
+
+const claude = (options: HookOptions): Target => ({ file: settingsFile(options), absentIsEmpty: false });
 
 /**
  * Registers the hooks, leaving every other setting as it was.
@@ -150,30 +192,37 @@ async function apply(
  * `--passive=false` would be a flag that could not be changed its mind about.
  */
 export function installHook(options: HookOptions = {}): Promise<HookResult> {
+  return install(claude(options), options);
+}
+
+function install(target: Target, options: HookOptions): Promise<HookResult> {
   const wanted = wantedHooks(options.passive ?? true);
+  const launcher = launcherOf(options);
   return apply(
+    target,
     "installed",
-    options,
     wanted,
-    (settings) => hasHooks(settings, wanted),
-    (settings) => withHooks(settings, wanted),
+    launcher,
+    (settings) => hasHooks(settings, wanted, launcher),
+    (settings) => withHooks(settings, wanted, launcher),
   );
 }
 
 /** Takes every hook back out, leaving every other setting as it was. */
 export function uninstallHook(options: HookOptions = {}): Promise<HookResult> {
-  return apply(
-    "removed",
-    options,
-    [],
-    (settings) => hasHooks(settings, []),
-    withoutHooks,
-  );
+  return uninstall(claude(options));
+}
+
+function uninstall(target: Target): Promise<HookResult> {
+  // Any launcher does: with nothing wanted, none is compared.
+  return apply(target, "removed", [], undefined, (settings) => hasHooks(settings, [], currentLauncher()), withoutHooks);
 }
 
 /** What `session hook install --repo` needs: the repository it applies to. */
 export interface RepoHookOptions {
   cwd?: string;
+  /** What the check runs. Defaults to this process's node and this package's cli.js. */
+  launcher?: Launcher;
 }
 
 /**
@@ -204,13 +253,16 @@ export async function repoSettingsFile(options: RepoHookOptions = {}): Promise<s
  * unlike the user's settings, a repository without one is the normal case.
  */
 export async function installRepoHooks(options: RepoHookOptions = {}): Promise<HookResult> {
-  const file = await repoSettingsFile(options);
-  const settings = await readSettings(file, true);
-  const changed = !hasHook(settings, CHECK_HOOK);
-  if (changed) {
-    await writeSettings(file, withHook(settings, CHECK_HOOK));
-  }
-  return { file, hooks: [CHECK_HOOK], changed, action: "installed" };
+  const target: Target = { file: await repoSettingsFile(options), absentIsEmpty: true };
+  const launcher = launcherOf(options);
+  return apply(
+    target,
+    "installed",
+    [CHECK_HOOK],
+    launcher,
+    (settings) => hasHook(settings, CHECK_HOOK, launcher),
+    (settings) => withHook(settings, CHECK_HOOK, launcher),
+  );
 }
 
 /**
@@ -221,13 +273,15 @@ export async function installRepoHooks(options: RepoHookOptions = {}): Promise<H
  * file emptied by the removal stays as `{}`, since nothing records who made it.
  */
 export async function uninstallRepoHooks(options: RepoHookOptions = {}): Promise<HookResult> {
-  const file = await repoSettingsFile(options);
-  const settings = await readSettings(file, true);
-  const changed = hasEntry(settings, CHECK_HOOK);
-  if (changed) {
-    await writeSettings(file, withoutHook(settings, CHECK_HOOK));
-  }
-  return { file, hooks: [], changed, action: "removed" };
+  const target: Target = { file: await repoSettingsFile(options), absentIsEmpty: true };
+  return apply(
+    target,
+    "removed",
+    [],
+    undefined,
+    (settings) => !hasEntry(settings, CHECK_HOOK),
+    (settings) => withoutHook(settings, CHECK_HOOK),
+  );
 }
 
 /**
@@ -254,5 +308,27 @@ export function formatHook(result: HookResult): string[] {
     const event = hook.matcher === undefined ? hook.event : `${hook.event} (${hook.matcher})`;
     lines.push(`  hook     ${event} → ${hook.command}`);
   }
+  if (result.launcher && result.hooks.length > 0) {
+    // What `session` stands for above: the hooks name it by path, not by PATH.
+    lines.push(`  via      ${launcherLine(result.launcher)}`);
+  }
+  const bare = bareNote(result);
+  if (bare) lines.push(bare);
   return lines;
+}
+
+/**
+ * One line when the file held a hook running a bare `session` — the command a
+ * hook's `/bin/sh` may not find, so the hook fails with nothing to show for
+ * it. Either install replaced them all, or some are not ones it registers and
+ * are left for the developer.
+ */
+function bareNote(result: HookResult): string | undefined {
+  const { before, after } = result.bare;
+  if (result.action !== "installed" || before === 0) return undefined;
+  const why = "which a hook's /bin/sh may not find";
+  if (after > 0) {
+    return `  note     ${after} other ${after === 1 ? "hook runs" : "hooks run"} a bare session, ${why}: edit by hand`;
+  }
+  return `  note     replaced ${before} ${before === 1 ? "hook" : "hooks"} that ran a bare session, ${why}`;
 }
