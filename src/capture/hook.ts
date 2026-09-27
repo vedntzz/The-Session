@@ -1,6 +1,8 @@
 /**
- * The Claude Code hooks `session hook install` registers, and the surgery on
- * somebody else's settings file that registers them.
+ * The hooks `session hook install` registers, and the surgery on somebody
+ * else's settings file that registers them. Claude Code's settings and
+ * Codex's `hooks.json` hold hooks in the same shape, so one set of surgery
+ * serves both.
  *
  * Two arrangements, and the developer picks:
  *

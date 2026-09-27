@@ -76,6 +76,7 @@ describe("an installed hook, run with only the system PATH", () => {
     home = path.join(root, "home");
     codex = path.join(home, ".codex");
     await mkdir(path.join(home, ".claude"), { recursive: true });
+    await mkdir(codex, { recursive: true });
     await writeFile(path.join(home, ".claude", "settings.json"), "{}", "utf8");
 
     work = path.join(root, "work");
@@ -130,6 +131,7 @@ describe("an installed hook, run with only the system PATH", () => {
 
   it.each([
     ["Claude Code", ".claude/settings.json"],
+    ["Codex", ".codex/hooks.json"],
   ])("opens, names and closes a session from %s's hooks", async (tool, relative) => {
     const commands = commandsIn(JSON.parse(await readFile(path.join(home, relative), "utf8")));
     const store = path.join(root, `store${path.dirname(relative)}`);

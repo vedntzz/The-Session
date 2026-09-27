@@ -2,7 +2,7 @@ import { realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { settingsFile } from "../src/commands/hook.js";
+import { codexHooksFile, settingsFile } from "../src/commands/hook.js";
 import { storeHome } from "../src/store/paths.js";
 
 describe("the test setup", () => {
@@ -14,7 +14,7 @@ describe("the test setup", () => {
   });
 
   it("sends every default config path there, not to the machine's own", () => {
-    for (const file of [settingsFile(), storeHome()]) {
+    for (const file of [settingsFile(), codexHooksFile(), storeHome()]) {
       expect(file.startsWith(homedir() + path.sep)).toBe(true);
     }
   });

@@ -24,6 +24,11 @@ import { repoRoot } from "../git.js";
 export interface HookOptions {
   /** The Claude Code settings file. Defaults to ~/.claude/settings.json. */
   settings?: string;
+  /**
+   * Codex's hooks file. Defaults to `hooks.json` in `$CODEX_HOME`, or in
+   * ~/.codex. Written only where its directory exists: no directory, no Codex.
+   */
+  codexHooks?: string;
   /** What the hooks run. Defaults to this process's node and this package's cli.js. */
   launcher?: Launcher;
   /**
@@ -35,10 +40,14 @@ export interface HookOptions {
   passive?: boolean;
 }
 
+/** Which editor reads a hooks file. */
+export type HookTool = "Claude Code" | "Codex";
+
 /** What happened, in the words the command prints. */
 export interface HookResult {
   /** The settings file that was read, and written if anything changed. */
   file: string;
+  tool: HookTool;
   /** What the file holds afterwards. Empty when the hooks were removed. */
   hooks: HookSpec[];
   /** False when the file already said what was asked for. */
@@ -73,10 +82,19 @@ export function settingsFile(options: HookOptions = {}): string {
   return options.settings ?? path.join(homedir(), ".claude", "settings.json");
 }
 
-async function readSettings(file: string, absentIsEmpty = false): Promise<Settings> {
-  const text = await readSettingsText(file, absentIsEmpty);
-  return text.trim() === "" ? {} : parseSettings(text, file);
+/** Codex's user-level hooks, in the same shape as Claude Code's. */
+export function codexHooksFile(options: HookOptions = {}): string {
+  const home = process.env["CODEX_HOME"] ?? path.join(homedir(), ".codex");
+  return options.codexHooks ?? path.join(home, "hooks.json");
 }
+
+async function readSettings(file: string, absentIsEmpty = false, what = CLAUDE_FILE): Promise<Settings> {
+  const text = await readSettingsText(file, absentIsEmpty);
+  return text.trim() === "" ? {} : parseSettings(text, file, what);
+}
+
+const CLAUDE_FILE = "The Claude Code settings file";
+const CODEX_FILE = "The Codex hooks file";
 
 /** The file's contents, or what to do about a machine that has none. */
 async function readSettingsText(file: string, absentIsEmpty: boolean): Promise<string> {
@@ -100,13 +118,13 @@ async function readSettingsText(file: string, absentIsEmpty: boolean): Promise<s
  * here: this is the one file `session` writes that it does not own, and
  * guessing at what somebody meant by it would be the way to lose their setup.
  */
-function parseSettings(text: string, file: string): Settings {
+function parseSettings(text: string, file: string, what: string): Settings {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
     throw new Error(
-      `The Claude Code settings file at ${file} is not valid JSON. ` +
+      `${what} at ${file} is not valid JSON. ` +
         `Fix it by hand, then run session hook install again.`,
       { cause: error },
     );
@@ -114,7 +132,7 @@ function parseSettings(text: string, file: string): Settings {
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error(
-      `The Claude Code settings file at ${file} is not a JSON object. ` +
+      `${what} at ${file} is not a JSON object. ` +
         `Fix it by hand, then run session hook install again.`,
     );
   }
@@ -146,6 +164,7 @@ async function writeSettings(file: string, settings: Settings): Promise<void> {
 
 interface Target {
   file: string;
+  tool: HookTool;
   /** True where a missing file is the normal case rather than a machine without the editor. */
   absentIsEmpty: boolean;
 }
@@ -158,8 +177,8 @@ async function apply(
   settled: (settings: Settings) => boolean,
   edit: (settings: Settings) => Settings,
 ): Promise<HookResult> {
-  const { file } = target;
-  const settings = await readSettings(file, target.absentIsEmpty);
+  const { file, tool } = target;
+  const settings = await readSettings(file, target.absentIsEmpty, tool === "Codex" ? CODEX_FILE : CLAUDE_FILE);
   const changed = !settled(settings);
   const before = bareSessionCommands(settings);
   let after = before;
@@ -171,17 +190,28 @@ async function apply(
     try {
       next = edit(settings);
     } catch (error) {
-      // The surgery does not know which file it is in, so the refusal says.
+      // Two files take the same surgery now, so the refusal names which.
       throw new Error(`${file}: ${(error as Error).message}`, { cause: error });
     }
     after = bareSessionCommands(next);
     await writeSettings(file, next);
   }
 
-  return { file, hooks, changed, action, ...(launcher ? { launcher } : {}), bare: { before, after } };
+  return { file, tool, hooks, changed, action, ...(launcher ? { launcher } : {}), bare: { before, after } };
 }
 
-const claude = (options: HookOptions): Target => ({ file: settingsFile(options), absentIsEmpty: false });
+const claude = (options: HookOptions): Target => ({ file: settingsFile(options), tool: "Claude Code", absentIsEmpty: false });
+
+/**
+ * Codex's hooks file, when this machine has Codex — judged by whether the
+ * directory it lives in exists. A developer who never installed Codex gets no
+ * `~/.codex` made for them.
+ */
+async function codex(options: HookOptions): Promise<Target | undefined> {
+  const file = codexHooksFile(options);
+  const found = await stat(path.dirname(file)).then((info) => info.isDirectory(), () => false);
+  return found ? { file, tool: "Codex", absentIsEmpty: true } : undefined;
+}
 
 /**
  * Registers the hooks, leaving every other setting as it was.
@@ -193,6 +223,16 @@ const claude = (options: HookOptions): Target => ({ file: settingsFile(options),
  */
 export function installHook(options: HookOptions = {}): Promise<HookResult> {
   return install(claude(options), options);
+}
+
+/**
+ * The same hooks in Codex's `hooks.json`, or undefined on a machine without
+ * Codex. Codex holds a changed file's hooks back until they are approved in
+ * its `/hooks` panel, which is why the result names the tool.
+ */
+export async function installCodexHooks(options: HookOptions = {}): Promise<HookResult | undefined> {
+  const target = await codex(options);
+  return target && install(target, options);
 }
 
 function install(target: Target, options: HookOptions): Promise<HookResult> {
@@ -211,6 +251,12 @@ function install(target: Target, options: HookOptions): Promise<HookResult> {
 /** Takes every hook back out, leaving every other setting as it was. */
 export function uninstallHook(options: HookOptions = {}): Promise<HookResult> {
   return uninstall(claude(options));
+}
+
+/** The same, from Codex's `hooks.json`; undefined on a machine without Codex. */
+export async function uninstallCodexHooks(options: HookOptions = {}): Promise<HookResult | undefined> {
+  const target = await codex(options);
+  return target && uninstall(target);
 }
 
 function uninstall(target: Target): Promise<HookResult> {
@@ -253,7 +299,7 @@ export async function repoSettingsFile(options: RepoHookOptions = {}): Promise<s
  * unlike the user's settings, a repository without one is the normal case.
  */
 export async function installRepoHooks(options: RepoHookOptions = {}): Promise<HookResult> {
-  const target: Target = { file: await repoSettingsFile(options), absentIsEmpty: true };
+  const target: Target = { file: await repoSettingsFile(options), tool: "Claude Code", absentIsEmpty: true };
   const launcher = launcherOf(options);
   return apply(
     target,
@@ -273,7 +319,7 @@ export async function installRepoHooks(options: RepoHookOptions = {}): Promise<H
  * file emptied by the removal stays as `{}`, since nothing records who made it.
  */
 export async function uninstallRepoHooks(options: RepoHookOptions = {}): Promise<HookResult> {
-  const target: Target = { file: await repoSettingsFile(options), absentIsEmpty: true };
+  const target: Target = { file: await repoSettingsFile(options), tool: "Claude Code", absentIsEmpty: true };
   return apply(
     target,
     "removed",
@@ -314,6 +360,9 @@ export function formatHook(result: HookResult): string[] {
   }
   const bare = bareNote(result);
   if (bare) lines.push(bare);
+  if (result.tool === "Codex" && result.action === "installed" && result.changed) {
+    lines.push("  note     Codex holds changed hooks back until they are approved: run /hooks in Codex");
+  }
   return lines;
 }
 

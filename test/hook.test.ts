@@ -25,11 +25,14 @@ import {
   type Settings,
 } from "../src/capture/hook.js";
 import {
+  codexHooksFile,
   currentLauncher,
   repoSettingsFile,
   formatHook,
+  installCodexHooks,
   installRepoHooks,
   installHook,
+  uninstallCodexHooks,
   uninstallRepoHooks,
   settingsFile,
   uninstallHook,
@@ -514,6 +517,7 @@ describe("installHook", () => {
 
     expect(result).toEqual({
       file,
+      tool: "Claude Code",
       hooks: [STOP_HOOK, OPEN_HOOK, PROMPT_HOOK],
       changed: true,
       action: "installed",
@@ -696,6 +700,7 @@ describe("installRepoHooks", () => {
     const result = await installRepoHooks({ cwd: repo, launcher: L });
     expect(result).toEqual({
       file: local,
+      tool: "Claude Code",
       hooks: [CHECK_HOOK],
       changed: true,
       action: "installed",
@@ -778,6 +783,7 @@ describe("installRepoHooks", () => {
       const result = await uninstallRepoHooks({ cwd: path.join(repo, "src"), launcher: L });
       expect(result).toEqual({
         file: local,
+        tool: "Claude Code",
         hooks: [],
         changed: true,
         action: "removed",
@@ -843,6 +849,91 @@ describe("installRepoHooks", () => {
   });
 });
 
+describe("installCodexHooks", () => {
+  let root: string;
+  let file: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), "session-codex-"));
+    file = path.join(root, ".codex", "hooks.json");
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const read = async (): Promise<Settings> => JSON.parse(await readFile(file, "utf8")) as Settings;
+
+  it("does nothing on a machine without Codex, and makes no directory for it", async () => {
+    expect(await installCodexHooks({ codexHooks: file, launcher: L })).toBeUndefined();
+    expect(await uninstallCodexHooks({ codexHooks: file })).toBeUndefined();
+    await expect(stat(path.dirname(file))).rejects.toThrow();
+  });
+
+  it("writes the same hooks as Claude Code's, creating hooks.json", async () => {
+    await mkdir(path.dirname(file));
+
+    const result = await installCodexHooks({ codexHooks: file, launcher: L });
+
+    expect(result).toMatchObject({ file, tool: "Codex", changed: true, action: "installed" });
+    expect(await read()).toEqual(ALL);
+  });
+
+  it("rewrites the bare commands an earlier setup wrote, where they stand", async () => {
+    await mkdir(path.dirname(file));
+    const bare = (hook: HookSpec, timeout: number) => [{ hooks: [{ type: "command", command: hook.command, timeout }] }];
+    await writeFile(file, JSON.stringify({
+      hooks: { SessionStart: bare(OPEN_HOOK, 10), SessionEnd: bare(STOP_HOOK, 10), UserPromptSubmit: bare(PROMPT_HOOK, 5) },
+    }), "utf8");
+
+    const result = await installCodexHooks({ codexHooks: file, launcher: L });
+
+    expect(result?.bare).toEqual({ before: 3, after: 0 });
+    expect(await read()).toEqual({ hooks: { SessionStart: [OPEN], SessionEnd: [STOP], UserPromptSubmit: [PROMPT] } });
+  });
+
+  it("follows passive capture the same way", async () => {
+    await mkdir(path.dirname(file));
+    await installCodexHooks({ codexHooks: file, launcher: L });
+
+    await installCodexHooks({ codexHooks: file, launcher: L, passive: false });
+
+    expect(await read()).toEqual(MANUAL);
+  });
+
+  it("takes them back out", async () => {
+    await mkdir(path.dirname(file));
+    await installCodexHooks({ codexHooks: file, launcher: L });
+
+    const result = await uninstallCodexHooks({ codexHooks: file });
+
+    expect(result).toMatchObject({ tool: "Codex", changed: true, action: "removed" });
+    expect(await read()).toEqual({});
+  });
+
+  it("refuses a hooks.json that is not JSON, naming it as Codex's", async () => {
+    await mkdir(path.dirname(file));
+    await writeFile(file, "{ nope", "utf8");
+
+    await expect(installCodexHooks({ codexHooks: file, launcher: L })).rejects.toThrow(
+      `The Codex hooks file at ${file} is not valid JSON`,
+    );
+  });
+
+  it("lives in CODEX_HOME when that is set, and in ~/.codex otherwise", () => {
+    const saved = process.env["CODEX_HOME"];
+    try {
+      process.env["CODEX_HOME"] = "/srv/codex";
+      expect(codexHooksFile()).toBe(path.join("/srv/codex", "hooks.json"));
+      delete process.env["CODEX_HOME"];
+      expect(codexHooksFile()).toMatch(/\.codex[/\\]hooks\.json$/);
+    } finally {
+      if (saved === undefined) delete process.env["CODEX_HOME"];
+      else process.env["CODEX_HOME"] = saved;
+    }
+  });
+});
+
 describe("uninstallHook", () => {
   let root: string;
   let file: string;
@@ -885,6 +976,7 @@ describe("uninstallHook", () => {
 describe("formatHook", () => {
   const result: HookResult = {
     file: "/Users/dev/.claude/settings.json",
+    tool: "Claude Code",
     hooks: [STOP_HOOK, OPEN_HOOK, PROMPT_HOOK],
     changed: true,
     action: "installed",
@@ -934,6 +1026,14 @@ describe("formatHook", () => {
   it("says nothing about a bare session it did not find, or when removing", () => {
     expect(formatHook(result).join("\n")).not.toContain("bare");
     expect(formatHook({ ...result, action: "removed", hooks: [], bare: { before: 1, after: 0 } }).join("\n")).not.toContain("bare");
+  });
+
+  it("says Codex must approve hooks it changed, and only then", () => {
+    const codex: HookResult = { ...result, file: "/Users/dev/.codex/hooks.json", tool: "Codex" };
+    const note = "  note     Codex holds changed hooks back until they are approved: run /hooks in Codex";
+    expect(formatHook(codex).at(-1)).toBe(note);
+    expect(formatHook({ ...codex, changed: false })).not.toContain(note);
+    expect(formatHook({ ...codex, action: "removed", hooks: [] })).not.toContain(note);
   });
 
   it("says when the hooks were already there", () => {
