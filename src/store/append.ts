@@ -216,7 +216,7 @@ export async function captureIntent(
   if (!current) {
     throw new Error(`no session with id ${id}`);
   }
-  if (current.intent !== null) {
+  if (current.intent !== null || current.intentMissing !== undefined) {
     throw new Error("intent is written once and cannot be edited");
   }
 
@@ -270,7 +270,7 @@ function refusePatch(patch: SessionPatch): void {
   if ("proposal" in patch) {
     throw new Error("proposal is written at start and cannot be edited");
   }
-  if ("intent" in patch) {
+  if ("intent" in patch || "intentMissing" in patch) {
     throw new Error(
       "intent is written once and cannot be edited. A passive session's first " +
         "prompt is written by captureIntent, which refuses an intent that is already there.",

@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `0fbe09f docs: agents files in the layout; regenerate context` (`v1.0.0-100-g0fbe09f`).
+Derived at `84b1bba Merge pull request #7 from vedntzz/fix/md-unpriced-reason` (`v1.0.0-105-g84b1bba`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -60,14 +60,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     159
-   19742
+     162
+   19880
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-      94
-   21537
+      97
+   21761
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -296,6 +296,8 @@ export interface Session {
    * there afterwards would be inventing them.
    */
   intent: string | null;
+  /** Why `intent` stays null though a prompt came: `paste-only`, a paste with no text in the payload. Written once, closes it. */
+  intentMissing?: "paste-only";
   /**
    * How the intent and scope were chosen. Absent on records before passive
    * capture existed, where it reads as `declared` — nothing but `session
@@ -1047,10 +1049,10 @@ Verbatim from `Claude.md`:
 
 ```
 src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything else is pure
-  store/ record.ts types · append.ts locked, signed writer · read.ts fold · paths.ts · scratch.ts tmp
+  store/ record.ts types · append.ts locked, signed writer · read.ts fold · intent-missing.ts · paths.ts · scratch.ts tmp
   chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
   git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
-  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-write, claude-bash, codex, codex-rollout, files
+  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, files
   scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
   agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
   commands/check-write.ts resolve-{write,shell,move,copy,remove}.ts   session hook check
@@ -1079,10 +1081,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  92 passed (92)
-      Tests  2438 passed (2438)
-   Start at  13:23:07
-   Duration  153.33s (transform 1.63s, setup 0ms, collect 7.84s, tests 686.10s, environment 7ms, prepare 3.30s)
+ Test Files  94 passed (94)
+      Tests  2457 passed (2457)
+   Start at  00:45:35
+   Duration  232.31s (transform 2.23s, setup 0ms, collect 15.53s, tests 1228.63s, environment 36ms, prepare 7.31s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

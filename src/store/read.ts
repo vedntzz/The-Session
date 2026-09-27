@@ -373,20 +373,20 @@ export async function getOpenSession(options: StoreOptions = {}): Promise<Sessio
  * later one on top of an intent that is already there: the first words written
  * are the ones that stand, whatever any subsequent record says.
  *
- * `captureIntent` checks the same thing before it writes, and that check is
- * the one that produces an error somebody can read. This is the backstop, and
- * it is here rather than only there because immutability that lives in the
- * writer is a convention, while immutability in the reader is a property of
- * the log: a record appended by hand cannot rewrite an intent either.
+ * `captureIntent` checks the same thing before it writes; this is the backstop,
+ * because immutability in the reader is a property of the log rather than a
+ * convention: a record appended by hand cannot rewrite an intent either. A
+ * reason for a missing intent closes it just as words do, and cannot follow them.
  */
 export function keptIntent(
   existing: Partial<Session> | undefined,
   record: LogRecord,
-): { intent?: string | null } {
-  if (!existing || existing.intent == null || record.set.intent === undefined) {
+): Pick<Partial<Session>, "intent" | "intentMissing"> {
+  const closed = existing !== undefined && (existing.intent != null || existing.intentMissing !== undefined);
+  if (!closed || (record.set.intent === undefined && record.set.intentMissing === undefined)) {
     return {};
   }
-  return { intent: existing.intent };
+  return { intent: existing.intent, intentMissing: existing.intentMissing };
 }
 
 /**
