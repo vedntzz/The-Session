@@ -10,6 +10,12 @@ export interface CaptureWindow {
   cwd?: string;
 }
 
+/** The first thing typed inside a window, and when its turn started. */
+export interface FirstPrompt {
+  at: number;
+  text: string;
+}
+
 /** What every adapter returns when it finds nothing. */
 export const NO_COST: SessionCost = zeroCost();
 
@@ -25,6 +31,12 @@ export interface Adapter {
   isAvailable(): Promise<boolean>;
   /** Cost observed inside `window`. Returns zeros rather than throwing. */
   capture(window: CaptureWindow): Promise<SessionCost>;
+  /**
+   * The first message typed inside `window`, verbatim, for a tool whose prompt
+   * hook may never run. Absent where the transcript cannot say; resolves to
+   * nothing rather than throwing.
+   */
+  firstPrompt?(window: CaptureWindow): Promise<FirstPrompt | undefined>;
 }
 
 /**

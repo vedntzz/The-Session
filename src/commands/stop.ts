@@ -1,7 +1,9 @@
-import { captureCost, knownAgents, type Adapter } from "../capture/index.js";
+import { captureCost, firstPromptIn, knownAgents, type Adapter, type CaptureWindow } from "../capture/index.js";
 import { classifyPaths } from "../classify.js";
 import { changedFilesSince, endStateOf, repoRoot, workingBlobs } from "../git.js";
+import { intentFromPrompt } from "./intent.js";
 import {
+  captureIntent,
   getOpenSession,
   hasDeclaredScope,
   totalTokens,
@@ -107,16 +109,38 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
     : await workingBlobs(await repoRoot(cwd), Object.keys(open.baselineState));
   const reality = computeReality(changed, open.baseline, baselineChanges(open.baselineState, now));
   const endedAt = new Date().toISOString();
-  const captured = await captureCost(
-    { from: open.startedAt, to: endedAt, cwd },
-    options.adapters ?? undefined,
-  );
+  const window = { from: open.startedAt, to: endedAt, cwd };
+  const captured = await captureCost(window, options.adapters ?? undefined);
+  await captureMissedIntent(open, window, options);
   // The one place both halves are in hand: what the agent spent, and what the
   // repository has to show for it. An adapter cannot do this for itself — a
   // transcript names the tool a call used, never what it did to the disk.
   const cost = reconcileEmpty(captured, reality.length > 0);
 
   return updateSession(open.id, await closingPatch(open, reality, cost, endedAt, cwd), options);
+}
+
+/**
+ * The intent of a hook-opened session whose prompt hook never delivered one,
+ * taken from the first message the transcript says was typed in the window.
+ *
+ * Codex runs no hook it has not been told to trust, so a Codex turn can run
+ * inside a session the editor opened without `session intent --from-prompt`
+ * ever seeing its prompt. The rollout recorded the words when they were sent;
+ * they are copied verbatim, flattened as a hooked prompt is, never summarised.
+ * Where no transcript holds one the intent stays null — never a placeholder —
+ * and an intent already closed, by words or by a recorded reason, is left
+ * exactly as it is.
+ */
+async function captureMissedIntent(open: Session, window: CaptureWindow, options: StopOptions): Promise<void> {
+  if (open.intent !== null || open.intentMissing !== undefined) {
+    return;
+  }
+  const prompt = await firstPromptIn(window, options.adapters ?? undefined);
+  const intent = prompt === undefined ? undefined : intentFromPrompt(prompt.text);
+  if (intent !== undefined) {
+    await captureIntent(open.id, intent, options);
+  }
 }
 
 /** What changed since the session opened, or why that cannot be answered. */

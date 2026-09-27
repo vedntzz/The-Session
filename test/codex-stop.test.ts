@@ -7,7 +7,8 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createCodexAdapter } from "../src/capture/adapters/codex.js";
 import { defaultAdapters } from "../src/capture/index.js";
-import { startSession } from "../src/commands/start.js";
+import { startPassiveSession, startSession } from "../src/commands/start.js";
+import { recordIntentMissing } from "../src/store.js";
 import { stopSession } from "../src/commands/stop.js";
 import { emptyTurnsOf } from "../src/empty.js";
 import { priceSession, wasMeasured } from "../src/pricing.js";
@@ -37,8 +38,8 @@ afterEach(async () => {
 
 const options = () => ({ home: path.join(root, "store"), cwd, adapters: [createCodexAdapter({ root: codex })] });
 
-/** A rollout for this repo with one turn per model, each started now. */
-async function rollout(models: string[]): Promise<void> {
+/** A rollout for this repo with one turn per model, each started now, each optionally typed. */
+async function rollout(models: string[], prompts: string[] = []): Promise<void> {
   const day = path.join(codex, "2026", "09", "28");
   await mkdir(day, { recursive: true });
   const at = new Date().toISOString();
@@ -46,6 +47,10 @@ async function rollout(models: string[]): Promise<void> {
     ...models.flatMap((model, i) => [
       { timestamp: at, type: "event_msg", payload: { type: "task_started", turn_id: `turn-${i}` } },
       { timestamp: at, type: "turn_context", payload: { turn_id: `turn-${i}`, model, cwd } },
+      ...(prompts[i] === undefined ? [] : [{ timestamp: at, type: "event_msg", payload: {
+        type: "item_completed", turn_id: `turn-${i}`,
+        item: { type: "UserMessage", content: [{ type: "text", text: prompts[i] }] },
+      } }]),
     ])];
   await writeFile(path.join(day, "rollout-2026-09-28T00-00-00-t.jsonl"), lines.map((l) => JSON.stringify(l)).join("\n"));
 }
@@ -80,5 +85,38 @@ describe("stop with the Codex adapter", () => {
     const stopped = await stopSession(options());
     expect(stopped.reality).toEqual(["a.txt"]);
     expect(emptyTurnsOf(stopped)).toBeUndefined();
+  });
+});
+
+describe("a hook-opened session Codex ran in, whose prompt hook never fired", () => {
+  it("takes its intent from the first message typed in the rollout", async () => {
+    await startPassiveSession(options());
+    await rollout(["gpt-6-astra", "gpt-6-astra"], ["Fix the stop line\n  for no scope", "and a second thing"]);
+    const stopped = await stopSession(options());
+    expect(stopped.intent).toBe("Fix the stop line for no scope");
+    expect(stopped.intentSource).toBe("captured");
+  });
+
+  it("stays without one, rather than a placeholder, where nothing was typed", async () => {
+    await startPassiveSession(options());
+    await rollout(["gpt-6-astra"]);
+    const stopped = await stopSession(options());
+    expect(stopped.intent).toBeNull();
+    expect(stopped.intentMissing).toBeUndefined();
+  });
+
+  it("leaves an intent the hook already closed alone", async () => {
+    const open = await startPassiveSession(options());
+    await recordIntentMissing(open!.id, "paste-only", options());
+    await rollout(["gpt-6-astra"], ["typed later"]);
+    const stopped = await stopSession(options());
+    expect(stopped.intent).toBeNull();
+    expect(stopped.intentMissing).toBe("paste-only");
+  });
+
+  it("never touches a declared intent", async () => {
+    await startSession("declared words", options());
+    await rollout(["gpt-6-astra"], ["what codex was told"]);
+    await expect(stopSession(options())).resolves.toMatchObject({ intent: "declared words" });
   });
 });

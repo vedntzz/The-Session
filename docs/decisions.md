@@ -1048,6 +1048,8 @@ outside it imports anything of Jev's but the interface.
 
 Whether any of these holds for the build above is unknown. If one does, `session hook check` cannot hold a Codex session to its agreement the way it holds a Claude Code session. Until a real Codex run shows otherwise, the diff at `stop` is the only record of what Codex wrote.
 
+*27 September 2026, one real run.* A hook-opened session held one Codex turn (desktop app, `cli_version` `0.155.0-alpha.16.4`) and closed with no intent. The app server that ran it, `~/.codex/plugins/.plugin-appserver/codex`, knows `UserPromptSubmit` and a `prompt` field in its payload — the same field `promptFromHook` reads — and its log lists the `CodexHooks` feature. It also holds hooks back until they are trusted: its strings include "hooks need review before they can run" and a `trusted_hash`, and `~/.codex/config.toml` holds no trust entry. Neither the rollout nor Codex's log shows any hook running for that turn. So the `hooks.json` above is present and not run. What the rollout does keep is the prompt as typed: an `item_completed` event whose item is a `UserMessage`, keyed by `turn_id`, apart from the `response_item` messages that carry injected context under the same `user` role. `stop` now takes a captured session's intent from the earliest such message in its window when no hook wrote one, and leaves it null when there is none. Whether trusting the hooks makes `UserPromptSubmit` fire was not tested.
+
 ## Finding your way around
 
 Type `session` on its own and it tells you where you are, not what it can do:

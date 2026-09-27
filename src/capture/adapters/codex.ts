@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { AgentInfo } from "../../agents.js";
 import { zeroCost, type SessionCost } from "../../store.js";
-import { addTokens, dominant, NO_COST, type Adapter, type CaptureWindow } from "../adapter.js";
+import { addTokens, dominant, NO_COST, type Adapter, type CaptureWindow, type FirstPrompt } from "../adapter.js";
 import { readRollout, turnsOf, type Rollout, type RolloutTurn } from "./codex-rollout.js";
 import { isDirectory, listDir, relatedPaths, touchedSince } from "./files.js";
 
@@ -63,14 +63,28 @@ function dominantModel(models: readonly (string | null)[]): string {
   return dominant(byModel);
 }
 
-async function captureWindow(root: string, window: CaptureWindow): Promise<SessionCost> {
+/** Every turn inside the window, imports included; nothing for a window that does not parse. */
+async function turnsIn(root: string, window: CaptureWindow): Promise<RolloutTurn[] | undefined> {
   const from = Date.parse(window.from);
-  if (Number.isNaN(from) || Number.isNaN(Date.parse(window.to))) return NO_COST;
+  if (Number.isNaN(from) || Number.isNaN(Date.parse(window.to))) return undefined;
   const turns: RolloutTurn[] = [];
   for (const file of await rolloutsTouchedIn(root, from)) {
     turns.push(...turnsInWindow(await readRollout(file), window));
   }
-  return costOfTurns(turns);
+  return turns;
+}
+
+async function captureWindow(root: string, window: CaptureWindow): Promise<SessionCost> {
+  const turns = await turnsIn(root, window);
+  return turns === undefined ? NO_COST : costOfTurns(turns);
+}
+
+/** The earliest turn in the window that recorded what was typed, and that text; imported history is not this session's. */
+async function firstPromptIn(root: string, window: CaptureWindow): Promise<FirstPrompt | undefined> {
+  const turns = (await turnsIn(root, window)) ?? [];
+  const typed = turns.filter((turn) => turn.prompt !== undefined && !turn.id.startsWith(IMPORTED));
+  const first = typed.sort((a, b) => a.at - b.at)[0];
+  return first === undefined ? undefined : { at: first.at, text: first.prompt! };
 }
 
 export interface CodexOptions {
@@ -84,5 +98,10 @@ export const CODEX_AGENT: AgentInfo = { name: "codex", reportsCalls: false, reco
 /** Reads Codex rollouts for turns and per-turn models; reality stays git's, never FileChange's. */
 export function createCodexAdapter(options: CodexOptions = {}): Adapter {
   const root = options.root ?? defaultCodexRoot();
-  return { name: CODEX_AGENT.name, isAvailable: () => isDirectory(root), capture: (window) => captureWindow(root, window) };
+  return {
+    name: CODEX_AGENT.name,
+    isAvailable: () => isDirectory(root),
+    capture: (window) => captureWindow(root, window),
+    firstPrompt: (window) => firstPromptIn(root, window),
+  };
 }
