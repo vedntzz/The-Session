@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Hooks registered by `session hook install` now run node and this package's
+  `cli.js` by absolute path instead of a bare `session`. The editor runs hooks
+  through `/bin/sh` without the developer's `PATH`. Under nvm, every hook
+  exited 127 and nothing was recorded, and the write check never ran. Running
+  the install again rewrites stale paths in place. It prints one line when a
+  hook in the file ran a bare `session`.
+- `session hook install` also registers the hooks in Codex's `hooks.json`
+  (`$CODEX_HOME`, or `~/.codex`) where Codex is installed, and `--uninstall`
+  removes them. It reminds you to approve changed hooks with `/hooks`.
+
 ## [2.0.0] — 2026-09-27
 
 Three commands cut, one boundary drawn, Prime reopened, and Codex sessions

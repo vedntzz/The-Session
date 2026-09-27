@@ -1,6 +1,8 @@
 /**
- * The Claude Code hooks `session hook install` registers, and the surgery on
- * somebody else's settings file that registers them.
+ * The hooks `session hook install` registers, and the surgery on somebody
+ * else's settings file that registers them. Claude Code's settings and
+ * Codex's `hooks.json` hold hooks in the same shape, so one set of surgery
+ * serves both.
  *
  * Two arrangements, and the developer picks:
  *
@@ -23,7 +25,10 @@
 export interface HookSpec {
   /** The Claude Code event that fires it. */
   readonly event: string;
-  /** The command line registered against that event. */
+  /**
+   * What it runs, as a person would type it. The settings file gets this with
+   * `session` spelled out as a launcher — see `commandLine`.
+   */
   readonly command: string;
   /** Seconds allowed before the handler is cancelled. */
   readonly timeout: number;
@@ -140,14 +145,129 @@ export function wantedHooks(passive: boolean): HookSpec[] {
 }
 
 /**
+ * The node binary and this package's `cli.js`, by absolute path, which is
+ * what a registered hook runs instead of a bare `session`.
+ *
+ * An editor runs a hook through `/bin/sh`, which reads none of the developer's
+ * shell startup files. Whatever put `session` on their PATH — nvm, Volta, a
+ * Homebrew prefix — is not there, so a bare `session` exits 127 and the
+ * session it was meant to open or close is silently never recorded. Both
+ * paths are spelled out rather than the `session` shim, because the shim is
+ * `#!/usr/bin/env node` and that PATH may have no `node` either.
+ *
+ * Absolute paths go stale when node or the package moves; installing again
+ * rewrites them.
+ */
+export interface Launcher {
+  readonly node: string;
+  readonly cli: string;
+}
+
+/** A word as `/bin/sh` reads it back: bare when that is safe, single-quoted when not. */
+function shellWord(word: string): string {
+  return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;
+}
+
+/** The subcommand and flags a hook passes, without the program name. */
+function argsOf(hook: HookSpec): string[] {
+  return hook.command.split(" ").slice(1);
+}
+
+/** The command line registered for a hook: the launcher, then its arguments. */
+export function commandLine(hook: HookSpec, launcher: Launcher): string {
+  return [shellWord(launcher.node), shellWord(launcher.cli), ...argsOf(hook)].join(" ");
+}
+
+/** The launcher as it appears at the front of every registered command. */
+export function launcherLine(launcher: Launcher): string {
+  return `${shellWord(launcher.node)} ${shellWord(launcher.cli)}`;
+}
+
+/**
+ * The words of a command line, for the two spellings `shellWord` writes: bare
+ * words and single-quoted ones. Anything else — double quotes, a backslash,
+ * an operator — is not a command this tool wrote, and reads as undefined.
+ */
+function wordsOf(command: string): string[] | undefined {
+  const words: string[] = [];
+  let word: string | undefined;
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i]!;
+    if (char === " " || char === "\t") {
+      if (word !== undefined) words.push(word);
+      word = undefined;
+    } else if (char === "'") {
+      const end = command.indexOf("'", i + 1);
+      if (end === -1) return undefined;
+      word = (word ?? "") + command.slice(i + 1, end);
+      i = end;
+    } else if (char === "\\" && command[i + 1] === "'") {
+      word = (word ?? "") + "'";
+      i++;
+    } else if (/[\w@%+=:,./-]/.test(char)) {
+      word = (word ?? "") + char;
+    } else {
+      return undefined;
+    }
+  }
+  if (word !== undefined) words.push(word);
+  return words;
+}
+
+function baseName(file: string): string {
+  return file.slice(file.lastIndexOf("/") + 1);
+}
+
+/**
+ * True when a command line runs this hook, however `session` was spelled: bare
+ * (every install before this one), an absolute path to a `session` shim (a
+ * hand repair), or a node binary and a `cli.js` (this install, or an earlier
+ * one whose paths have since moved). The arguments must match exactly, so a
+ * hook somebody else wrote around `session` is not taken for ours.
+ */
+function runsHook(command: string, hook: HookSpec): boolean {
+  const words = wordsOf(command);
+  if (words === undefined) return false;
+  const args = argsOf(hook);
+  const head = words.slice(0, words.length - args.length);
+  if (words.slice(head.length).join(" ") !== args.join(" ")) return false;
+  if (head.length === 1) {
+    return head[0] === "session" || (head[0]!.startsWith("/") && baseName(head[0]!) === "session");
+  }
+  return head.length === 2 && head.every((word) => word.startsWith("/")) && baseName(head[1]!) === "cli.js";
+}
+
+/**
+ * How many registered commands, of any event and anybody's, start with a bare
+ * `session` — which a hook's `/bin/sh` may not find.
+ */
+export function bareSessionCommands(settings: Settings): number {
+  const hooks = settings["hooks"];
+  if (!isObject(hooks)) return 0;
+  let count = 0;
+  for (const groups of Object.values(hooks)) {
+    if (!Array.isArray(groups)) continue;
+    for (const group of groups) {
+      if (!isObject(group) || !Array.isArray(group["hooks"])) continue;
+      for (const entry of group["hooks"]) {
+        if (isObject(entry) && typeof entry["command"] === "string" && /^\s*session(\s|$)/.test(entry["command"])) {
+          count++;
+        }
+      }
+    }
+  }
+  return count;
+}
+
+/**
  * A matcher group. `SessionEnd` and `SessionStart` both support a `matcher` —
  * why the session ended, how it began — but the field is optional and an
  * omitted matcher means every occurrence. Every start and every ending is one
  * we want to record, so the key is deliberately absent rather than written as
  * `"*"`.
  */
-function ourGroup(hook: HookSpec): Record<string, unknown> {
-  const entry = { type: "command", command: hook.command, timeout: hook.timeout };
+function ourGroup(hook: HookSpec, launcher: Launcher): Record<string, unknown> {
+  const entry = { type: "command", command: commandLine(hook, launcher), timeout: hook.timeout };
   return hook.matcher === undefined ? { hooks: [entry] } : { matcher: hook.matcher, hooks: [entry] };
 }
 
@@ -159,7 +279,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isEntryFor(hook: HookSpec, entry: unknown): boolean {
-  return isObject(entry) && entry["command"] === hook.command;
+  return isObject(entry) && typeof entry["command"] === "string" && runsHook(entry["command"], hook);
 }
 
 /** The groups registered against an event, or none when the file has none. */
@@ -183,7 +303,7 @@ function claim(value: unknown, what: string): Record<string, unknown> | undefine
   }
   if (!isObject(value)) {
     throw new Error(
-      `${what} in the Claude Code settings file is not an object. ` +
+      `${what} in the settings file is not an object. ` +
         `Fix it by hand, then run session hook install again.`,
     );
   }
@@ -196,7 +316,7 @@ function claimGroups(value: unknown, event: string): unknown[] | undefined {
   }
   if (!Array.isArray(value)) {
     throw new Error(
-      `hooks.${event} in the Claude Code settings file is not a list. ` +
+      `hooks.${event} in the settings file is not a list. ` +
         `Fix it by hand, then run session hook install again.`,
     );
   }
@@ -244,14 +364,18 @@ export function hasEntry(settings: Settings, hook: HookSpec): boolean {
 
 /**
  * True when one hook is registered and says what it should. An entry left by
- * an older `session` runs the right command on too short a budget, so it reads
- * as not registered: installing over it is a repair, not a no-op. So does one
- * filed under a matcher other than the hook's own.
+ * an older `session` runs the right command on too short a budget, or through
+ * a bare `session` or a launcher that has since moved, so it reads as not
+ * registered: installing over it is a repair, not a no-op. So does one filed
+ * under a matcher other than the hook's own.
  */
-export function hasHook(settings: Settings, hook: HookSpec): boolean {
+export function hasHook(settings: Settings, hook: HookSpec, launcher: Launcher): boolean {
   const found = foundFor(settings, hook);
   return found.length > 0 &&
-    found.every((item) => item.matches && item.entry["timeout"] === hook.timeout);
+    found.every((item) =>
+      item.matches &&
+      item.entry["timeout"] === hook.timeout &&
+      item.entry["command"] === commandLine(hook, launcher));
 }
 
 /**
@@ -263,15 +387,15 @@ export function hasHook(settings: Settings, hook: HookSpec): boolean {
  * had it is a change — the settings file still holds two hooks that would open
  * sessions nobody asked for, and reporting "already" would leave them there.
  */
-export function hasHooks(settings: Settings, wanted: readonly HookSpec[]): boolean {
+export function hasHooks(settings: Settings, wanted: readonly HookSpec[], launcher: Launcher): boolean {
   return HOOKS.every((hook) =>
     wanted.includes(hook)
-      ? hasHook(settings, hook)
+      ? hasHook(settings, hook, launcher)
       : entriesFor(settings, hook).length === 0,
   );
 }
 
-function addHook(settings: Settings, hook: HookSpec): Settings {
+function addHook(settings: Settings, hook: HookSpec, launcher: Launcher): Settings {
   // An entry already running the command is corrected where it stands, so an
   // upgrade never leaves two hooks racing to do the same thing. One under the
   // wrong matcher cannot be corrected where it stands without changing what
@@ -281,6 +405,7 @@ function addHook(settings: Settings, hook: HookSpec): Settings {
     settings = removeHook(settings, hook);
   } else if (found.length > 0) {
     for (const { entry } of found) {
+      entry["command"] = commandLine(hook, launcher);
       entry["timeout"] = hook.timeout;
     }
     return settings;
@@ -289,7 +414,7 @@ function addHook(settings: Settings, hook: HookSpec): Settings {
   const hooks = claim(settings["hooks"], "hooks") ?? {};
   const groups = claimGroups(hooks[hook.event], hook.event) ?? [];
 
-  groups.push(ourGroup(hook));
+  groups.push(ourGroup(hook, launcher));
   hooks[hook.event] = groups;
   settings["hooks"] = hooks;
   return settings;
@@ -344,10 +469,10 @@ function keepsAnything(group: unknown, hook: HookSpec): boolean {
  * this is the whole arrangement rather than an addition to it. Installing
  * twice registers each of them once.
  */
-export function withHooks(settings: Settings, wanted: readonly HookSpec[]): Settings {
+export function withHooks(settings: Settings, wanted: readonly HookSpec[], launcher: Launcher): Settings {
   let next = structuredClone(settings);
   for (const hook of HOOKS) {
-    next = wanted.includes(hook) ? addHook(next, hook) : removeHook(next, hook);
+    next = wanted.includes(hook) ? addHook(next, hook, launcher) : removeHook(next, hook);
   }
   return next;
 }
@@ -357,8 +482,8 @@ export function withHooks(settings: Settings, wanted: readonly HookSpec[]): Sett
  * For a hook kept apart from `HOOKS` — the check — so adding it says nothing
  * about the others, and adding it twice registers it once.
  */
-export function withHook(settings: Settings, hook: HookSpec): Settings {
-  return addHook(structuredClone(settings), hook);
+export function withHook(settings: Settings, hook: HookSpec, launcher: Launcher): Settings {
+  return addHook(structuredClone(settings), hook, launcher);
 }
 
 /** The settings with one hook taken out and nothing else touched. */

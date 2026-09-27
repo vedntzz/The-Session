@@ -1,6 +1,15 @@
 // `session hook`.
 import type { Command } from "commander";
-import { formatHook, installRepoHooks, installHook, uninstallRepoHooks, uninstallHook } from "../commands/hook.js";
+import {
+  formatHook,
+  installCodexHooks,
+  installRepoHooks,
+  installHook,
+  uninstallCodexHooks,
+  uninstallRepoHooks,
+  uninstallHook,
+  type HookResult,
+} from "../commands/hook.js";
 import type { ProgramOptions } from "./options.js";
 import { parseFlag } from "./options.js";
 import { printLines } from "./print.js";
@@ -34,7 +43,7 @@ export function registerHook(program: Command, options: ProgramOptions): void {
 
   hook
     .command("install")
-    .description("Register the Claude Code hooks that open and close sessions")
+    .description("Register the Claude Code and Codex hooks that open and close sessions")
     .option("--uninstall", "take the hooks back out instead (with --repo, only the check)")
     .option(
       "--passive [yes|no]",
@@ -58,9 +67,13 @@ export function registerHook(program: Command, options: ProgramOptions): void {
         printLines(formatHook(flags.uninstall ? await uninstallRepoHooks(options) : await installRepoHooks(options)));
         return;
       }
-      const result = flags.uninstall
-        ? await uninstallHook(options)
-        : await installHook({ ...options, passive: flags.passive });
-      printLines(formatHook(result));
+      // Claude Code first, since its file must exist; Codex only where installed.
+      const results: (HookResult | undefined)[] = flags.uninstall
+        ? [await uninstallHook(options), await uninstallCodexHooks(options)]
+        : [
+            await installHook({ ...options, passive: flags.passive }),
+            await installCodexHooks({ ...options, passive: flags.passive }),
+          ];
+      printLines(results.flatMap((result) => (result ? formatHook(result) : [])));
     });
 }

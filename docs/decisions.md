@@ -31,6 +31,7 @@ first-class, and nothing assumes Claude Code.
 - [The write-check event](#the-write-check-event) — what each check answered, signed into the chain; a crash leaves none
 - [The Jev contract](#the-jev-contract) — an optional advisor's types, frozen for Sprint 2
 - [What Codex records](#what-codex-records) — six public claims checked against real rollouts: confirmed, refuted, unknown
+- [A hook has no PATH](#a-hook-has-no-path) — why hooks name node and `cli.js` by absolute path
 - [Finding your way around](#finding-your-way-around) — why `--help` is short
 - [The v1 boundary](#the-v1-boundary) — the freeze retired, what v1 is, and models that propose but never judge; invariant 3, amended for an optional advisor
 - [Rejected](#rejected) — `cochange`, which measured centrality, and `prime`, and the backtest that stopped it
@@ -1051,6 +1052,35 @@ Whether any of these holds for the build above is unknown. If one does, `session
 *27 September 2026, one real run.* A hook-opened session held one Codex turn (desktop app, `cli_version` `0.155.0-alpha.16.4`) and closed with no intent. The app server that ran it, `~/.codex/plugins/.plugin-appserver/codex`, knows `UserPromptSubmit` and a `prompt` field in its payload — the same field `promptFromHook` reads — and its log lists the `CodexHooks` feature. It also holds hooks back until they are trusted: its strings include "hooks need review before they can run" and a `trusted_hash`, and `~/.codex/config.toml` holds no trust entry. Neither the rollout nor Codex's log shows any hook running for that turn. So the `hooks.json` above is present and not run. What the rollout does keep is the prompt as typed: an `item_completed` event whose item is a `UserMessage`, keyed by `turn_id`, apart from the `response_item` messages that carry injected context under the same `user` role. `stop` now takes a captured session's intent from the earliest such message in its window when no hook wrote one, and leaves it null when there is none. Whether trusting the hooks makes `UserPromptSubmit` fire was not tested.
 
 *27 September 2026.* Codex's own `/hooks` panel reports "clamping SessionEnd hook timeout to 3s in ~/.codex/hooks.json". Whatever `timeout` the file asks for, `session stop --if-open` gets 3 seconds at `SessionEnd`, so a captured Codex session may stay open until the next `session start` or `session stop` closes it. Observed in the panel, not measured on a run.
+
+## A hook has no PATH
+
+*27 September 2026, this machine.* Claude Code runs a hook's command through
+`/bin/sh`, which reads none of the developer's shell startup files. With node
+and the package installed through nvm, `session` is on the PATH of every
+terminal and on no hook's: each registered hook exited 127 with
+`session: command not found`. For the capture hooks that meant no session
+opened, no intent written and nothing closed. For `session hook check`, it meant
+a write the host let through unchecked. Nothing reported any of it. Codex's
+`hooks.json` held the same bare commands.
+
+So `session hook install` no longer registers `session`. Every hook it writes
+(the three user-level hooks in Claude Code's settings and in Codex's
+`hooks.json`, and the repository's check) names the node binary that ran the
+install and this package's `cli.js`, both by absolute path. The `session` shim
+is not used: it starts with `#!/usr/bin/env node`, and that PATH may have no
+`node` either. `test/hook-path.test.ts` runs every installed command under
+`/bin/sh -c` with `PATH=/usr/bin:/bin`.
+
+An absolute path goes stale when node or the package moves: an nvm version
+removed, a Homebrew Cellar upgraded, or a reinstall under another prefix.
+Install recognises its own entries by their arguments, whether they use a bare
+`session`, an absolute path to a `session` shim, or any node and `cli.js`. It
+rewrites them in place, so running it again is the repair. It prints one line
+when the file held a hook that ran a bare `session`. Codex holds a changed
+`hooks.json` back until it is approved in `/hooks`, so install says that too.
+Codex is written only where its directory exists. A machine without Codex
+gets no `~/.codex`.
 
 ## Finding your way around
 

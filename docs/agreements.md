@@ -359,10 +359,12 @@ cases it can reach:
 | A step is slow or stdin never closes | Denied at the 5-second internal deadline (`CHECK_DEADLINE_MS`), inside the registered 10-second timeout; a `not-checked` event, reason `deadline`, is recorded within 3 more seconds if it can be; the process exits without waiting on stdin or abandoned work |
 | A caught error in the check | A static JSON denial, exit 0 |
 | An error escaping the check (e.g. stdout fails) | A static stderr reason, exit 2, which blocks |
-| `session` is not on the editor's `PATH`, Node cannot start, or the process is killed | **The write goes through, and no event is recorded.** Nothing inside the check can answer for a process that never ran ([why no event](decisions.md#a-crash-leaves-no-event)) |
+| The node or `cli.js` path the hook names has moved since `session hook install --repo` ran, Node cannot start, or the process is killed | **The write goes through, and no event is recorded.** Nothing inside the check can answer for a process that never ran ([why no event](decisions.md#a-crash-leaves-no-event)) |
 
-Enforcement is therefore only as reliable as the `session` command being
-installed where the editor can run it. When several PreToolUse hooks match,
+Enforcement is therefore only as reliable as the paths the hook names. The hook
+runs node and `cli.js` by absolute path, because an editor's `/bin/sh` does not
+have the developer's `PATH` ([why](decisions.md#a-hook-has-no-path)). Run the
+install again after moving either. When several PreToolUse hooks match,
 the host runs them in parallel; its documentation does not say how
 conflicting decisions from different hooks are combined.
 
