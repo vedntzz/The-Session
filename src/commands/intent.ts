@@ -1,4 +1,5 @@
-import { captureIntent, getOpenSession, type Session, type StoreOptions } from "../store.js";
+import { unwrapPastes } from "../capture/adapters/claude-prompt.js";
+import { captureIntent, getOpenSession, recordIntentMissing, type Session, type StoreOptions } from "../store.js";
 
 /**
  * The first prompt of a passively opened session, written down as its intent.
@@ -55,17 +56,25 @@ export function intentFromPrompt(prompt: string): string | undefined {
  * that was opened passively and has not been given words yet. A session the
  * developer declared already has an intent and keeps it; so does a passive
  * session past its first prompt.
+ *
+ * A pasted prompt is recorded as its text, without the editor's tag around it.
+ * One whose payload held the tag and no text is recorded as not captured —
+ * null, with the reason — because the tag is not what anybody asked for.
  */
 export async function captureFromPrompt(
   prompt: string,
   options: StoreOptions = {},
 ): Promise<Session | undefined> {
   const open = await getOpenSession(options);
-  if (!open || open.intent !== null) {
+  if (!open || open.intent !== null || open.intentMissing !== undefined) {
     return undefined;
   }
 
-  const intent = intentFromPrompt(prompt);
+  const { text, pasteOnly } = unwrapPastes(prompt);
+  if (pasteOnly) {
+    return recordIntentMissing(open.id, "paste-only", options);
+  }
+  const intent = intentFromPrompt(text);
   if (intent === undefined) {
     return undefined; // an empty prompt declares nothing; the next one may
   }

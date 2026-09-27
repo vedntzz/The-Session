@@ -11,7 +11,7 @@ import {
 import { plainPalette, type Palette } from "../palette.js";
 import { emptyTurnsOf } from "../../empty.js";
 import { costCell, NO_RATES, wasteCell, type View } from "./cost.js";
-import { headOf, intentOf } from "./intent.js";
+import { headOf, intentOf, noIntentSentence } from "./intent.js";
 import { summarizePaths } from "./paths.js";
 import { flatten, INDENT, plural, shortId, wrapSegments } from "./text.js";
 import { turnModelNote } from "./turn-models.js";
@@ -113,11 +113,7 @@ function restOf(session: Session): string {
 function askedFor(session: Session): { before: string; intent: string; after: string } {
   if (session.intent === null) {
     // Nothing to ink, so the whole sentence is the frame.
-    const text =
-      session.endedAt === null
-        ? "Nothing has been asked yet."
-        : "Nothing was ever asked: the session ended before a prompt arrived.";
-    return { before: text, intent: "", after: "" };
+    return { before: noIntentSentence(session), intent: "", after: "" };
   }
   // Quoted, and the quotes sit outside the ink. Somebody's own words run into
   // the sentence around them otherwise, and the reader who most needs this

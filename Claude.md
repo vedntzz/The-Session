@@ -21,10 +21,10 @@ Node 20+, TypeScript, ESM. `commander` and `picocolors` are the only runtime dep
 
 ```
 src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything else is pure
-  store/ record.ts types · append.ts locked, signed writer · read.ts fold · paths.ts · scratch.ts tmp
+  store/ record.ts types · append.ts locked, signed writer · read.ts fold · intent-missing.ts · paths.ts · scratch.ts tmp
   chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
   git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
-  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-write, claude-bash, codex, codex-rollout, files
+  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, files
   scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
   agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
   commands/check-write.ts resolve-{write,shell,move,copy,remove}.ts   session hook check
@@ -43,6 +43,7 @@ evidence/ gen-context.mjs (docs/context.md) prime-evaluate.mjs enforce-e2e.mjs
 ```ts
   intent: string | null        // fixed; a passive session's arrives once, from its first prompt
   intentSource?: IntentSource  // 'declared' | 'primed' | 'captured'; absent reads as declared
+  intentMissing?: 'paste-only' // why intent stayed null though a prompt came; written once, closes it; never backfilled
   agreement?, proposal?, checkout?, baselineState?, attribution?  // creating record only, never patched
   reality: string[]            // diff vs startCommit, less baseline, plus baseline paths whose blob moved
   drift: string[]              // reality outside scope

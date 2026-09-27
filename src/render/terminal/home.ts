@@ -85,7 +85,8 @@ interface HomeText {
  */
 function whileRecording(running: Session): HomeText {
   const since = clock(running.startedAt);
-  const what = running.intent === null ? "nothing asked yet" : asked(running);
+  const what = running.intent !== null ? asked(running)
+    : running.intentMissing === "paste-only" ? "the first prompt was pasted text, not captured" : "nothing asked yet";
   return {
     sentence: `Recording since ${since}: ${what}.`,
     suggestions: [

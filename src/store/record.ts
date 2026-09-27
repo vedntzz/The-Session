@@ -62,9 +62,7 @@ export function parseIntentSource(value: string): IntentSource {
   if (found) {
     return found;
   }
-  throw new Error(
-    `${value} is not an intent source. Use one of: ${INTENT_SOURCES.join(", ")}.`,
-  );
+  throw new Error(`${value} is not an intent source. Use one of: ${INTENT_SOURCES.join(", ")}.`);
 }
 
 export interface Session {
@@ -86,6 +84,8 @@ export interface Session {
    * there afterwards would be inventing them.
    */
   intent: string | null;
+  /** Why `intent` stays null though a prompt came: `paste-only`, a paste with no text in the payload. Written once, closes it. */
+  intentMissing?: "paste-only";
   /**
    * How the intent and scope were chosen. Absent on records before passive
    * capture existed, where it reads as `declared` — nothing but `session
@@ -253,7 +253,7 @@ export type RecordFields = Partial<Omit<Session, "id" | "toolCalls">> & {
 export type SessionPatch = Omit<
   RecordFields,
   "intent" | "intentSource" | "repo" | "attribution" | "proposal" | "agreement" | "checkout" | "baselineState"
-  | "toolCallStart" | "toolCallEnd" | "writeCheck"
+  | "intentMissing" | "toolCallStart" | "toolCallEnd" | "writeCheck"
 >;
 
 /**

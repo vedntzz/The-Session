@@ -103,19 +103,36 @@ export const NO_INTENT_OPEN = "(no prompt yet)";
 /** How a session that ended without ever being given one reads. */
 export const NO_INTENT_ENDED = "(no prompt)";
 
+/** How a first prompt reads that was a paste the hook was handed no text of. */
+export const NO_INTENT_PASTED = "(pasted text not captured)";
+
 /**
  * The intent as any view prints it.
  *
  * A passive session that has not had a prompt yet has no words to show, and a
  * session that ended before one arrived never will. Both say so rather than
  * printing an empty column: a blank would read as a session whose intent was
- * lost, and nothing was lost — nothing was ever said.
+ * lost, and nothing was lost — nothing was ever said. A paste whose text never
+ * reached the hook was said and not seen, and it says that instead.
  */
-export function intentOf(session: Pick<Session, "intent" | "endedAt">): string {
+export function intentOf(session: Pick<Session, "intent" | "intentMissing" | "endedAt">): string {
   if (session.intent !== null) {
     return session.intent;
   }
+  if (session.intentMissing === "paste-only") {
+    return NO_INTENT_PASTED;
+  }
   return session.endedAt === null ? NO_INTENT_OPEN : NO_INTENT_ENDED;
+}
+
+/** The sentence a brief view says in place of an intent there is none of. */
+export function noIntentSentence(session: Pick<Session, "intentMissing" | "endedAt">): string {
+  if (session.intentMissing === "paste-only") {
+    return "The first prompt was pasted text the hook was not given, so what was asked is not on the record.";
+  }
+  return session.endedAt === null
+    ? "Nothing has been asked yet."
+    : "Nothing was ever asked: the session ended before a prompt arrived.";
 }
 
 // --- shortening somebody's own words -------------------------------------
