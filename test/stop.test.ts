@@ -448,11 +448,26 @@ describe("stopping a session the hook opened", () => {
     expect(formatStopped(await stopSession(options))).toEqual([
       "  stopped  (no prompt)",
       "  changed  nothing",
+      "  no scope — nothing was declared to drift from",
     ]);
   });
 });
 
 describe("formatStopped", () => {
+  it("explains that no scope was declared even when the record holds drift", async () => {
+    await startSession("touch the api", options);
+    await write("api/orders.py", "changed");
+    await write("db/schema.py");
+
+    const session = await stopSession(options);
+    expect(session.drift).toEqual(["api/orders.py", "db/schema.py"]);
+    expect(formatStopped(session)).toEqual([
+      "  stopped  touch the api",
+      "  changed  api/orders.py  db/schema.py",
+      "  no scope — nothing was declared to drift from",
+    ]);
+  });
+
   it("lists the changed files under a stopped intent", async () => {
     await startSession("touch the api", { ...options, scope: ["api/"] });
     await write("api/orders.py", "changed");

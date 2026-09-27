@@ -15,6 +15,7 @@ import { isPriced, priceSession, type RateTable } from "../pricing.js";
 import { inScope } from "../scope.js";
 import { callsCell, describePaths, intentOf, unpricedTokens } from "../render/terminal.js";
 import { plural } from "../render/terminal/text.js";
+import { NO_SCOPE } from "../render/terminal/intent.js";
 import { emptyTurnsOf, reconcileEmpty } from "../empty.js";
 
 /** What `session stop` needs, on top of where the store lives. */
@@ -173,7 +174,8 @@ export async function stopIfOpen(options: StopOptions = {}): Promise<Session | u
 
 /**
  * The lines `session stop` prints. The `outside` line appears only when the
- * session drifted, so a clean session stays quiet about it.
+ * session declared a scope and drifted; without a scope, say why drift cannot
+ * be reported.
  */
 /**
  * The tokens, and the model where no rate covers it.
@@ -202,7 +204,9 @@ export function formatStopped(session: Session, rates?: RateTable): string[] {
   const changed =
     session.reality.length > 0 ? describePaths(session.reality, "  ") : "nothing";
   const lines = [`  stopped  ${intentOf(session)}`, `  changed  ${changed}`];
-  if (session.drift.length > 0) {
+  if (session.scope.length === 0) {
+    lines.push(`  ${NO_SCOPE}`);
+  } else if (session.drift.length > 0) {
     lines.push(`  outside  ${describePaths(session.drift, "  ")}`);
   }
   if (session.cost.turns > 0 || session.cost.apiCalls > 0) {
