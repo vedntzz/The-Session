@@ -150,7 +150,7 @@ export async function assertCanStart(
 
 /** How an open session is named in the message that refuses to open a second. */
 function describeOpen(open: Session): string {
-  return open.intent ?? "opened by the hook, no prompt yet";
+  return open.intent ?? (open.intentMissing ? "opened by the hook, pasted first prompt not captured" : "opened by the hook, no prompt yet");
 }
 
 /**
