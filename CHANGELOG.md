@@ -7,11 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Three commands cut, one boundary drawn. See
+## [2.0.0] — 2026-09-27
+
+Three commands cut, one boundary drawn, Prime reopened, and Codex sessions
+captured. Major because `estimate`, `show` and `debt` are gone as commands and
+primed records need a Prime-aware reader. See
 [The v1 boundary](docs/decisions.md#the-v1-boundary).
 
 ### Added
 
+- `session prime`: read-only scope suggestions with evidence and an explicit
+  `--start` acceptance path. `--scope` replaces the suggestion before starting.
+- Assisted sessions carry a separate `primed` source and immutable original
+  proposal. Existing records keep their hashes and source interpretation.
+- A walk-forward evaluation of the production rule, with historical trees,
+  abstentions, precision, recall, and tree coverage. See [Prime](docs/prime.md).
 - **`session ui`**, a browsable ledger over the window `week` prints. One
   timeline entry per session, expandable inline to the changed files as a
   tree with drift marked `!`, the declared or accepted scope, and the cost;
@@ -38,7 +48,6 @@ Three commands cut, one boundary drawn. See
   `session prime --start --review`. Review and edit accepted paths, actions,
   sensitive paths and policy before typing `accept`. Original Prime proposals
   remain separate. Cancellation writes nothing; scripted starts are unchanged.
-  Remaining sprint work extends this to enforcement below.
 - **`session hook install --repo`** registers `session hook check` before
   Edit, Write and MultiEdit, in this repository's `.claude/settings.local.json`
   only. User-level settings are never touched, and other settings and hooks in
@@ -62,19 +71,35 @@ Three commands cut, one boundary drawn. See
   an edit; a short list of readers passes; anything else is asked about with
   "Can't tell what this writes." Chains, pipes, substitutions, globs,
   aliases and anything a dependency's install script does are not seen.
+- **Every write-check answer is signed into the log** as a `writeCheck`
+  event: `ask`, `deny`, `silent` or `not-checked`, never `allow`. Tool and
+  path are null where they are not known.
+- **Codex sessions are captured.** The Codex adapter reads the session's
+  rollout: one turn per `task_started`, the model each turn ran on, and
+  imported history skipped rather than counted as this session's work.
+  Tokens come per turn from `token_count` events, with repeated events
+  skipped so nothing is counted twice, and cached reads kept apart from
+  fresh input. `stop` closes a Codex session with or without a rollout. When
+  no hook wrote an intent, `stop` takes the first prompt typed in the window
+  from the rollout, verbatim; where nothing was typed it stays null, never a
+  placeholder.
+- **Codex turns are priced turn by turn**, each at its own model's rate. A
+  turn with no tokens, no model or no rate leaves the whole session
+  unpriced, and `week` says why — the model with no rate, or "Codex cache
+  writes: billing unverified". `week` also shows each turn's model and the
+  imported turns it skipped. An unpriced session is never `$0.00`.
+- **`session agents`**, each coding agent's sessions: writes checked,
+  merged, survived 30 days, and cost, over all recorded history; `--days`
+  narrows it. Merges are counts, not a merge rate. A session captured by
+  more than one agent counts whole under each. Pending sessions are left out
+  of every denominator. Which agents captured a session is recorded; older
+  records are read off each adapter's own counters.
+- **`npm publish` refuses a version not above the registry's.**
+  `prepublishOnly` compares `package.json` with `npm view`, and fails if the
+  registry cannot be read rather than guessing. `npm run release` checks it
+  before any push.
 - `docs/decisions.md` records what a Claude Code `PreToolUse` hook can and
   cannot show, checked against the hooks reference on 21 and 22 September 2026.
-
-### Removed
-
-- **`session estimate` is gone**, with `INTENT_RULES` and `classifyIntent`,
-  the one place the tool read a class off the words of an intent. Everything
-  it restated is still on the record; `week --class` still classifies by
-  path. Breaking for anything that called it.
-- **`session show` is gone as a command.** It is `session week <id>` now —
-  see Changed. Breaking for scripts that called `session show`.
-- **`session debt` is gone as a command.** It is `session prime --debt` now —
-  see Changed.
 
 ### Changed
 
@@ -92,29 +117,20 @@ Three commands cut, one boundary drawn. See
   full report `session debt` printed, every repo on the machine. `prime`'s
   intent is now optional only so that `--debt` can stand alone; without
   either it says what to type.
-- **The freeze is retired.** `docs/decisions.md` replaces "What 1.0 means"
-  with the v1 boundary, and invariant 3 in `CLAUDE.md` now says models may
-  propose — a scope, an agreement — for the developer to accept, and never
-  judge. Nothing in this release calls a model.
-
-## [2.0.0] — 2026-09-17
-
-Prime has been reopened explicitly after the initial refinement freeze.
-
-### Added
-
-- `session prime`: read-only scope suggestions with evidence and an explicit
-  `--start` acceptance path. `--scope` replaces the suggestion before starting.
-- Assisted sessions carry a separate `primed` source and immutable original
-  proposal. Existing records keep their hashes and source interpretation.
-- A walk-forward evaluation of the production rule, with historical trees,
-  abstentions, precision, recall, and tree coverage. See [Prime](docs/prime.md).
-
-### Changed
-
 - **Primed records require a Prime-aware reader.** Older binaries reject the
   new `primed` intent source. Existing records retain their original hashes and
   interpretation; no migration or backfill is performed.
+- **`session start` closes a session the hook opened** instead of refusing.
+  A captured session was never declared, so `start` stops it as `session
+  stop` would, prints one `closed` line naming it, and opens the declared
+  one; what it changed becomes the new session's baseline. A declared open
+  session is still refused.
+- **`session stop` says no scope was declared** for a session started
+  without `--scope`, in the wording `week` and `pr` already use, rather than
+  listing drift against nothing.
+- **Calls read `—` where an agent counts none**, never `0` — in `stop`'s
+  cost line, `week <id>`, `week --open` and the `ui` evidence panel. `stop`'s
+  cost line now shows for sessions with turns but no counted calls.
 - **`week`'s `drift files` column is now `drift`.** Breaking for anything that
   parsed the heading. The unit was there so the number beside it could not be
   read as a score, and it cost six columns for a column of single digits —
@@ -122,10 +138,31 @@ Prime has been reopened explicitly after the initial refinement freeze.
   terminal. A table that wraps has no columns left to misread, so the unit
   went. The risk is accepted, not solved: nothing in that view now names what
   the number counts, and a reader who wants to know opens `week --md`, which
-  still says `Unplanned`, or `show --full`, which lists the paths.
+  still says `Unplanned`, or `week <id> --full`, which lists the paths.
+- **The freeze is retired.** Prime was reopened explicitly after the initial
+  refinement freeze. `docs/decisions.md` replaces "What 1.0 means" with the v1
+  boundary, and invariant 3 in `CLAUDE.md` now says models may propose — a
+  scope, an agreement — for the developer to accept, and never judge. Nothing
+  in this release calls a model.
+
+### Removed
+
+- **`session estimate` is gone**, with `INTENT_RULES` and `classifyIntent`,
+  the one place the tool read a class off the words of an intent. Everything
+  it restated is still on the record; `week --class` still classifies by
+  path. Breaking for anything that called it.
+- **`session show` is gone as a command.** It is `session week <id>` now —
+  see Changed. Breaking for scripts that called `session show`.
+- **`session debt` is gone as a command.** It is `session prime --debt` now —
+  see Changed. Breaking for scripts that called `session debt`.
 
 ### Fixed
 
+- **A pasted prompt is captured as its text.** Claude Code sends a paste
+  behind a `<pasted_content>` tag; the tag is stripped and the text kept. A
+  prompt that was only the tag is recorded as `intentMissing: 'paste-only'`,
+  and views read "(pasted text not captured)" rather than "nothing asked".
+  Existing records are left as written.
 - Agent guidance now documents Prime, its immutable proposal, and all three
   intent sources. The Claude and Codex skill copies agree, with consistency
   checks guarding the mirrors and the documented intent-source list.
@@ -144,16 +181,17 @@ Prime has been reopened explicitly after the initial refinement freeze.
   laid out unconstrained — the colourless render stays pinnable, which is the
   same contract colour has. **`week` now fits an eighty-column terminal.**
 - **A captured prompt flooded the brief views.** `MAX_INTENT` is 500 and only
-  `week` shortened anything, so `session show` printed one 568-column sentence
-  and the bare screen printed the whole prompt. Both now shorten a captured
-  prompt to its first sentence, by the same rule and the same code `session pr`
-  already used, and say where the rest is. **A declaration is still never
-  shortened** — it is the promise the diff is held to — it wraps instead.
-- **`show --full` ran its paths off the edge.** Six drift paths were one
+  `week` shortened anything, so the one-session view printed one 568-column
+  sentence and the bare screen printed the whole prompt. Both now shorten a
+  captured prompt to its first sentence, by the same rule and the same code
+  `session pr` already used, and say where the rest is. **A declaration is
+  still never shortened** — it is the promise the diff is held to — it wraps
+  instead.
+- **`week <id> --full` ran its paths off the edge.** Six drift paths were one
   150-column line. They now wrap into the value column with the label blank
   beneath, and the gutter note moves under them. Nothing is capped: every path
   still prints, since `--full` is the view opened to see every path.
-- **`session debt` printed the store's own keys.** Headings read
+- **`session prime --debt` printed the store's own keys.** Headings read
   `path:/private/tmp/…/scratchpad/demo` and `remote:github.com/owner/repo`.
   They now read as repository names, with the home directory shortened to `~`,
   and the repo the reader is standing in comes first, marked. Only that one
@@ -163,6 +201,17 @@ Prime has been reopened explicitly after the initial refinement freeze.
   now two blocks with a line between them: what the table does not say, then
   the money and what qualifies it. Nothing was dropped or folded into anything
   else.
+
+### Known limits
+
+- Codex hooks capture nothing until they are approved with `/hooks` in
+  Codex.
+- Codex clamps `SessionEnd` to 3 seconds, so a captured Codex session may
+  stay open until the next `session start` or `session stop`. See
+  [What Codex records](docs/decisions.md#what-codex-records).
+- Whether Codex bills cache writes inside `input_tokens` is unverified; a
+  session with Codex cache writes is left unpriced.
+- Write checks are not supported for Codex.
 
 ## [1.0.0] — 2026-09-08
 
