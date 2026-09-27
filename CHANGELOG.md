@@ -7,17 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [2.0.1] — 2026-09-27
 
-- Hooks registered by `session hook install` now run node and this package's
-  `cli.js` by absolute path instead of a bare `session`. The editor runs hooks
-  through `/bin/sh` without the developer's `PATH`. Under nvm, every hook
-  exited 127 and nothing was recorded, and the write check never ran. Running
-  the install again rewrites stale paths in place. It prints one line when a
-  hook in the file ran a bare `session`.
-- `session hook install` also registers the hooks in Codex's `hooks.json`
-  (`$CODEX_HOME`, or `~/.codex`) where Codex is installed, and `--uninstall`
-  removes them. It reminds you to approve changed hooks with `/hooks`.
+### Fixed
+- Hooks run node and the CLI by absolute path, so they work where the hook shell can't find `session` (nvm, `/bin/sh`). Re-run `session hook install` to repair existing hooks.
+- `session hook install` also writes Codex's hooks.json when ~/.codex exists; approve them with /hooks.
+- Tests run against a temporary home and can never touch real config.
 
 ## [2.0.0] — 2026-09-27
 
@@ -629,7 +624,8 @@ that a reader following the tags is not left wondering what became of it.
 - The hook now fires reliably on `SessionEnd`, under a 10-second timeout.
 - `week --open` no longer paints the waste hue over a figure of zero.
 
-[Unreleased]: https://github.com/vedntzz/The-Session/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/vedntzz/The-Session/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/vedntzz/The-Session/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/vedntzz/The-Session/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/vedntzz/The-Session/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/vedntzz/The-Session/compare/v0.8.0...v0.9.0
