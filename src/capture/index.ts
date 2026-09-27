@@ -1,10 +1,10 @@
 import type { AgentInfo } from "../agents.js";
 import type { SessionCost } from "../store.js";
-import { mergeCosts, NO_COST, type Adapter, type CaptureWindow } from "./adapter.js";
+import { mergeCosts, NO_COST, type Adapter, type CaptureWindow, type FirstPrompt } from "./adapter.js";
 import { CLAUDE_CODE_AGENT, createClaudeCodeAdapter } from "./adapters/claude-code.js";
 import { CODEX_AGENT, createCodexAdapter } from "./adapters/codex.js";
 
-export { NO_COST, type Adapter, type CaptureWindow } from "./adapter.js";
+export { NO_COST, type Adapter, type CaptureWindow, type FirstPrompt } from "./adapter.js";
 
 /** Every tool `session` knows how to read. Add new adapters here. */
 export function defaultAdapters(): Adapter[] {
@@ -38,4 +38,24 @@ export async function captureCost(
   // Which adapters found anything is written down, so a view never has to guess.
   const agents = adapters.filter((_, i) => costs[i]!.turns > 0 || costs[i]!.apiCalls > 0).map((a) => a.name);
   return { ...mergeCosts(costs), agents: [...new Set(agents)].sort() };
+}
+
+/**
+ * The earliest message typed inside the window, across every adapter that can
+ * read one. Best-effort like cost: an adapter that fails contributes nothing.
+ */
+export async function firstPromptIn(
+  window: CaptureWindow,
+  adapters: readonly Adapter[] = defaultAdapters(),
+): Promise<FirstPrompt | undefined> {
+  const found = await Promise.all(
+    adapters.map(async (adapter) => {
+      try {
+        return adapter.firstPrompt !== undefined && (await adapter.isAvailable()) ? await adapter.firstPrompt(window) : undefined;
+      } catch {
+        return undefined;
+      }
+    }),
+  );
+  return found.filter((prompt) => prompt !== undefined).sort((a, b) => a.at - b.at)[0];
 }

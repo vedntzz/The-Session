@@ -70,6 +70,20 @@ describe("the Codex adapter", () => {
   });
 });
 
+describe("the first prompt a rollout holds", () => {
+  const prompt = (window: { from: string; to: string; cwd?: string }) => createCodexAdapter({ root }).firstPrompt!(window);
+
+  it("is the earliest turn's typed message inside the window, with when that turn started", async () => {
+    // The fixture's text is redacted, which is what the adapter reads back.
+    await expect(prompt(WHOLE)).resolves.toEqual({ at: Date.parse("2026-09-23T23:24:50.593Z"), text: "[redacted]" });
+  });
+
+  it("is nothing where no turn ran in the window, or none ran in this repo", async () => {
+    await expect(prompt({ ...WHOLE, from: "2026-09-23T23:28:00Z" })).resolves.toBeUndefined();
+    await expect(prompt({ ...WHOLE, cwd: "/elsewhere" })).resolves.toBeUndefined();
+  });
+});
+
 describe("a rollout line", () => {
   const at = "2026-09-25T22:46:58.909Z";
   const line = (type: string, payload: object) => JSON.stringify({ timestamp: at, type, payload });
@@ -109,6 +123,22 @@ describe("a rollout line", () => {
   it("names no model where the context names none, and counts no turn from a context alone", () => {
     expect(fold([started("t1"), context("t1")]).map((turn) => turn.model)).toEqual([null]);
     expect(fold([context("t2", "m")])).toEqual([]);
+  });
+
+  const typed = (turn: string, ...texts: string[]) => line("event_msg", {
+    type: "item_completed", turn_id: turn,
+    item: { type: "UserMessage", content: texts.map((text) => ({ type: "text", text, text_elements: [] })) },
+  });
+
+  it("keeps what the developer typed for a turn, from its UserMessage, not injected context", () => {
+    const injected = line("response_item", { type: "message", role: "user", content: [{ type: "input_text", text: "<recommended_plugins>" }] });
+    const turns = fold([started("t1"), injected, typed("t1", "fix the stop line"), typed("t1", "and then this")]);
+    expect(turns.map((turn) => turn.prompt)).toEqual(["fix the stop line"]);
+  });
+
+  it("joins a message's text parts and leaves a turn with none without a prompt", () => {
+    expect(fold([started("t1"), typed("t1", "first", "second")])[0]?.prompt).toBe("first\nsecond");
+    expect(fold([started("t2")])[0]).not.toHaveProperty("prompt");
   });
 
   it("is committed with no prompt, message or local path in it", async () => {

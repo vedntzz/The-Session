@@ -353,6 +353,13 @@ describe("session", () => {
     await expect(program.parseAsync(["start"], { from: "user" })).rejects.toThrow();
   });
 
+  it("start closes a session the hook opened and says so in one line", async () => {
+    await run("start", "--passive");
+    const lines = await run("start", "the declared thing");
+    expect(lines[0]).toBe("  closed   the hook's session: (no prompt)  changed nothing");
+    expect(lines[1]).toMatch(/^  started  the declared thing/);
+  });
+
   it("start surfaces a refusal as a rejection", async () => {
     await run("start", "the first thing");
     await expect(run("start", "the second thing")).rejects.toThrow(/already open/);

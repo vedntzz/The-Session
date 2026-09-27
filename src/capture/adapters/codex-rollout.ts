@@ -13,6 +13,8 @@ export interface RolloutTurn {
   cwd?: string;
   /** Summed `last_token_usage`; null where no usage was recorded for the turn. */
   tokens: TokenCounts | null;
+  /** What the developer typed to start the turn, from its first `UserMessage`; absent where none was recorded. */
+  prompt?: string;
 }
 
 /** What a turn's `turn_context` adds; the first one written for a turn wins. */
@@ -27,6 +29,8 @@ export interface Rollout {
   started: Map<string, number>;
   contexts: Map<string, TurnContext>;
   usage: Map<string, TokenCounts>;
+  /** Each turn's first typed message. Injected context is a `response_item`, never a `UserMessage`. */
+  prompts: Map<string, string>;
   /** The turn a `token_count` belongs to: the last one started and not yet complete. */
   current?: string;
   /** The previous cumulative total, so a total emitted twice in a row is counted once. */
@@ -34,7 +38,7 @@ export interface Rollout {
 }
 
 export function emptyRollout(): Rollout {
-  return { started: new Map(), contexts: new Map(), usage: new Map() };
+  return { started: new Map(), contexts: new Map(), usage: new Map(), prompts: new Map() };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -102,6 +106,17 @@ function foldContext(rollout: Rollout, record: Line): void {
   rollout.contexts.set(id, { model: str(record.payload["model"]) ?? null, ...(cwd === undefined ? {} : { cwd }) });
 }
 
+/** Notes the first message typed for a turn, its text parts joined by newlines. */
+function foldPrompt(rollout: Rollout, record: Line): void {
+  const id = str(record.payload["turn_id"]);
+  const item = record.payload["item"];
+  if (record.type !== "event_msg" || record.payload["type"] !== "item_completed" || id === undefined) return;
+  if (!isObject(item) || item["type"] !== "UserMessage" || rollout.prompts.has(id)) return;
+  const parts = Array.isArray(item["content"]) ? item["content"] : [];
+  const texts = parts.flatMap((part) => (isObject(part) && part["type"] === "text" && typeof part["text"] === "string" ? [part["text"]] : []));
+  if (texts.length > 0) rollout.prompts.set(id, texts.join("\n"));
+}
+
 /** Folds one line in. */
 export function foldRolloutLine(rollout: Rollout, line: string): void {
   const record = line.trim() === "" ? undefined : parseLine(line);
@@ -112,6 +127,7 @@ export function foldRolloutLine(rollout: Rollout, line: string): void {
   foldStart(rollout, record);
   foldContext(rollout, record);
   foldUsage(rollout, record);
+  foldPrompt(rollout, record);
 }
 
 /** Every started turn, with its context's model and cwd where it has one; a context alone is no turn. */
@@ -119,7 +135,9 @@ export function turnsOf(rollout: Rollout): RolloutTurn[] {
   return [...rollout.started].map(([id, at]) => {
     const context = rollout.contexts.get(id);
     const tokens = rollout.usage.get(id) ?? null;
-    return { id, at, model: context?.model ?? null, tokens, ...(context?.cwd === undefined ? {} : { cwd: context.cwd }) };
+    const prompt = rollout.prompts.get(id);
+    return { id, at, model: context?.model ?? null, tokens, ...(context?.cwd === undefined ? {} : { cwd: context.cwd }),
+      ...(prompt === undefined ? {} : { prompt }) };
   });
 }
 

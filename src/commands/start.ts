@@ -2,22 +2,28 @@ import { attributionValues, hasAttribution, readConfig } from "../config.js";
 import type { PrimeProposal } from "../prime.js";
 import { parseAgreement, scopeForAgreement, type Agreement } from "../agreement.js";
 import { changedFilesSince, currentCommit, endStateOf, isRepo } from "../git.js";
+import { describePaths } from "../render/terminal.js";
+import { headOf, intentOf } from "../render/terminal/intent.js";
 import { safeText } from "../render/tui/text.js";
+import { stopSession, type StopOptions } from "./stop.js";
 import {
   appendSession,
   getOpenSession,
+  intentSourceOf,
   type NewSession,
   type Session,
   type StoreOptions,
 } from "../store.js";
 
 /** What `session start` needs, on top of where the store lives. */
-export interface StartOptions extends StoreOptions {
+export interface StartOptions extends StopOptions {
   /** Paths the developer expects to change. */
   scope?: string[];
   proposal?: PrimeProposal;
   /** Explicitly accepted terms; no agreement is inferred when absent. */
   agreement?: Agreement;
+  /** Told of a session the hook opened that this start stopped first. */
+  onCapturedClosed?: (stopped: Session) => void;
 }
 
 /**
@@ -97,8 +103,15 @@ async function openingFacts(cwd: string): Promise<Pick<NewSession, "startedAt" |
 
 /**
  * Opens a session: what the developer says they are about to do, and the
- * commit they are about to do it from. Refuses when one is already open —
- * two open sessions in a repo means neither can be attributed a diff.
+ * commit they are about to do it from. Refuses when a declared session is
+ * already open — two open sessions in a repo means neither can be attributed
+ * a diff.
+ *
+ * A session the hook opened is stopped first instead, the way `session stop`
+ * would stop it: its reality is recorded, and whatever it changed becomes the
+ * new session's baseline. Nobody declared it, so there is no declaration to
+ * take the diff away from, and refusing would leave the developer unable to
+ * declare anything while their editor is running.
  */
 export async function startSession(intent: string, options: StartOptions = {}): Promise<Session> {
   const declared = intent.trim();
@@ -114,6 +127,7 @@ export async function startSession(intent: string, options: StartOptions = {}): 
     ? scopeForAgreement(agreement, options.scope)
     : normalizeScope(options.scope);
   await assertCanStart(declared, options);
+  await stopCaptured(options);
 
   return appendSession(
     {
@@ -141,11 +155,25 @@ export async function assertCanStart(
     throw new Error(`Not a git repository: ${cwd}. Run session start from inside your repo.`);
   }
   const open = await getOpenSession(options);
-  if (open) {
+  if (open && !isCaptured(open)) {
     throw new Error(
       `A session is already open: "${describeOpen(open)}". Run session stop to close it.`,
     );
   }
+}
+
+/** Opened by the hook and never declared: the one kind `start` may stop. */
+function isCaptured(open: Session): boolean {
+  return intentSourceOf(open) === "captured";
+}
+
+/** Stops the open session if the hook opened it; a declared one was refused already. */
+async function stopCaptured(options: StartOptions): Promise<void> {
+  const open = await getOpenSession(options);
+  if (open === undefined || !isCaptured(open)) {
+    return;
+  }
+  options.onCapturedClosed?.(await stopSession(options));
 }
 
 /** How an open session is named in the message that refuses to open a second. */
@@ -201,6 +229,17 @@ async function openingFactsOrNothing(
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The one line `session start` prints above its own when it stopped the
+ * hook's session first. A captured prompt is cut to its first sentence, as
+ * every brief view cuts one.
+ */
+export function formatClosedCaptured(stopped: Session): string {
+  const { head, cut } = stopped.intent === null ? { head: intentOf(stopped), cut: false } : headOf(stopped.intent);
+  const changed = stopped.reality.length > 0 ? describePaths(stopped.reality, "  ") : "nothing";
+  return `  closed   the hook's session: ${head}${cut ? "…" : ""}  changed ${changed}`;
 }
 
 /**
