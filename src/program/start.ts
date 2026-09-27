@@ -1,6 +1,7 @@
 // `session start`.
 import type { Command } from "commander";
-import { formatStarted, startPassiveSession, startSession } from "../commands/start.js";
+import { formatClosedCaptured, formatStarted, startPassiveSession, startSession } from "../commands/start.js";
+import type { Session } from "../store.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
 import { startReviewed } from "../commands/review.js";
@@ -26,10 +27,15 @@ export function registerStart(program: Command, options: ProgramOptions): void {
       if (intent === undefined) {
         throw new Error('No intent given. Run: session start "what you are about to do"');
       }
-      const startOptions = { ...options, scope: flags.scope };
+      const closed: string[] = [];
+      const startOptions = {
+        ...options,
+        scope: flags.scope,
+        onCapturedClosed: (stopped: Session) => closed.push(formatClosedCaptured(stopped)),
+      };
       const session = flags.review
         ? await startReviewed(intent, startOptions)
         : await startSession(intent, startOptions);
-      printLines(session ? formatStarted(session) : ["  Cancelled. No session started."]);
+      printLines([...closed, ...(session ? formatStarted(session) : ["  Cancelled. No session started."])]);
     });
 }

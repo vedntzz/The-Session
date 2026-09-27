@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { formatStarted, startPassiveSession, startSession } from "../src/commands/start.js";
+import { formatClosedCaptured, formatStarted, startPassiveSession, startSession } from "../src/commands/start.js";
+import { captureFromPrompt } from "../src/commands/intent.js";
+import type { Session } from "../src/store.js";
 import { stopSession } from "../src/commands/stop.js";
 import { getOpenSession, readSessions, updateSession, type SessionPatch } from "../src/store.js";
 
@@ -165,6 +167,60 @@ describe("startSession", () => {
   it("writes nothing when it refuses", async () => {
     await expect(startSession("too early", options)).rejects.toThrow();
     await expect(readSessions(options)).resolves.toEqual([]);
+  });
+});
+
+describe("startSession over a session the hook opened", () => {
+  it("stops the captured session with its reality, then opens the declared one", async () => {
+    await commit("a.txt");
+    const captured = await startPassiveSession(options);
+    await captureFromPrompt("tidy the readme", options);
+    await writeFile(path.join(cwd, "README.md"), "tidied", "utf8");
+
+    const closed: Session[] = [];
+    const declared = await startSession("add rate limiting", {
+      ...options,
+      scope: ["api/"],
+      adapters: [],
+      onCapturedClosed: (session) => closed.push(session),
+    });
+
+    const [first, second] = await readSessions(options);
+    expect(first?.id).toBe(captured?.id);
+    expect(first?.endedAt).not.toBeNull();
+    expect(first?.reality).toEqual(["README.md"]);
+    expect(first?.drift).toEqual([]);
+    expect(closed).toEqual([first]);
+    expect(second).toEqual(declared);
+    await expect(getOpenSession(options)).resolves.toEqual(declared);
+    // What the hook's session changed is not the declared one's doing.
+    expect(declared.baseline).toEqual(["README.md"]);
+  });
+
+  it("still refuses over a declared session, and closes nothing", async () => {
+    await commit("a.txt");
+    const first = await startSession("the first thing", options);
+
+    await expect(startSession("the second thing", { ...options, adapters: [] })).rejects.toThrow(
+      /already open: "the first thing"/,
+    );
+    await expect(readSessions(options)).resolves.toEqual([first]);
+  });
+
+  it("closes nothing when its own arguments are refused", async () => {
+    await commit("a.txt");
+    const captured = await startPassiveSession(options);
+
+    await expect(startSession("x", { ...options, scope: [""], adapters: [] })).rejects.toThrow(/--scope/);
+    await expect(getOpenSession(options)).resolves.toEqual(captured);
+  });
+
+  it("says in one line which session it closed and what that one changed", () => {
+    const base = { endedAt: "2026-09-27T00:00:00.000Z", intentMissing: undefined };
+    expect(formatClosedCaptured({ ...base, intent: "tidy the readme. Then more.", reality: ["README.md"] } as Session))
+      .toBe("  closed   the hook's session: tidy the readme.…  changed README.md");
+    expect(formatClosedCaptured({ ...base, intent: null, reality: [] } as unknown as Session))
+      .toBe("  closed   the hook's session: (no prompt)  changed nothing");
   });
 });
 
