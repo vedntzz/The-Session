@@ -15,20 +15,70 @@ $ session week last
   ace87ecd · $0.45 · 3 turns
 ```
 
-```bash
-npm i -g @vedantzz/session
-```
-
 ## Quickstart
 
-```bash
-session scan           # what agent sessions already on this disk did — no setup, writes nothing
-session hook install   # register the Claude Code hooks once per machine
-# work normally — the hooks open a record and close it when the agent stops
-session                # where this repo stands, and the one thing worth typing next
-session week           # the last 7 days: where the work went, what drifted
-session pr             # a pull request body, transcribed from the record
+From npm install to a recorded session, inside any git repository with Claude
+Code installed.
+
+**1. Install.**
+
 ```
+$ npm i -g @vedantzz/session
+
+added 3 packages in 185ms
+```
+
+**2. Register the write check in this repository.** It writes to
+`.claude/settings.local.json` only.
+
+```
+$ session hook install --repo
+  wrote    …/demo/.claude/settings.local.json
+  hook     PreToolUse (Edit|Write|MultiEdit|Bash) → session hook check
+```
+
+**3. Declare what the agent is about to do, and where.** The intent cannot be
+edited afterwards.
+
+```
+$ session start "add a farewell function next to greet" --scope src
+  started  add a farewell function next to greet  (head 8905d07)
+  scope    src
+```
+
+**4. Run the agent.** Use it the way you normally would.
+
+```
+$ claude
+```
+
+**5. Close the record.** It shows what changed, what fell outside the declared
+scope, and the cost read from the transcript.
+
+```
+$ session stop
+  stopped  add a farewell function next to greet
+  changed  src/greet.js  test/greet.test.js
+  outside  test/greet.test.js
+  cost     206,175 tokens  1 turn  (7 api calls)
+```
+
+**6. Read it back.**
+
+```
+$ session week last
+
+  The work has not landed on the default branch yet.
+  You asked for "add a farewell function next to greet".
+  1 file changed outside what you declared: test/greet.test.js.
+
+  89720f7a · $0.12 · 1 turn
+```
+
+Next: `session hook install` (without `--repo`) registers user-level hooks so
+that sessions open and close by themselves. `session scan` shows what agent
+sessions already on this disk did, and `session pr` writes a pull request body
+from the record.
 
 ## Declaring before the agent runs
 
