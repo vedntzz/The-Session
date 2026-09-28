@@ -2,6 +2,7 @@
 // module exported still comes from it, and is the same function as the new home's.
 import { describe, expect, it } from "vitest";
 import * as pricing from "../src/pricing.js";
+import * as rates from "../src/pricing-rates.js";
 import * as spend from "../src/pricing-spend.js";
 
 describe("pricing.ts, split", () => {
@@ -32,5 +33,25 @@ describe("pricing.ts, split", () => {
     expect(pricing.spendOf).toBe(spend.spendOf);
     expect(pricing.shippedNote).toBe(spend.shippedNote);
     expect(pricing.unpricedThroughout).toBe(spend.unpricedThroughout);
+  });
+
+  it("re-exports the rates file, its stub and its loading from pricing-rates.ts", () => {
+    for (const name of [
+      "RATES_FILE",
+      "USER_RATES_FILE",
+      "bundledRatesFile",
+      "loadChecked",
+      "loadRates",
+      "parseChecked",
+      "parseRates",
+      "rateStub",
+    ] as const) {
+      expect(pricing[name]).toBe(rates[name]);
+    }
+  });
+
+  it("still finds the bundled rates.json beside the package", async () => {
+    expect(new URL(rates.bundledRatesFile()).pathname.endsWith("/rates.json")).toBe(true);
+    expect((await rates.loadRates()).size).toBeGreaterThan(0);
   });
 });
