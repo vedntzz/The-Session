@@ -103,7 +103,7 @@ describe("rateFor", () => {
     expect(rateFor("claude-opus-4-1-20250805", rates)?.rate).toBe(OPUS);
   });
 
-  it("takes the longest key that fits, not the first", () => {
+  it("prices a dated id at its own model, not a shorter key", () => {
     const table: RateTable = new Map([
       ["claude-opus-4", HAIKU],
       ["claude-opus-4-1", OPUS],
@@ -115,6 +115,35 @@ describe("rateFor", () => {
   it("only matches at a dash", () => {
     // Otherwise `claude-opus-4` prices `claude-opus-45`, a model nobody quoted.
     expect(rateFor("claude-opus-4123", new Map([["claude-opus-4", OPUS]]))).toBeUndefined();
+  });
+
+  it("matches a prefix only where what follows is a date", () => {
+    // The prefix rule exists for dated snapshots. Anything else after the dash
+    // is another model, and pricing it at its neighbour's rate is a guess.
+    const table: RateTable = new Map([
+      ["claude-opus-5", OPUS],
+      ["claude-sonnet-4-5", HAIKU],
+      ["gpt-4o", HAIKU],
+    ]);
+
+    expect(rateFor("claude-opus-5-5", table)).toBeUndefined();
+    expect(rateFor("claude-opus-5-latest", table)).toBeUndefined();
+    expect(rateFor("claude-opus-5-5-20260901", table)).toBeUndefined();
+    expect(rateFor("claude-opus-5-2026091", table)).toBeUndefined();
+    expect(rateFor("claude-sonnet-4-5-20250929", table)).toEqual({
+      key: "claude-sonnet-4-5",
+      rate: HAIKU,
+    });
+    expect(rateFor("gpt-4o-2024-08-06", table)?.key).toBe("gpt-4o");
+  });
+
+  it("reports a model whose suffix is not a date as unpriced, by name", () => {
+    const price = priceSession(
+      { ...zeroCost(), model: "claude-opus-5-5" },
+      new Map([["claude-opus-5", OPUS]]),
+    );
+
+    expect(price).toEqual({ priced: false, model: "claude-opus-5-5" });
   });
 
   it("has nothing for a model the table has never heard of", () => {
