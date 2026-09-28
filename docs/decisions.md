@@ -1053,6 +1053,8 @@ Whether any of these holds for the build above is unknown. If one does, `session
 
 *27 September 2026.* Codex's own `/hooks` panel reports "clamping SessionEnd hook timeout to 3s in ~/.codex/hooks.json". Whatever `timeout` the file asks for, `session stop --if-open` gets 3 seconds at `SessionEnd`, so a captured Codex session may stay open until the next `session start` or `session stop` closes it. Observed in the panel, not measured on a run.
 
+*28 September 2026, correction.* The 3-second clamp is not what leaves these sessions open: `SessionEnd` was never seen firing. With the hooks trusted and enabled, `SessionStart` and `UserPromptSubmit` fire, and `session stop --if-open` does not run, because Codex 0.157 keeps a task alive in its daemon after `/exit`, so the session does not end. A captured Codex session is closed by the next `session start`, which stops a session the hook opened before declaring its own, or by `session stop`. The hook's `session start --passive` does not close it: it opens nothing while a session is open, so the next Codex session's work lands on the one still open.
+
 ## A hook has no PATH
 
 *27 September 2026, this machine.* Claude Code runs a hook's command through
