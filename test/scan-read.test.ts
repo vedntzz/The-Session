@@ -278,6 +278,28 @@ describe("scanSessions", () => {
     expect(sessions[0]?.label).toBe("the actual question");
   });
 
+  it("labels a pasted prompt with its text, never Claude Code's paste tag", async () => {
+    await writeTranscript("aaaa", [
+      prompt(ago(60), '<pasted_content id="ab12">\n\nSet up the Jev contract.', "/dev/one"),
+      reply(ago(59), "req-1", "/dev/one"),
+    ]);
+
+    const { sessions } = await scanSessions(30, RATES, { root: projects, now: clock });
+
+    expect(sessions[0]?.label).toBe("Set up the Jev contract.");
+  });
+
+  it("labels a prompt that was only the paste tag as not captured, like every other view", async () => {
+    await writeTranscript("aaaa", [
+      prompt(ago(60), '<pasted_content id="ab12">', "/dev/one"),
+      reply(ago(59), "req-1", "/dev/one"),
+    ]);
+
+    const { sessions } = await scanSessions(30, RATES, { root: projects, now: clock });
+
+    expect(sessions[0]?.label).toBe("(pasted text not captured)");
+  });
+
   it("still cuts a turn at a slash command, even though it will not label one", async () => {
     // The label and the turn boundary are different questions. A nicer label
     // must never change a cost figure.
