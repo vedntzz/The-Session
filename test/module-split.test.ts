@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import * as pricing from "../src/pricing.js";
 import * as rates from "../src/pricing-rates.js";
 import * as spend from "../src/pricing-spend.js";
+import * as brief from "../src/render/terminal/brief.js";
+import * as sentences from "../src/render/terminal/brief-sentences.js";
 
 describe("pricing.ts, split", () => {
   it("exports exactly what it did before the split", () => {
@@ -53,5 +55,15 @@ describe("pricing.ts, split", () => {
   it("still finds the bundled rates.json beside the package", async () => {
     expect(new URL(rates.bundledRatesFile()).pathname.endsWith("/rates.json")).toBe(true);
     expect((await rates.loadRates()).size).toBeGreaterThan(0);
+  });
+});
+
+describe("brief.ts, split", () => {
+  it("exports exactly what it did before the split", () => {
+    expect(Object.keys(brief)).toEqual(["formatBrief"]);
+  });
+
+  it("takes its three sentences from brief-sentences.ts", () => {
+    expect(Object.keys(sentences).sort()).toEqual(["WHERE_IT_WENT", "askedFor", "wentOutside"]);
   });
 });
