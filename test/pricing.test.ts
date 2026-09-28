@@ -461,6 +461,46 @@ describe("the bundled table", () => {
     );
   });
 
+  it("does not let claude-opus-5 swallow claude-opus-5-5", async () => {
+    // `claude-opus-5-5` is `claude-opus-5` plus a dash, so without its own
+    // entry it was priced at Opus 5's rate — a different model's price, which
+    // is the guess this table exists to refuse. The figures are the ones
+    // https://claude.com/pricing published on 2026-09-28, 5-minute cache writes.
+    const table = await loadRates();
+
+    for (const model of ["claude-opus-5-5", "claude-opus-5-5-20260901"]) {
+      expect(rateFor(model, table), model).toEqual({
+        key: "claude-opus-5-5",
+        rate: { input: 4, cacheRead: 0.2, cacheCreation: 5, output: 20 },
+      });
+    }
+    expect(rateFor("claude-opus-5-20260115", table)?.key).toBe("claude-opus-5");
+  });
+
+  it("does not let claude-fable-5 swallow claude-fable-5-1", async () => {
+    // Same shape: Fable 5.1 reads cache at $0.25, Fable 5 at $1. Figures from
+    // https://claude.com/pricing on 2026-09-28.
+    const table = await loadRates();
+
+    expect(rateFor("claude-fable-5-1", table)).toEqual({
+      key: "claude-fable-5-1",
+      rate: { input: 10, cacheRead: 0.25, cacheCreation: 12.5, output: 50 },
+    });
+    expect(rateFor("claude-fable-5-20260301", table)?.key).toBe("claude-fable-5");
+  });
+
+  it("prices claude-sonnet-5 at the published rate", async () => {
+    // https://claude.com/pricing on 2026-09-28; the table had $3/$15 before.
+    const table = await loadRates();
+
+    expect(table.get("claude-sonnet-5")).toEqual({
+      input: 2,
+      cacheRead: 0.2,
+      cacheCreation: 2.5,
+      output: 10,
+    });
+  });
+
   it("says where its prices came from and that they go stale", async () => {
     // The numbers in here are a snapshot of somebody else's price list. A
     // reader who cannot tell how old they are has no way to know whether to
