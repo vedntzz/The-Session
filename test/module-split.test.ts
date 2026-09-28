@@ -6,6 +6,8 @@ import * as rates from "../src/pricing-rates.js";
 import * as spend from "../src/pricing-spend.js";
 import * as brief from "../src/render/terminal/brief.js";
 import * as sentences from "../src/render/terminal/brief-sentences.js";
+import * as session from "../src/render/terminal/session.js";
+import * as sessionPaths from "../src/render/terminal/session-paths.js";
 
 describe("pricing.ts, split", () => {
   it("exports exactly what it did before the split", () => {
@@ -65,5 +67,20 @@ describe("brief.ts, split", () => {
 
   it("takes its three sentences from brief-sentences.ts", () => {
     expect(Object.keys(sentences).sort()).toEqual(["WHERE_IT_WENT", "askedFor", "wentOutside"]);
+  });
+});
+
+describe("session.ts, split", () => {
+  it("exports exactly what it did before the split", () => {
+    expect(Object.keys(session)).toEqual(["formatSession"]);
+  });
+
+  it("takes its path rows from session-paths.ts", () => {
+    expect(Object.keys(sessionPaths).sort()).toEqual([
+      "changedLines",
+      "declaredLine",
+      "labelledPaths",
+      "outsideLines",
+    ]);
   });
 });
