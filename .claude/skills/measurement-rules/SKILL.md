@@ -424,9 +424,11 @@ Prices are **data**, not code — `rates.json` beside the package, merged entry 
 entry with `~/.session/rates.json` if there is one. A model in neither is
 reported unpriced, with its tokens and its name. Never price an unknown model at
 the nearest model's rate: the figure goes on invoices, and an admitted gap beats
-a plausible wrong number. Match exactly, or by the longest key that is a prefix
-**at a dash** — transcripts report dated ids, and without the dash
-`claude-opus-4` would price `claude-opus-45`.
+a plausible wrong number. Match exactly, or as a key followed by **a dash and a
+snapshot date** (`-20250929`, `-2024-08-06`) and nothing else — transcripts
+report dated ids. Any other suffix is another model: `claude-opus-5-5` is not
+`claude-opus-5`, and was once billed at its rate by a rule that let any dash
+through. Never widen the suffix past a date.
 
 The bundled table carries the current Claude and OpenAI models and the older
 ones a log may still hold, and it says on its face that prices go stale and
@@ -513,9 +515,10 @@ both, and a window with any of it says `none of it on changes that never
 merged` instead. Both counters are exactly zero when no such session
 contributed, so the test never rests on comparing two sums of floats.
 
-It is one function, `shippedNote` in `pricing.ts`, called by `week` and by the
-page `week --open` writes. Two copies would be two chances for the terminal
-and the page to say different things about one window.
+It is one function, `shippedNote` in `pricing-spend.ts` (re-exported by
+`pricing.ts`), called by `week` and by the page `week --open` writes. Two
+copies would be two chances for the terminal and the page to say different
+things about one window.
 
 ## A total nobody can work out
 
@@ -541,10 +544,10 @@ it. Neither is a dollar, so both keep a window off `$0.00`; but a note that
 pooled them would send somebody to `~/.session/rates.json` to add a price for a
 model called `unknown`. Every view names them apart.
 
-It is one function, `unpricedThroughout` in `pricing.ts`, and every view calls
-it rather than spelling the clauses out again. A test copied into three
-renderers is three chances for them to come to disagree about what a week cost,
-and the clause that gets dropped in the copying is never the first one. It
+It is one function, `unpricedThroughout` in `pricing-spend.ts` (re-exported
+by `pricing.ts`), and every view calls it rather than spelling the clauses out
+again. A test copied into three renderers is three chances for them to come to
+disagree about what a week cost, and the clause that gets dropped in the copying is never the first one. It
 takes the fields it reads rather than a whole `Spend`, so `scan` — which has no
 `unmerged` to report — is held to the same rule; `uncaptured` is optional
 there, because a scanned transcript is a session *because* it has turns in it.
