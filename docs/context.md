@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `c71db58 Merge pull request #15 from vedntzz/refactor/split-at-ratchet` (`v2.0.1-9-gc71db58`).
+Derived at `c770db1 Merge pull request #16 from vedntzz/fix/rate-prefix-dates-only` (`v2.0.1-12-gc770db1`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -1086,8 +1086,8 @@ model's rate. A release of this tool is not a price update.
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
  Test Files  98 passed (98)
       Tests  2540 passed (2540)
-   Start at  03:14:29
-   Duration  236.65s (transform 2.86s, setup 1.62s, collect 15.02s, tests 1263.27s, environment 26ms, prepare 5.79s)
+   Start at  03:52:02
+   Duration  242.83s (transform 2.66s, setup 1.53s, collect 13.93s, tests 1303.11s, environment 14ms, prepare 5.81s)
 ```
 
 The generator runs the behavioral suite before writing this document, then
