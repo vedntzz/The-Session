@@ -7,6 +7,7 @@ import * as spend from "../src/pricing-spend.js";
 import * as brief from "../src/render/terminal/brief.js";
 import * as sentences from "../src/render/terminal/brief-sentences.js";
 import * as session from "../src/render/terminal/session.js";
+import * as sessionCost from "../src/render/terminal/session-cost.js";
 import * as sessionPaths from "../src/render/terminal/session-paths.js";
 
 describe("pricing.ts, split", () => {
@@ -82,5 +83,9 @@ describe("session.ts, split", () => {
       "labelledPaths",
       "outsideLines",
     ]);
+  });
+
+  it("takes its cost rows from session-cost.ts", () => {
+    expect(Object.keys(sessionCost).sort()).toEqual(["costLines", "pricesLines"]);
   });
 });
