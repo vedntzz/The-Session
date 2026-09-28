@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `7454092 2.0.1` (`v2.0.1`).
+Derived at `c71db58 Merge pull request #15 from vedntzz/refactor/split-at-ratchet` (`v2.0.1-9-gc71db58`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -67,7 +67,7 @@ $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
      102
-   22575
+   22644
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -397,7 +397,7 @@ to nest here and its relative links repointed at this directory.
 
 ```console
 $ wc -l .claude/skills/measurement-rules/SKILL.md
-     603 .claude/skills/measurement-rules/SKILL.md
+     606 .claude/skills/measurement-rules/SKILL.md
 ```
 
 That file is the copy a change is held to. **If the two ever disagree, the
@@ -822,9 +822,11 @@ Prices are **data**, not code — `rates.json` beside the package, merged entry 
 entry with `~/.session/rates.json` if there is one. A model in neither is
 reported unpriced, with its tokens and its name. Never price an unknown model at
 the nearest model's rate: the figure goes on invoices, and an admitted gap beats
-a plausible wrong number. Match exactly, or by the longest key that is a prefix
-**at a dash** — transcripts report dated ids, and without the dash
-`claude-opus-4` would price `claude-opus-45`.
+a plausible wrong number. Match exactly, or as a key followed by **a dash and a
+snapshot date** (`-20250929`, `-2024-08-06`) and nothing else — transcripts
+report dated ids. Any other suffix is another model: `claude-opus-5-5` is not
+`claude-opus-5`, and was once billed at its rate by a rule that let any dash
+through. Never widen the suffix past a date.
 
 The bundled table carries the current Claude and OpenAI models and the older
 ones a log may still hold, and it says on its face that prices go stale and
@@ -911,9 +913,10 @@ both, and a window with any of it says `none of it on changes that never
 merged` instead. Both counters are exactly zero when no such session
 contributed, so the test never rests on comparing two sums of floats.
 
-It is one function, `shippedNote` in `pricing.ts`, called by `week` and by the
-page `week --open` writes. Two copies would be two chances for the terminal
-and the page to say different things about one window.
+It is one function, `shippedNote` in `pricing-spend.ts` (re-exported by
+`pricing.ts`), called by `week` and by the page `week --open` writes. Two
+copies would be two chances for the terminal and the page to say different
+things about one window.
 
 ### A total nobody can work out
 
@@ -939,10 +942,10 @@ it. Neither is a dollar, so both keep a window off `$0.00`; but a note that
 pooled them would send somebody to `~/.session/rates.json` to add a price for a
 model called `unknown`. Every view names them apart.
 
-It is one function, `unpricedThroughout` in `pricing.ts`, and every view calls
-it rather than spelling the clauses out again. A test copied into three
-renderers is three chances for them to come to disagree about what a week cost,
-and the clause that gets dropped in the copying is never the first one. It
+It is one function, `unpricedThroughout` in `pricing-spend.ts` (re-exported
+by `pricing.ts`), and every view calls it rather than spelling the clauses out
+again. A test copied into three renderers is three chances for them to come to
+disagree about what a week cost, and the clause that gets dropped in the copying is never the first one. It
 takes the fields it reads rather than a whole `Spend`, so `scan` — which has no
 `unmerged` to report — is held to the same rule; `uncaptured` is optional
 there, because a scanned transcript is a session *because* it has turns in it.
@@ -1068,7 +1071,7 @@ evidence/ gen-context.mjs (docs/context.md) prime-evaluate.mjs enforce-e2e.mjs
 
 ```console
 $ node -e "const r=require('./rates.json');console.log('model entries: '+Object.keys(r.models).length);console.log('prices checked: '+r.checked)"
-model entries: 42
+model entries: 44
 prices checked: 2026-08-23
 ```
 
@@ -1082,9 +1085,9 @@ model's rate. A release of this tool is not a price update.
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
  Test Files  98 passed (98)
-      Tests  2535 passed (2535)
-   Start at  02:45:01
-   Duration  240.00s (transform 2.39s, setup 1.58s, collect 13.73s, tests 1233.67s, environment 18ms, prepare 5.08s)
+      Tests  2540 passed (2540)
+   Start at  03:14:29
+   Duration  236.65s (transform 2.86s, setup 1.62s, collect 15.02s, tests 1263.27s, environment 26ms, prepare 5.79s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

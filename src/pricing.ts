@@ -51,31 +51,31 @@ export function priceTokens(tokens: TokenCounts, rate: ModelRate): number {
   );
 }
 
+/** A snapshot date ending a model id: `-20250929`, or `-2024-08-06`. Nothing else. */
+const SNAPSHOT_DATE = /-(?:\d{8}|\d{4}-\d{2}-\d{2})$/;
+
 /**
  * The rates entry that covers a model.
  *
- * Exactly, or by the longest key that is a prefix of it at a dash: transcripts
- * report dated ids like `claude-sonnet-4-5-20250929`, and a table that had to
- * list every snapshot would be stale the week it shipped. The dash matters —
- * without it `claude-opus-4` would price `claude-opus-45`, a model nobody has
- * quoted a price for.
+ * Exactly, or as the same id with a snapshot date on the end: transcripts
+ * report dated ids like `claude-sonnet-4-5-20250929` (or OpenAI's
+ * `gpt-4o-2024-08-06`), and a table that had to list every snapshot would be
+ * stale the week it shipped. Only a date: any other suffix is another model —
+ * `claude-opus-5-5` is not `claude-opus-5`, and neither is `claude-opus-45` or
+ * `claude-opus-5-latest` — and pricing it at its neighbour's rate is the guess
+ * this table exists to refuse. Such a model is unpriced, by name.
  */
 export function rateFor(
   model: string,
   rates: RateTable,
 ): { key: string; rate: ModelRate } | undefined {
-  const exact = rates.get(model);
-  if (exact) {
-    return { key: model, rate: exact };
-  }
-
-  let best: { key: string; rate: ModelRate } | undefined;
-  for (const [key, rate] of rates) {
-    if (model.startsWith(`${key}-`) && (best === undefined || key.length > best.key.length)) {
-      best = { key, rate };
+  for (const key of [model, model.replace(SNAPSHOT_DATE, "")]) {
+    const rate = rates.get(key);
+    if (rate) {
+      return { key, rate };
     }
   }
-  return best;
+  return undefined;
 }
 
 /** What a session cost, or which model stopped it being answerable. */
@@ -84,7 +84,7 @@ export type Price =
       priced: true;
       /** The model as the transcript reported it. */
       model: string;
-      /** The rates key that covered it, which may be a shorter prefix. */
+      /** The rates key that covered it: the model, or the model less its snapshot date. */
       matched: string;
       usd: number;
       /**
