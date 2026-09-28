@@ -9,6 +9,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
+import { unwrapPastes } from "../capture/adapters/claude-prompt.js";
 import {
   defaultTranscriptRoot,
   transcriptsTouchedIn,
@@ -24,6 +25,7 @@ import {
 import { isRepo, landingsSince, repoRoot, type Landing } from "../git.js";
 import { summarizeScan, UNKNOWN_REPO, type ScanReport, type ScannedSession } from "../scan.js";
 import type { RateTable } from "../pricing.js";
+import { NO_INTENT_PASTED } from "../render/terminal/intent.js";
 
 /** How far back `scan` looks when nobody says. */
 export const DEFAULT_SCAN_DAYS = 30;
@@ -155,8 +157,21 @@ function openTurn(
 ): void {
   setTurn(turn() + 1);
   if (folded.label === undefined) {
-    folded.label = promptTextOf(entry);
+    folded.label = labelOf(entry);
   }
+}
+
+/**
+ * The prompt's words, less Claude Code's paste tag. A prompt that was only the
+ * tag carried no words, and reads as it does in every other view.
+ */
+function labelOf(entry: Record<string, unknown>): string | undefined {
+  const prompt = promptTextOf(entry);
+  if (prompt === undefined) {
+    return undefined;
+  }
+  const { text, pasteOnly } = unwrapPastes(prompt);
+  return pasteOnly ? NO_INTENT_PASTED : text.trim();
 }
 
 /** What a session with no prompt in it is called. */
