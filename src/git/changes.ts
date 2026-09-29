@@ -1,5 +1,5 @@
 // What changed since a commit.
-import { chunk, repoRoot, runGit, splitNulList, tryGit } from "./run.js";
+import { repoRoot, runGit, splitNulList, tryGit } from "./run.js";
 
 /**
  * Paths that differ from `commit`, relative to the repo root, sorted and

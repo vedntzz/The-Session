@@ -1,13 +1,12 @@
 // push, pull and peers: what travels, and what refuses to.
 import { readFile } from "node:fs/promises";
 import { repoRoot } from "../git.js";
-import { fingerprint, loadOrCreateKeypair, loadPublicKey } from "../keys.js";
-import { resolveStoreFile, storeHome, type StoreOptions } from "../store.js";
-import { checkChain, isIntact, type ChainCheck } from "../verify.js";
+import { loadOrCreateKeypair, loadPublicKey } from "../keys.js";
+import { resolveStoreFile, storeHome } from "../store.js";
+import { isIntact, type ChainCheck } from "../verify.js";
 import {
   fingerprintOf,
   linesOf,
-  LOG_ENTRY,
   refFor,
   REF_PREFIX,
   sortPeers,

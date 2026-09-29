@@ -2,8 +2,8 @@
 import { appendFile, mkdir, open, realpath, rm, stat } from "node:fs/promises";
 import { tryGit } from "../git.js";
 import path from "node:path";
-import { canonicalJson, GENESIS, lineHash, recordHash, type SignedBody } from "../chain.js";
-import { fingerprint, loadOrCreateKeypair, signHash, type Keypair } from "../keys.js";
+import { GENESIS, lineHash, recordHash, type SignedBody } from "../chain.js";
+import { loadOrCreateKeypair, signHash, type Keypair } from "../keys.js";
 import {
   RECORD_VERSION,
   type LogRecord,
@@ -16,10 +16,7 @@ import {
 import { repoIdentity, resolveStoreFile, storeHome } from "./paths.js";
 import {
   intentSourceFor,
-  isComplete,
-  keptIntent,
   readLogAt,
-  readLogFile,
   readSessions,
   sessionFrom,
   type RawLog,

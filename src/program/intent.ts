@@ -1,7 +1,6 @@
 // `session intent`, the hook's prompt capture.
 import type { Command } from "commander";
 import { captureFromPrompt, promptFromHook, readHookPayload } from "../commands/intent.js";
-import { startPassiveSession } from "../commands/start.js";
 import type { ProgramOptions } from "./options.js";
 
 export function registerIntent(program: Command, options: ProgramOptions): void {

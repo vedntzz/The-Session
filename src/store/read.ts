@@ -13,7 +13,6 @@ import {
   type NewSession,
   type RecordFields,
   type Session,
-  type SessionPatch,
   type StoreOptions,
 } from "./record.js";
 import {

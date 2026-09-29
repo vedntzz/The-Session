@@ -6,7 +6,7 @@
 // second parser that segmented turns or deduplicated calls even slightly
 // differently would have the tool quoting two figures for the same work with
 // nothing to say which was right.
-import { zeroCost, type SessionCost, type TokenCounts } from "../store.js";
+import { zeroCost, type SessionCost } from "../store.js";
 import { addTokens, dominant } from "./adapter.js";
 
 export function isObject(value: unknown): value is Record<string, unknown> {

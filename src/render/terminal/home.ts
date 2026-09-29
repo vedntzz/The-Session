@@ -4,7 +4,7 @@ import { inOwnWords, type Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { NO_RATES, type View } from "./cost.js";
 import { headOf } from "./intent.js";
-import { clock, flatten, INDENT, padRight, plural, width, wrapSegments } from "./text.js";
+import { clock, flatten, INDENT, padRight, width, wrapSegments } from "./text.js";
 
 // --- the home screen -----------------------------------------------------
 

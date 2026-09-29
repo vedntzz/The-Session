@@ -1,5 +1,5 @@
 // What a ref is called, what one line of a published log says. Pure.
-import type { LogRecord, RawLine } from "../store.js";
+import type { RawLine } from "../store.js";
 import { checkChain, type ChainCheck } from "../verify.js";
 
 /**
