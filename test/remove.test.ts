@@ -93,6 +93,17 @@ describe("resolveRemove", () => {
     expect(await resolveRemove({ kind: "unknown" }, root, root)).toEqual({ kind: "blocked", reason: "unsupported-remove" });
   });
 
+  it("blocks a remove with no operands rather than resolving nothing", async () => {
+    expect(await resolveRemove({ kind: "remove", paths: [], force: true }, root, root))
+      .toEqual({ kind: "blocked", reason: "unsupported-remove" });
+  });
+
+  it("blocks the whole command for one operand that cannot be a file, however fine the rest", async () => {
+    // src/a is a file, so src/a/x is no missing operand but one that cannot
+    // exist; src/b resolving cleanly beside it must not pass the command.
+    expect(await resolve("rm src/b src/a/x")).toEqual({ kind: "blocked", reason: "not-file" });
+  });
+
   it("feeds the decision: deleting a sensitive file is a violation even inside the paths", async () => {
     const resolved = await resolve("rm .env");
     if (resolved.kind !== "resolved") throw new Error("expected a resolution");
