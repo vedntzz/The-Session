@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -133,12 +133,33 @@ describe("session scan", () => {
     await transcript("aaaa", "work in this checkout", work);
     await transcript("bbbb", "work somewhere else", other);
 
-    // The real path: the reader files a session under the root git reports,
-    // and `--repo` is compared with it as given, symlinks unresolved.
-    const text = (await run("scan", "--repo", await realpath(work))).join("\n");
+    const text = (await run("scan", "--repo", work)).join("\n");
 
     expect(text).toContain("work in this checkout");
     expect(text).not.toContain("work somewhere else");
+  });
+
+  it("finds a checkout named through a symlink, as git files it under the real path", async () => {
+    const link = path.join(root, "link-to-work");
+    await symlink(work, link);
+    await transcript("aaaa", "work in this checkout", work);
+
+    for (const named of [link, path.join(link, "."), await realpath(work)]) {
+      expect((await run("scan", "--repo", named)).join("\n")).toContain("work in this checkout");
+    }
+  });
+
+  it("still filters by a --repo that no longer exists, as typed", async () => {
+    const gone = path.join(root, "gone");
+    await mkdir(gone, { recursive: true });
+    await transcript("aaaa", "work in a deleted directory", gone);
+    await transcript("bbbb", "work in this checkout", work);
+    await rm(gone, { recursive: true });
+
+    const text = (await run("scan", "--repo", gone)).join("\n");
+
+    expect(text).toContain("work in a deleted directory");
+    expect(text).not.toContain("work in this checkout");
   });
 
   it("writes nothing to the store", async () => {

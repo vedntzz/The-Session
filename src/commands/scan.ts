@@ -6,7 +6,7 @@
 // `~/.session`, no record of anything. It opens transcripts, asks git
 // questions, and writes nothing anywhere.
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { unwrapPastes } from "../capture/adapters/claude-prompt.js";
@@ -299,10 +299,24 @@ export function overlaps(
   return landings.some((landing) => landing.at >= from && landing.at <= to);
 }
 
-/** True when a session ran in the checkout `--repo` named. */
-function inRepo(session: ScannedSession, wanted: string): boolean {
+/** True when a session ran in the checkout `--repo` named, by any of its spellings. */
+function inRepo(session: ScannedSession, wanted: readonly string[]): boolean {
   const left = path.resolve(session.repo);
-  return left === wanted || left.startsWith(wanted + path.sep);
+  return wanted.some((dir) => left === dir || left.startsWith(dir + path.sep));
+}
+
+/**
+ * `--repo` as typed and as the filesystem resolves it.
+ *
+ * A session is filed under the root git reports, which has its symlinks
+ * resolved — `/private/var/…` on macOS where the shell says `/var/…`. The
+ * path as typed is kept too: a directory git does not know is filed under
+ * whatever the transcript recorded, and one since deleted has no real path.
+ */
+async function wantedRepo(repo: string): Promise<string[]> {
+  const typed = path.resolve(repo);
+  const real = await realpath(typed).catch(() => typed);
+  return real === typed ? [typed] : [typed, real];
 }
 
 /**
@@ -325,7 +339,7 @@ export async function scanSessions(
   const sessions = await scannedSessions(root, from, to);
   await groupByCheckout(sessions);
 
-  const wanted = options.repo === undefined ? undefined : path.resolve(options.repo);
+  const wanted = options.repo === undefined ? undefined : await wantedRepo(options.repo);
   const kept = wanted === undefined ? sessions : sessions.filter((one) => inRepo(one, wanted));
 
   await markLandings(kept, new Date(from));
