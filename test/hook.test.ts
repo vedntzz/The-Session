@@ -57,13 +57,10 @@ const STALE = { hooks: [{ type: "command", command: STOP_HOOK.command }] };
 const THEIRS = { hooks: [{ type: "command", command: "say goodbye" }] };
 
 /** What a settings file holds after a full install. */
-const ALL: Settings = {
-  hooks: {
-    [STOP_HOOK.event]: [STOP],
-    [OPEN_HOOK.event]: [OPEN],
-    [PROMPT_HOOK.event]: [PROMPT],
-  },
-};
+const ALL: Settings = { hooks: { [STOP_HOOK.event]: [STOP], [OPEN_HOOK.event]: [OPEN], [PROMPT_HOOK.event]: [PROMPT] } };
+/** `ALL` as an installer writes it: the start hook names its own tool, so a start can say which agent opened it. */
+const installed = (agent: string): Settings => ({ hooks: { ...(ALL["hooks"] as object), [OPEN_HOOK.event]:
+  [{ hooks: [{ type: "command", command: commandLine(OPEN_HOOK, L, agent), timeout: OPEN_HOOK.timeout }] }] } });
 
 /** What it holds when passive capture was turned off. */
 const MANUAL: Settings = { hooks: { [STOP_HOOK.event]: [STOP] } };
@@ -524,7 +521,7 @@ describe("installHook", () => {
       launcher: L,
       bare: { before: 0, after: 0 },
     });
-    await expect(read()).resolves.toEqual({ model: "opus", ...ALL });
+    await expect(read()).resolves.toEqual({ model: "opus", ...installed("claude-code") });
   });
 
   it("registers the closer alone with --passive=false", async () => {
@@ -553,7 +550,7 @@ describe("installHook", () => {
     const result = await installHook({ settings: file, launcher: L, passive: true });
 
     expect(result.changed).toBe(true);
-    await expect(read()).resolves.toEqual(ALL);
+    await expect(read()).resolves.toEqual(installed("claude-code"));
   });
 
   it("writes JSON a person can read, and ends the file with a newline", async () => {
@@ -631,7 +628,7 @@ describe("installHook", () => {
 
     await installHook({ settings: file, launcher: L });
 
-    await expect(read()).resolves.toEqual(ALL);
+    await expect(read()).resolves.toEqual(installed("claude-code"));
   });
 
   it("says where it looked when there is no settings file", async () => {
@@ -876,7 +873,7 @@ describe("installCodexHooks", () => {
     const result = await installCodexHooks({ codexHooks: file, launcher: L });
 
     expect(result).toMatchObject({ file, tool: "Codex", changed: true, action: "installed" });
-    expect(await read()).toEqual(ALL);
+    expect(await read()).toEqual(installed("codex"));
   });
 
   it("rewrites the bare commands an earlier setup wrote, where they stand", async () => {
@@ -889,7 +886,7 @@ describe("installCodexHooks", () => {
     const result = await installCodexHooks({ codexHooks: file, launcher: L });
 
     expect(result?.bare).toEqual({ before: 3, after: 0 });
-    expect(await read()).toEqual({ hooks: { SessionStart: [OPEN], SessionEnd: [STOP], UserPromptSubmit: [PROMPT] } });
+    expect(await read()).toEqual(installed("codex"));
   });
 
   it("follows passive capture the same way", async () => {

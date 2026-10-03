@@ -14,7 +14,8 @@ export function registerStart(program: Command, options: ProgramOptions): void {
     .option("--scope <paths...>", "paths you expect to change")
     .option("--review", "review and edit an agreement before accepting and starting (interactive)")
     .option("--passive", "for the editor hook: open an undeclared session, or do nothing")
-    .action(async (intent: string | undefined, flags: { scope?: string[]; passive?: boolean; review?: boolean }) => {
+    .option("--agent <name>", "for the editor hook: which coding tool's hook this is")
+    .action(async (intent: string | undefined, flags: { scope?: string[]; passive?: boolean; review?: boolean; agent?: string }) => {
       // The hook's half of the command, and it prints nothing either way. A
       // SessionStart handler's stdout is fed to the agent as context, so a
       // line here would arrive inside somebody's prompt.

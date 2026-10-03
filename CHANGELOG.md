@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The write check covers NotebookEdit. Re-run `session hook install --repo`.
 - The write check asks about npm, pnpm and yarn run outside the checkout root, instead of checking a manifest they would not write.
 - The write check asks about yarn beside Plug'n'Play files, which writes more than its lockfile.
+- `session hook install` names each tool in its start hook, and `session start` accepts it. Re-run the install to record which agent opened a session.
 
 ## [2.0.1] — 2026-09-27
 

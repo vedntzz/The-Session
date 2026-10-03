@@ -19,6 +19,8 @@ import {
   type Settings,
 } from "../capture/hook.js";
 import { repoRoot } from "../git.js";
+import { CLAUDE_CODE } from "../capture/adapters/claude-name.js";
+import { CODEX_AGENT } from "../capture/adapters/codex.js";
 
 /** What `session hook install` needs. */
 export interface HookOptions {
@@ -167,6 +169,7 @@ interface Target {
   tool: HookTool;
   /** True where a missing file is the normal case rather than a machine without the editor. */
   absentIsEmpty: boolean;
+  agent?: string; // the name its start hook passes as `--agent`
 }
 
 async function apply(
@@ -200,7 +203,7 @@ async function apply(
   return { file, tool, hooks, changed, action, ...(launcher ? { launcher } : {}), bare: { before, after } };
 }
 
-const claude = (options: HookOptions): Target => ({ file: settingsFile(options), tool: "Claude Code", absentIsEmpty: false });
+const claude = (options: HookOptions): Target => ({ file: settingsFile(options), tool: "Claude Code", absentIsEmpty: false, agent: CLAUDE_CODE });
 
 /**
  * Codex's hooks file, when this machine has Codex — judged by whether the
@@ -210,15 +213,12 @@ const claude = (options: HookOptions): Target => ({ file: settingsFile(options),
 async function codex(options: HookOptions): Promise<Target | undefined> {
   const file = codexHooksFile(options);
   const found = await stat(path.dirname(file)).then((info) => info.isDirectory(), () => false);
-  return found ? { file, tool: "Codex", absentIsEmpty: true } : undefined;
+  return found ? { file, tool: "Codex", absentIsEmpty: true, agent: CODEX_AGENT.name } : undefined;
 }
 
 /**
- * Registers the hooks, leaving every other setting as it was.
- *
- * Passive capture is on unless it is turned off, and turning it off is a
- * statement about the file rather than an omission from it: the two hooks it
- * needs are taken back out if an earlier install put them there. Otherwise
+ * Registers the hooks, leaving every other setting as it was. Passive capture is on unless turned off, and
+ * off is a statement about the file: an earlier install's two passive hooks are taken back out, or
  * `--passive=false` would be a flag that could not be changed its mind about.
  */
 export function installHook(options: HookOptions = {}): Promise<HookResult> {
@@ -243,8 +243,8 @@ function install(target: Target, options: HookOptions): Promise<HookResult> {
     "installed",
     wanted,
     launcher,
-    (settings) => hasHooks(settings, wanted, launcher),
-    (settings) => withHooks(settings, wanted, launcher),
+    (settings) => hasHooks(settings, wanted, launcher, target.agent),
+    (settings) => withHooks(settings, wanted, launcher, target.agent),
   );
 }
 
