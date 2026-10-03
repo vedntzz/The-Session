@@ -1084,6 +1084,16 @@ when the file held a hook that ran a bare `session`. Codex holds a changed
 Codex is written only where its directory exists. A machine without Codex
 gets no `~/.codex`.
 
+## The October sweep
+
+*3 October 2026.* A read of the whole codebase found fourteen defects; the
+plan and how each was cut is [sweep-plan.md](sweep-plan.md). The decisions
+that change what the tool claims are here.
+
+**A rename keeps both paths.** `git diff` reports only a renamed file's new
+name, so the path it left vanished from `reality`, `drift` and the outcome
+evidence. The diff runs with `--no-renames`.
+
 ## Finding your way around
 
 Type `session` on its own and it tells you where you are, not what it can do:
