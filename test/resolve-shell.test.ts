@@ -37,8 +37,8 @@ describe("resolveShellCommand", () => {
     expect(await resolve(command)).toEqual(expected);
   });
 
-  it("resolves a command's paths from its own directory", async () => {
-    expect(await resolve("npm install", path.join(root, "src"))).toEqual(resolved(["src/package-lock.json", "create"]));
+  it("cannot tell what a package manager writes below the root, where it walks up to another package.json (SES-4)", async () => {
+    expect(await resolve("npm install", path.join(root, "src"))).toEqual({ kind: "unknown" });
   });
 
   it.each([

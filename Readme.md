@@ -114,7 +114,9 @@ otherwise. It never grants a permission. `--repo --uninstall` removes it.
 - Shell commands are read, not run: npm/pnpm/yarn installs, `sed -i`, `>`,
   `tee`, `mv`, `cp`, `rm` and a short list of read-only commands are
   recognised. Anything else — chains, pipes, scripts, `node -e` — is asked
-  about: "Can't tell what this writes."
+  about: "Can't tell what this writes." A package manager is recognised only
+  at the checkout root, over a `package.json` there: anywhere else it walks up
+  to another manifest, so it is asked about.
 - **When the check itself fails** it denies: a caught error, a malformed
   payload or its own 5-second deadline all answer `deny`, and anything
   unexpected exits 2, which blocks. **When the editor gives up on it** — its

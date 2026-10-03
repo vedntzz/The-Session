@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - A rename records both of its paths.
 - The write check covers NotebookEdit. Re-run `session hook install --repo`.
+- The write check asks about npm, pnpm and yarn run outside the checkout root, instead of checking a manifest they would not write.
 
 ## [2.0.1] — 2026-09-27
 

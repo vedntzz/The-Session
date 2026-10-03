@@ -1,11 +1,12 @@
-// SES-10: writes the check used to miss or place at the wrong path.
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+// SES-4, SES-10: writes the check used to miss or place at the wrong path.
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Agreement } from "../src/agreement.js";
 import { CHECK_HOOK, hasHook, type Settings } from "../src/capture/hook.js";
 import { checkWrite } from "../src/commands/check-write.js";
+import { packageManagerAtRoot } from "../src/commands/resolve-package.js";
 import { runGit } from "../src/git.js";
 import { appendSession } from "../src/store.js";
 
@@ -30,6 +31,31 @@ const event = (tool_name: string, tool_input: unknown, at = cwd) =>
   JSON.stringify({ hook_event_name: "PreToolUse", tool_name, cwd: at, tool_input });
 const check = (payload: string) => checkWrite({ cwd, home, stdin: input(payload) });
 const decision = (output: string) => (output === "" ? "silent" : JSON.parse(output).hookSpecificOutput.permissionDecision);
+
+describe("SES-4: a package manager below the root", () => {
+  it("asks rather than checking src/package.json, which npm would not write", async () => {
+    // The agreement covers src, so the old answer — src/package.json, src/package-lock.json — was silence,
+    // while npm walked up and rewrote the root's package.json, outside the terms.
+    const answer = await check(event("Bash", { command: "npm install lodash" }, path.join(cwd, "src")));
+    expect(decision(answer)).toBe("ask");
+  });
+
+  it("still checks the root's manifest when the command runs at the root", async () => {
+    expect(decision(await check(event("Bash", { command: "npm install lodash" })))).toBe("deny");
+  });
+
+  it("asks at a root with no package.json, where npm would walk out of the repository", async () => {
+    await rm(path.join(cwd, "package.json"));
+    expect(decision(await check(event("Bash", { command: "npm install lodash" })))).toBe("ask");
+  });
+
+  it("does not take a symlinked package.json as the stop for the walk", async () => {
+    await rm(path.join(cwd, "package.json"));
+    await writeFile(path.join(temp, "elsewhere.json"), "{}");
+    await symlink(path.join(temp, "elsewhere.json"), path.join(cwd, "package.json"));
+    await expect(packageManagerAtRoot("npm install", cwd, cwd)).resolves.toBe(false);
+  });
+});
 
 describe("SES-10: NotebookEdit is checked", () => {
   it("denies a notebook edit on a sensitive path", async () => {

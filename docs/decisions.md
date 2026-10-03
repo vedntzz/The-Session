@@ -1094,8 +1094,11 @@ that change what the tool claims are here.
 name, so the path it left vanished from `reality`, `drift` and the outcome
 evidence. The diff runs with `--no-renames`.
 
-**The write check reaches further.** NotebookEdit is checked
-as a write to its notebook.
+**The write check reaches further, and claims less.** NotebookEdit is checked
+as a write to its notebook. A package manager is recognised only at the
+checkout root over a regular-file `package.json`: from a subdirectory it walks
+up to another manifest and a workspace root, and checking the path it was
+given let the real write through in silence.
 
 ## Finding your way around
 
