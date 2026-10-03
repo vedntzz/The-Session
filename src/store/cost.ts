@@ -78,6 +78,13 @@ export interface SessionCost extends TokenCounts {
   turnTokens?: (TokenCounts | null)[];
   /** History a tool imported into a thread, seen in the window: not a turn, never priced. */
   importedTurnsSkipped?: number;
+  /**
+   * The four counters split by the model each call ran on, for adapters that
+   * name a model per call. Priced part by part, so a session that mixed models
+   * is never billed at one model's rate. Models with no tokens are left out.
+   * Absent on records stopped before it, which were priced at `model`.
+   */
+  modelTokens?: Record<string, TokenCounts>;
   /** Adapters that found turns or calls, sorted; absent on records stopped before it — see `agentsOf`. */
   agents?: string[];
 }

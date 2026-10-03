@@ -815,6 +815,11 @@ name. Note `stop` reports tokens and not money, and says nothing about pricing
 at all when it was handed no rate table: "unpriced" would then mean "nobody
 asked", which is a different fact.
 
+A session that used several models is priced model by model from
+`cost.modelTokens`; a record without the field keeps the dominant-model rule
+it was priced under. Never price one model's tokens at another's rate to
+"fill" a gap — an unrated model leaves the session unpriced, by name.
+
 `pricing.ts` is the only file that knows a price. Everything above `loadRates`
 is pure: `priceTokens`, `rateFor`, `priceSession`, `spendOf`, `formatUsd`.
 
@@ -1055,7 +1060,7 @@ src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything el
   store/ record.ts types · append.ts locked, signed writer · read.ts fold · intent-missing.ts · paths.ts · scratch.ts tmp
   chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
   git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
-  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, files
+  capture/ hook.ts settings surgery · transcript.ts · model-tokens.ts · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, files
   scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts (re-exports pricing-spend.ts, pricing-rates.ts) pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
   agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
   commands/check-write.ts resolve-{write,shell,package,move,copy,remove}.ts   session hook check

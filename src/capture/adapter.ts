@@ -1,4 +1,5 @@
 import { zeroCost, type SessionCost, type TokenCounts } from "../store.js";
+import { addModelTokens } from "./model-tokens.js";
 
 /** The slice of wall-clock time a session occupied. */
 export interface CaptureWindow {
@@ -77,6 +78,7 @@ function addPerTurn(total: SessionCost, part: SessionCost): void {
     total.turnModels = [...(total.turnModels ?? []), ...part.turnModels];
     total.turnTokens = [...(total.turnTokens ?? []), ...(part.turnTokens ?? part.turnModels.map(() => null))];
   }
+  addModelTokens(total, part);
   if ((part.importedTurnsSkipped ?? 0) > 0) {
     total.importedTurnsSkipped = (total.importedTurnsSkipped ?? 0) + part.importedTurnsSkipped!;
   }

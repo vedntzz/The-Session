@@ -1,5 +1,5 @@
 import type { SessionCost, TokenCounts } from "./store.js";
-import { priceByTurn } from "./pricing-turns.js";
+import { priceByModel, priceByTurn } from "./pricing-turns.js";
 export {
   bundledRatesFile, loadChecked, loadRates, parseChecked, parseRates, RATES_FILE, rateStub, USER_RATES_FILE,
 } from "./pricing-rates.js";
@@ -112,6 +112,7 @@ export function isPriced(price: Price): price is Extract<Price, { priced: true }
 /** What a session cost. Unpriced when no entry covers the model it ran on. */
 export function priceSession(cost: SessionCost, rates: RateTable): Price {
   if (cost.turnTokens !== undefined || (cost.untokenedTurns ?? 0) > 0) return priceByTurn(cost, rates);
+  if (cost.modelTokens !== undefined) return priceByModel(cost, rates);
   const found = rateFor(cost.model, rates);
   if (!found) {
     return { priced: false, model: cost.model };

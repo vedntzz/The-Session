@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- A session that used several models is priced at each model's own rate.
 - A rename records both of its paths.
 - The write check covers NotebookEdit. Re-run `session hook install --repo`.
 - The write check asks about npm, pnpm and yarn run outside the checkout root, instead of checking a manifest they would not write.

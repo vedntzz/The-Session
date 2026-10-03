@@ -417,6 +417,11 @@ name. Note `stop` reports tokens and not money, and says nothing about pricing
 at all when it was handed no rate table: "unpriced" would then mean "nobody
 asked", which is a different fact.
 
+A session that used several models is priced model by model from
+`cost.modelTokens`; a record without the field keeps the dominant-model rule
+it was priced under. Never price one model's tokens at another's rate to
+"fill" a gap — an unrated model leaves the session unpriced, by name.
+
 `pricing.ts` is the only file that knows a price. Everything above `loadRates`
 is pure: `priceTokens`, `rateFor`, `priceSession`, `spendOf`, `formatUsd`.
 

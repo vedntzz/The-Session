@@ -1090,6 +1090,12 @@ gets no `~/.codex`.
 plan and how each was cut is [sweep-plan.md](sweep-plan.md). The decisions
 that change what the tool claims are here.
 
+**Money is per model.** A Claude session that ran Opus with Haiku subagents
+was priced entirely at whichever made more calls. `cost.modelTokens` keeps the
+four counters per model, and each part is priced at its own rate. A model no
+rate covers leaves the session unpriced, by name, as before. Records without
+the field keep the dominant-model rule they were priced under.
+
 **A rename keeps both paths.** `git diff` reports only a renamed file's new
 name, so the path it left vanished from `reality`, `drift` and the outcome
 evidence. The diff runs with `--no-renames`.
