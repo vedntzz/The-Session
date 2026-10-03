@@ -42,7 +42,7 @@ session opened elsewhere while the review waits prevents a second start.
 
 **Review does not activate enforcement by itself.** A policy is checked only
 in a repository where `session hook install --repo` has registered the check
-command below, and only for Edit, Write and MultiEdit. External
+command below, and only for Edit, Write, MultiEdit, NotebookEdit and shell commands. External
 proposal ingestion is not exposed, and this review refuses an external proposal
 rather than labelling it as Prime's.
 
@@ -116,7 +116,7 @@ none. Schema and codes: [decisions](decisions.md#every-check-recorded).
 
 `session hook install --repo` registers it for the current repository only,
 in `<root>/.claude/settings.local.json`, under the matcher
-`Edit|Write|MultiEdit` with a 10-second timeout. The file is created if absent;
+`Edit|Write|MultiEdit|NotebookEdit|Bash` with a 10-second timeout. The file is created if absent;
 other settings and hooks in it are kept, and a second install changes nothing.
 An entry filed under a narrower matcher is moved, not duplicated. User-level
 settings are never read or written, because outside a repository the check
@@ -147,7 +147,8 @@ attempts; ordinary stop-time diff measurement remains separate.
 #### Shell commands
 
 `session hook check` also reads Claude Code's `Bash` payloads, and the check's
-matcher is `Edit|Write|MultiEdit|Bash`. `parseClaudeBash` keeps only `cwd` and
+matcher is `Edit|Write|MultiEdit|NotebookEdit|Bash`. NotebookEdit is read
+as a write to its `notebook_path`, whichever cell mode it uses. `parseClaudeBash` keeps only `cwd` and
 the command, in memory; neither is stored, logged or echoed. The command goes
 through `resolveShellCommand` (below), and:
 

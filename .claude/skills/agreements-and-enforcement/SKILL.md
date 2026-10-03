@@ -65,7 +65,7 @@ because the spelling decides which terms apply.
 
 ## From a payload to a decision
 
-1. **Parse** (`claude-write.ts`): Edit, Write and the legacy MultiEdit shape.
+1. **Parse** (`claude-write.ts`): Edit, Write, the legacy MultiEdit shape, and NotebookEdit (its `notebook_path`).
    Keep `cwd` and `filePath` and drop everything else — content, replacement
    strings and transcript paths are never held. `unsupported` (another tool)
    and `invalid` (a malformed supported one) are different answers and stay

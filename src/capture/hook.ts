@@ -120,7 +120,7 @@ export const PROMPT_HOOK: HookSpec = {
 export const HOOKS: readonly HookSpec[] = [STOP_HOOK, OPEN_HOOK, PROMPT_HOOK];
 
 /**
- * Checks an attempted Edit, Write or MultiEdit against the open session's
+ * Checks an attempted Edit, Write, MultiEdit or NotebookEdit against the open session's
  * agreement, before the tool runs.
  *
  * Deliberately not in `HOOKS`: those belong in the user's settings and fire
@@ -142,7 +142,7 @@ export const CHECK_HOOK: HookSpec = {
   command: "session hook check",
   timeout: 10,
   passive: false,
-  matcher: "Edit|Write|MultiEdit|Bash",
+  matcher: "Edit|Write|MultiEdit|NotebookEdit|Bash",
 };
 
 /**

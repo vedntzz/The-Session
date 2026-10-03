@@ -1094,6 +1094,9 @@ that change what the tool claims are here.
 name, so the path it left vanished from `reality`, `drift` and the outcome
 evidence. The diff runs with `--no-renames`.
 
+**The write check reaches further.** NotebookEdit is checked
+as a write to its notebook.
+
 ## Finding your way around
 
 Type `session` on its own and it tells you where you are, not what it can do:

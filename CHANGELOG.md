@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - A rename records both of its paths.
+- The write check covers NotebookEdit. Re-run `session hook install --repo`.
 
 ## [2.0.1] — 2026-09-27
 

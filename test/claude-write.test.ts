@@ -18,7 +18,15 @@ describe("Claude file-write adapter", () => {
     expect(JSON.stringify(result)).not.toContain("private");
   });
 
-  it.each(["Bash", "Read", "NotebookEdit", "mcp__other__Write", "write"])("keeps unsupported %s separate from malformed writes", (tool) => {
+  // SES-10: NotebookEdit rewrites a file like any other writer, so it is checked like one.
+  it.each(["replace", "insert", "delete", undefined])("reads NotebookEdit in %s mode as a write to its notebook", (edit_mode) => {
+    const input = { notebook_path: "/repo/n.ipynb", new_source: "private source", cell_id: "c1", ...(edit_mode ? { edit_mode } : {}) };
+    const result = parseClaudeWrite(payload("NotebookEdit", input));
+    expect(result).toEqual({ kind: "write", tool: "NotebookEdit", request: { cwd: "/repo", filePath: "/repo/n.ipynb" } });
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
+
+  it.each(["Bash", "Read", "mcp__other__Write", "write", "notebookedit"])("keeps unsupported %s separate from malformed writes", (tool) => {
     expect(parseClaudeWrite(payload(tool, null))).toEqual({ kind: "unsupported" });
   });
 
@@ -33,6 +41,10 @@ describe("Claude file-write adapter", () => {
     { tool: "MultiEdit", input: { file_path: "/repo/a.ts", edits: [edit, null] } },
     { tool: "MultiEdit", input: { file_path: "/repo/a.ts", edits: [edit, { old_string: "secret" }] } },
     { tool: "MultiEdit", input: { file_path: "/repo/a.ts", edits: [{ ...edit, file_path: "/other/file" }] } },
+    { tool: "NotebookEdit", input: { notebook_path: "/repo/n.ipynb" } },
+    { tool: "NotebookEdit", input: { notebook_path: "", new_source: "secret" } },
+    { tool: "NotebookEdit", input: { file_path: "/repo/n.ipynb", new_source: "secret" } },
+    { tool: "NotebookEdit", input: { notebook_path: "/repo/n.ipynb", new_source: "secret", edit_mode: "append" } },
   ])("refuses malformed $tool inputs without echoing source", ({ tool, input }) => {
     expect(parseClaudeWrite(payload(tool, input))).toEqual({ kind: "invalid", reason: "invalid-input" });
   });

@@ -215,7 +215,7 @@ From the code and `git log`, 21–23 September 2026:
 |---|---|---|
 | Agreement record | Terms (paths, actions, sensitive paths, policy) signed into the first record, never patched | `src/agreement.ts`, `src/store/` |
 | Review screen | `start --review`, `prime --start --review`; only `accept` saves | `src/commands/review.ts` |
-| Write check | `session hook check`: `ask`/`deny` or silence, never `allow`, for Edit, Write, MultiEdit and Bash | `src/commands/check-write.ts`, `src/agreement-decision.ts` |
+| Write check | `session hook check`: `ask`/`deny` or silence, never `allow`, for Edit, Write, MultiEdit, NotebookEdit and Bash | `src/commands/check-write.ts`, `src/agreement-decision.ts` |
 | Shell recognisers | npm/pnpm/yarn, `sed -i`, `>`, `tee`, `mv`, `cp`, `rm`, read-only list; unknown → ask "Can't tell what this writes." | `src/shell/`, `src/commands/resolve-shell.ts` |
 | Install | `session hook install --repo` / `--repo --uninstall`, this repository's `.claude/settings.local.json` only | `src/commands/hook.ts`, `src/capture/hook.ts` |
 | Start snapshot | Blob per dirty file at start; `stop` counts dirty files the session changed again | `src/commands/start.ts`, `src/commands/stop.ts` |

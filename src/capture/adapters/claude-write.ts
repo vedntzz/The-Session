@@ -26,6 +26,7 @@ export function parseClaudeWrite(payload: string): WriteRequestResult {
   if (!object(value) || value.hook_event_name !== "PreToolUse" || typeof value.tool_name !== "string") {
     return { kind: "invalid", reason: "invalid-event" };
   }
+  if (value.tool_name === "NotebookEdit") return notebookWrite(value);
   if (!["Edit", "Write", "MultiEdit"].includes(value.tool_name)) return { kind: "unsupported" };
   const input = value.tool_input;
   if (typeof value.cwd !== "string" || !value.cwd || !object(input) ||
@@ -40,4 +41,22 @@ export function parseClaudeWrite(payload: string): WriteRequestResult {
   return valid
     ? { kind: "write", tool: value.tool_name, request: { cwd: value.cwd, filePath: input.file_path } }
     : { kind: "invalid", reason: "invalid-input" };
+}
+
+const NOTEBOOK_MODES = ["replace", "insert", "delete"];
+
+/**
+ * NotebookEdit writes one `.ipynb` file, named by `notebook_path`. Every mode
+ * (replace, insert or delete a cell) rewrites that file, so all three are a
+ * write to it; the resolver says edit or create. The cell source is checked
+ * for shape and then dropped, like any other content.
+ */
+function notebookWrite(value: Record<string, unknown>): WriteRequestResult {
+  const input = value.tool_input;
+  if (typeof value.cwd !== "string" || !value.cwd || !object(input) ||
+    typeof input.notebook_path !== "string" || !input.notebook_path || typeof input.new_source !== "string" ||
+    (input.edit_mode !== undefined && !NOTEBOOK_MODES.includes(input.edit_mode as string))) {
+    return { kind: "invalid", reason: "invalid-input" };
+  }
+  return { kind: "write", tool: "NotebookEdit", request: { cwd: value.cwd, filePath: input.notebook_path } };
 }

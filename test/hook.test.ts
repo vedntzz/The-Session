@@ -342,7 +342,7 @@ describe("the check hook", () => {
   it("runs the check before the file tools and shell commands, and nothing else", () => {
     expect(CHECK_HOOK.event).toBe("PreToolUse");
     expect(CHECK_HOOK.command).toBe("session hook check");
-    expect(CHECK_HOOK.matcher).toBe("Edit|Write|MultiEdit|Bash");
+    expect(CHECK_HOOK.matcher).toBe("Edit|Write|MultiEdit|NotebookEdit|Bash");
   });
 
   it("is never part of what the user-level install registers or removes", () => {
@@ -759,7 +759,7 @@ describe("installRepoHooks", () => {
     await buildProgram({ cwd: repo, settings: user, launcher: L }).parseAsync(["node", "session", "hook", "install", "--repo"]);
     expect(await readFile(user, "utf8")).toBe(before);
     expect(await read()).toEqual({ hooks: { PreToolUse: [CHECK] } });
-    expect(log.mock.calls.flat().join("\n")).toContain("PreToolUse (Edit|Write|MultiEdit|Bash) → session hook check");
+    expect(log.mock.calls.flat().join("\n")).toContain("PreToolUse (Edit|Write|MultiEdit|NotebookEdit|Bash) → session hook check");
   });
 
   it.each([
@@ -1051,7 +1051,7 @@ describe("formatHook", () => {
 
   it("names the tools a matched hook fires for", () => {
     expect(formatHook({ ...result, hooks: [CHECK_HOOK] })[1]).toBe(
-      "  hook     PreToolUse (Edit|Write|MultiEdit|Bash) → session hook check",
+      "  hook     PreToolUse (Edit|Write|MultiEdit|NotebookEdit|Bash) → session hook check",
     );
   });
 
