@@ -196,10 +196,10 @@ describe("evidenceFor", () => {
     expect(evidence?.landed).toBe(false);
   });
 
-  it("reads a deletion as landed when the path is gone at the tip", () => {
+  it("reads a deletion as landed when the branch had the path and it is gone at the tip", () => {
     const wrote = session({ reality: ["src/gone.ts"], endState: { "src/gone.ts": null } });
 
-    const [evidence] = evidenceFor(wrote, facts({ absentAtTip: ["src/gone.ts"] }));
+    const [evidence] = evidenceFor(wrote, facts({ absentAtTip: ["src/gone.ts"], history: { "src/gone.ts": [BLOB.other] } }));
 
     expect(evidence).toMatchObject({ ended: null, landed: true });
   });

@@ -424,7 +424,11 @@ for the benefit of whoever reads the raw JSONL. Don't "simplify" this by reading
 the stored field — a session merges long after it stopped, and nothing tells
 the tool when.
 
-Merged is decided on **content**, never on commit shas. A squash merge keeps
+Merged is decided on **content**, never on commit shas — content that arrived
+**after the session began**: a blob counts only where some default-branch
+commit holding it is not an ancestor of `startCommit` (`git/preexisting.ts`,
+asked once per path per gather), so a revert is not merged at stop. A
+deletion lands only where the branch once had the path. A squash merge keeps
 none of the branch's commits and a rebase rewrites all of them, so
 `branch --contains` reports nearly every merged session as abandoned. The test
 is whether the blob the session left is at that path anywhere in the default
@@ -1064,7 +1068,7 @@ src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything el
   chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
   git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
   capture/ hook.ts settings surgery · transcript.ts · model-tokens.ts · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, files
-  scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts (re-exports pricing-spend.ts, pricing-rates.ts) pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
+  scope.ts classify.ts outcome.ts observe.ts (git/preexisting.ts) empty.ts pricing.ts (re-exports pricing-spend.ts, pricing-rates.ts) pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
   agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
   commands/check-write.ts resolve-{write,shell,package,move,copy,remove}.ts   session hook check
   write-check-event.ts write-checks.ts commands/record-write-check.ts capture/check-adapter.ts   its signed events

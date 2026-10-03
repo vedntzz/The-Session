@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A session that used several models is priced at each model's own rate.
 - Codex spend counts at the moment it was reported, not when its turn started.
 - A rename records both of its paths.
+- A revert no longer reads as merged the moment it stops; a deletion of a file the default branch never had is not a landing.
 - A write cut short no longer leaves the log unreadable; `verify` names the torn line.
 - The log lock is taken over only from a dead owner, so a sleeping laptop cannot fork the chain.
 - The write check covers NotebookEdit. Re-run `session hook install --repo`.

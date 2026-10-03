@@ -52,6 +52,8 @@ export interface RepoFacts {
   absentAtTip: ReadonlySet<string>;
   /** What each path holds in the working tree now; null when it is not there. */
   working: ReadonlyMap<string, string | null>;
+  /** `preexistingKey`s whose end state the branch held only before the session began; absent: not asked. */
+  preexisting?: ReadonlySet<string>;
 }
 
 /** One file the session touched, and where its content is now. */
@@ -119,19 +121,15 @@ export function parseOutcome(value: string): SessionOutcome {
 }
 
 /**
- * Whether the content the session left at `path` reached the default branch.
- *
- * A deletion is the awkward case: there is no blob to look for, so what counts
- * is the path being gone at the tip. That is weaker than the test for content —
- * it cannot tell the session's deletion from someone else's — and it is the
- * best a content match can do about a file that is not there.
+ * Whether what the session left at `path` reached the default branch after it began (SES-9). A deletion lands where
+ * the branch once had the file and the tip does not — weaker than content, it cannot tell whose deletion it was.
  */
-function hasLanded(path: string, ended: string | null, facts: RepoFacts): boolean {
-  if (ended === null) {
-    return facts.absentAtTip.has(path);
-  }
-  return facts.history.get(path)?.has(ended) ?? false;
+function hasLanded(session: Session, path: string, ended: string | null, facts: RepoFacts): boolean {
+  if (ended === null) return facts.absentAtTip.has(path) && (facts.history.get(path)?.size ?? 0) > 0;
+  return (facts.history.get(path)?.has(ended) ?? false) && !facts.preexisting?.has(preexistingKey(session.id, path));
 }
+/** The key `RepoFacts.preexisting` holds: one session, one path. */
+export const preexistingKey = (sessionId: string, path: string): string => `${sessionId}\0${path}`;
 
 /**
  * What the repo says about each file this session left behind.
@@ -151,7 +149,7 @@ export function evidenceFor(session: Session, facts: RepoFacts): FileEvidence[] 
         path,
         ended,
         working: facts.working.get(path) ?? null,
-        landed: hasLanded(path, ended, facts),
+        landed: hasLanded(session, path, ended, facts),
       };
     });
 }

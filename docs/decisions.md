@@ -1106,6 +1106,15 @@ spend with no readable instant makes its turn's tokens unknown, never guessed.
 name, so the path it left vanished from `reality`, `drift` and the outcome
 evidence. The diff runs with `--no-renames`.
 
+**Landed means after the session began.** A blob in the default branch's
+history counted as landed even when it was there before the session started,
+so a revert read as merged the moment it stopped. A blob now lands only where
+some default-branch commit holding it is not an ancestor of the session's
+start commit (`src/git/preexisting.ts`); a revert that is later merged arrives
+in a new commit and lands then. A deletion lands only where the branch once
+had the file. One landed file with the rest lost is still `merged`: the
+verdict lists what was lost, and `mark` is how a person says otherwise.
+
 **A torn write no longer breaks the log.** An append cut short leaves a line
 with no newline; the next append starts on a fresh line and chains to it. That
 line then sat mid-file, and every read threw `corrupt JSON` — every view, and

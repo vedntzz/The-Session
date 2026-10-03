@@ -1,4 +1,5 @@
 import { gatherRepoFacts } from "./git.js";
+import { preexistingEndStates } from "./git/preexisting.js";
 import { effectiveOutcome, reportedOutcome, type RepoFacts } from "./outcome.js";
 import type { Session } from "./store.js";
 
@@ -20,10 +21,11 @@ export async function factsFor(
   // nothing behind is still decidable — there is nothing of it anywhere, which
   // is an answer — and returning no facts here would push it into the "cannot
   // tell" fallback instead.
-  return gatherRepoFacts(
+  const facts = await gatherRepoFacts(
     sessions.flatMap((session) => (session.endState ? Object.keys(session.endState) : [])),
     cwd,
   );
+  return facts && { ...facts, preexisting: await preexistingEndStates(sessions, facts.branch, facts.history, cwd) };
 }
 
 /**

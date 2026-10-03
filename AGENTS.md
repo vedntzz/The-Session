@@ -25,7 +25,7 @@ src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything el
   chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
   git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
   capture/ hook.ts settings surgery · transcript.ts · model-tokens.ts · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, files
-  scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts (re-exports pricing-spend.ts, pricing-rates.ts) pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
+  scope.ts classify.ts outcome.ts observe.ts (git/preexisting.ts) empty.ts pricing.ts (re-exports pricing-spend.ts, pricing-rates.ts) pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
   agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
   commands/check-write.ts resolve-{write,shell,package,move,copy,remove}.ts   session hook check
   write-check-event.ts write-checks.ts commands/record-write-check.ts capture/check-adapter.ts   its signed events

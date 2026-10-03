@@ -26,7 +26,11 @@ for the benefit of whoever reads the raw JSONL. Don't "simplify" this by reading
 the stored field — a session merges long after it stopped, and nothing tells
 the tool when.
 
-Merged is decided on **content**, never on commit shas. A squash merge keeps
+Merged is decided on **content**, never on commit shas — content that arrived
+**after the session began**: a blob counts only where some default-branch
+commit holding it is not an ancestor of `startCommit` (`git/preexisting.ts`,
+asked once per path per gather), so a revert is not merged at stop. A
+deletion lands only where the branch once had the path. A squash merge keeps
 none of the branch's commits and a rebase rewrites all of them, so
 `branch --contains` reports nearly every merged session as abandoned. The test
 is whether the blob the session left is at that path anywhere in the default
