@@ -8,6 +8,7 @@
 // nothing to say which was right.
 import { zeroCost, type SessionCost } from "../store.js";
 import { addTokens, dominant } from "./adapter.js";
+import { modelTokensOf } from "./model-tokens.js";
 
 export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -88,11 +89,7 @@ export function isUserAuthored(entry: Record<string, unknown>): boolean {
   return !content.some((block) => isObject(block) && block["type"] === "tool_result");
 }
 
-/**
- * Wrappers Claude Code puts round its own bookkeeping, which arrives looking
- * like something the developer typed. `/clear` is a real entry in a real
- * transcript and it is not what the session was about.
- */
+/** Claude Code's own bookkeeping, looking typed: `/clear` is a real entry and not what the session was about. */
 const NOT_A_PROMPT = /^<(command-name|command-message|command-args|local-command-)/;
 
 /**
@@ -229,5 +226,5 @@ export function costOfCalls(calls: readonly Call[]): SessionCost {
   cost.apiCalls = calls.length;
   cost.turns = turns.size;
   cost.model = dominant(callsByModel);
-  return cost;
+  return { ...cost, ...modelTokensOf(calls) };
 }

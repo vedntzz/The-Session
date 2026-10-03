@@ -1,4 +1,5 @@
 import { zeroCost, type SessionCost, type TokenCounts } from "../store.js";
+import { addModelTokens } from "./model-tokens.js";
 
 /** The slice of wall-clock time a session occupied. */
 export interface CaptureWindow {
@@ -8,6 +9,13 @@ export interface CaptureWindow {
   to: string;
   /** The repo the session ran in, for adapters that can attribute by path. */
   cwd?: string;
+  /**
+   * The agent's own session id, as its hook payload names it. Where given,
+   * only that session's transcript is read, so two agents running in one repo
+   * at once are not each charged for both. Absent: every transcript in the
+   * window and the repo, which is how every record before it was captured.
+   */
+  agentSessionId?: string;
 }
 
 /** The first thing typed inside a window, and when its turn started. */
@@ -77,6 +85,7 @@ function addPerTurn(total: SessionCost, part: SessionCost): void {
     total.turnModels = [...(total.turnModels ?? []), ...part.turnModels];
     total.turnTokens = [...(total.turnTokens ?? []), ...(part.turnTokens ?? part.turnModels.map(() => null))];
   }
+  addModelTokens(total, part);
   if ((part.importedTurnsSkipped ?? 0) > 0) {
     total.importedTurnsSkipped = (total.importedTurnsSkipped ?? 0) + part.importedTurnsSkipped!;
   }

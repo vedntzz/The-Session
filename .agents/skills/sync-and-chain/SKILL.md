@@ -53,7 +53,7 @@ verifier already had. It cannot catch a wholesale rewrite under a new key —
 see [What it does not do](../../../docs/decisions.md#what-it-does-not-do).
 
 **Some fields exist only in the creating record.** `proposal`, `agreement`,
-`checkout`, `baselineState`, `intentSource` and `attribution` are written in the first record
+`checkout`, `baselineState`, `intentSource`, `openedBy` and `attribution` are written in the first record
 for a session and nowhere after (`intent` is the one exception: a passive
 session's arrives once, from its first prompt, through `captureIntent`). The
 writer refuses a patch that carries any of them,
@@ -99,10 +99,26 @@ read through their defaults (`proposerOf` says `prime`), so the stored bytes
 and their hashes stay exactly as written. A new optional field needs no record
 version bump — `hash` already covers everything in `set`.
 
+**Agent sessions are events too.** A `set.agentSession` record (`agent-start`
+or `agent-end`, an editor's opaque session id and tool name) is appended under
+the lock by `commands/agent-session.ts` and folded into `agentEvents`; the
+fold ignores an `agentEvents` value in any record, and `updateSession`
+refuses all three keys. See `agent-sessions.ts`.
+
 `prev` makes the append a read-then-write, so appends take a lock file
-(`<log>.lock`, created `wx`, stale after 10s). Reading is untouched:
-`readSessions` folds records exactly as before and checks nothing — `session
-verify` is the only thing that walks the chain.
+(`<log>.lock`, created `wx`, holding its owner's pid and host —
+`store/lock.ts`). It is taken over only when that pid is dead on this host;
+an ownerless or foreign lock falls back to stale after 10s. Takeover renames
+it aside and checks the inode it judged, so a lock just taken by someone else
+is put back. Never go back to age alone: a sleeping laptop's lock looks old.
+
+A line an append cut short becomes a mid-file line once the next append
+starts fresh and chains to it. `store/torn.ts` is the one rule: it is torn
+only when the next record is signed and its `prev` is that line's hash. The
+fold skips it and `verify` counts it apart (`verify-torn.ts`); anything else
+that does not parse is still damage. Beyond that one rule, reading checks
+nothing: `readSessions` folds records as before, and `session verify` is the
+only thing that walks the chain.
 
 `session verify --log <path> --key <pubkey>` must keep working on a machine
 with no `~/.session` at all: with `--log`, nothing derives a store path, and

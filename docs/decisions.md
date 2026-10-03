@@ -1084,6 +1084,88 @@ when the file held a hook that ran a bare `session`. Codex holds a changed
 Codex is written only where its directory exists. A machine without Codex
 gets no `~/.codex`.
 
+## The October sweep
+
+*3 October 2026.* A read of the whole codebase found fourteen defects; the
+plan and how each was cut is [sweep-plan.md](sweep-plan.md). The decisions
+that change what the tool claims are here.
+
+**A hook closes only what its own agent opened.** `SessionEnd` used to run
+`session stop --if-open` against whatever was open, so `/clear` — which ends
+one agent session and starts the next — closed a declared session part way
+through, and the passive session that replaced it carried no agreement: the
+write check went silent for the rest of the work. A second `claude` in
+another terminal did the same when it exited. Now the editors' payloads are
+read for their session id and why they started or ended, and nothing else.
+A declared or primed session is never closed by a hook; `session stop` is the
+developer's. `/clear` closes nothing. A passive session records the agent
+session that opened it (`openedBy`, creating record only), and every agent
+that starts while it is open appends a signed `agentSession` event; it closes
+once no agent in it that reports its end is still live. Codex never fires its
+end hook, so a Codex agent cannot hold a session open. A session with no
+agent ids, a hook that sends no payload, and a stop typed by hand keep the old
+rule exactly.
+
+**Cost is read from those agents' transcripts.** The window rule charged every
+transcript in the repo and the time window to the session, so two agents
+running at once were each billed for both, and a session in `~` was billed to
+every repository under it. Capture now runs once per recorded agent session —
+Claude Code's `<id>.jsonl`, Codex's `rollout-*-<id>.jsonl` — and adds them up.
+`cost.capturedBy` says which rule a record was captured under; absent reads as
+`window`, which is what every older record was. The ids are the editors'
+opaque session ids: no path, no prompt, nothing the agent wrote.
+
+**Money is per model.** A Claude session that ran Opus with Haiku subagents
+was priced entirely at whichever made more calls. `cost.modelTokens` keeps the
+four counters per model, and each part is priced at its own rate. A model no
+rate covers leaves the session unpriced, by name, as before. Records without
+the field keep the dominant-model rule they were priced under.
+
+**A Codex spend counts at its own instant.** A turn was counted whole or not
+at all by when it started. Each `token_count` now carries its own timestamp:
+a turn that began before `session start` contributes what it spent after it,
+and a turn still running at `stop` does not contribute what came later. A
+spend with no readable instant makes its turn's tokens unknown, never guessed.
+
+**A rename keeps both paths.** `git diff` reports only a renamed file's new
+name, so the path it left vanished from `reality`, `drift` and the outcome
+evidence. The diff runs with `--no-renames`.
+
+**Landed means after the session began.** A blob in the default branch's
+history counted as landed even when it was there before the session started,
+so a revert read as merged the moment it stopped. A blob now lands only where
+some default-branch commit holding it is not an ancestor of the session's
+start commit (`src/git/preexisting.ts`); a revert that is later merged arrives
+in a new commit and lands then. A deletion lands only where the branch once
+had the file. One landed file with the rest lost is still `merged`: the
+verdict lists what was lost, and `mark` is how a person says otherwise.
+
+**A torn write no longer breaks the log.** An append cut short leaves a line
+with no newline; the next append starts on a fresh line and chains to it. That
+line then sat mid-file, and every read threw `corrupt JSON` — every view, and
+the write check, which denies when it cannot read. A line that does not parse
+is now read as torn when, and only when, the next record is signed and its
+`prev` is that line's hash. Only the writer holding the lock and the key can
+have named it, so an edit or an insertion still breaks the chain where it did.
+`verify` counts torn lines apart from records and names them.
+
+**A lock is taken over only from an owner that is gone.** The lock file holds
+its owner's pid and host. On the same host it is stale when that pid is dead,
+however young; a living owner's lock is never taken, however old — a laptop
+that sleeps mid-append used to wake to its lock taken and the chain forked.
+With no owner to ask (an older lock, another host's), the ten-second age rule
+stands. Takeover renames the file aside and checks it is the file that was
+judged, so a lock another waiter has just taken is put back, not deleted. The
+cost: a crashed process whose pid has been reused holds its lock until the
+twenty-second wait gives up and says which file to delete.
+
+**The write check reaches further, and claims less.** NotebookEdit is checked
+as a write to its notebook. A package manager is recognised only at the
+checkout root over a regular-file `package.json`: from a subdirectory it walks
+up to another manifest and a workspace root, and checking the path it was
+given let the real write through in silence. yarn beside Plug'n'Play files is
+unknown, since it writes more than its lockfile.
+
 ## Finding your way around
 
 Type `session` on its own and it tells you where you are, not what it can do:

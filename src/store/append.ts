@@ -1,5 +1,6 @@
 // Appending to the log, under a lock, with each line signed into the chain.
-import { appendFile, mkdir, open, realpath, rm, stat } from "node:fs/promises";
+import { appendFile, mkdir, realpath } from "node:fs/promises";
+import { withLock } from "./lock.js";
 import { tryGit } from "../git.js";
 import path from "node:path";
 import { GENESIS, lineHash, recordHash, type SignedBody } from "../chain.js";
@@ -24,67 +25,7 @@ import {
 
 // --- appending -----------------------------------------------------------
 
-/** How long a lock is honoured before it is assumed to belong to a dead process. */
-export const LOCK_STALE_MS = 10_000;
-
-export const LOCK_POLL_MS = 25;
-
-export const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Serializes appends to one log file across processes.
- *
- * A bare O_APPEND write is atomic on its own, but a chained record is a read
- * of the last line followed by a write, and two of those interleaved would
- * give two records the same `prev` — a fork in the chain, indistinguishable
- * from tampering. The lock is a file created with `wx`, which is atomic on
- * every filesystem this runs on; one left behind by a killed process is taken
- * over once it is older than `LOCK_STALE_MS`.
- */
-export async function withLock<T>(file: string, action: () => Promise<T>): Promise<T> {
-  const lock = `${file}.lock`;
-  await acquireLock(lock);
-  try {
-    return await action();
-  } finally {
-    await rm(lock, { force: true });
-  }
-}
-
-/** Blocks until the lock file is ours, or until waiting stops being reasonable. */
-export async function acquireLock(lock: string): Promise<void> {
-  const deadline = Date.now() + LOCK_STALE_MS * 2;
-  for (;;) {
-    try {
-      const handle = await open(lock, "wx", 0o600);
-      await handle.close();
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-        throw error;
-      }
-      await waitForLock(lock, deadline);
-    }
-  }
-}
-
-/**
- * One turn of the wait: take over a lock a killed process left behind once it
- * is older than `LOCK_STALE_MS`, give up at the deadline, otherwise sleep.
- */
-export async function waitForLock(lock: string, deadline: number): Promise<void> {
-  const held = await stat(lock).catch(() => undefined);
-  if (held && Date.now() - held.mtimeMs > LOCK_STALE_MS) {
-    await rm(lock, { force: true });
-    return;
-  }
-  if (Date.now() > deadline) {
-    throw new Error(
-      `Timed out waiting for ${lock}. If no other session command is running, delete that file.`,
-    );
-  }
-  await sleep(LOCK_POLL_MS);
-}
+export { LOCK_POLL_MS, LOCK_STALE_MS, acquireLock, sleep, waitForLock, withLock } from "./lock.js";
 
 /** The hash the next record must carry as its `prev`. */
 export function nextPrev(log: RawLog): string {
@@ -254,6 +195,9 @@ export async function updateSession(
 function refusePatch(patch: SessionPatch): void {
   if ("toolCalls" in patch || "toolCallStart" in patch || "toolCallEnd" in patch || "writeCheck" in patch) {
     throw new Error("Tool calls and write checks are recorded by their hooks and cannot be patched.");
+  }
+  if ("openedBy" in patch || "agentEvents" in patch || "agentSession" in patch) {
+    throw new Error("Agent sessions are recorded by the editor hooks and cannot be patched. Start a new session instead.");
   }
   if ("baselineState" in patch) {
     throw new Error("The starting snapshot is taken at start and cannot be added or edited later.");

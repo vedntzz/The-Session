@@ -4,7 +4,7 @@ import path from "node:path";
 import type { AgentInfo } from "../../agents.js";
 import { zeroCost, type SessionCost } from "../../store.js";
 import { addTokens, dominant, NO_COST, type Adapter, type CaptureWindow, type FirstPrompt } from "../adapter.js";
-import { readRollout, turnsOf, type Rollout, type RolloutTurn } from "./codex-rollout.js";
+import { readRollout, sumSpends, turnsOf, type Rollout, type RolloutTurn } from "./codex-rollout.js";
 import { isDirectory, listDir, relatedPaths, touchedSince } from "./files.js";
 
 /** `${CODEX_HOME:-~/.codex}/sessions`, laid out as YYYY/MM/DD/rollout-*.jsonl. */
@@ -31,11 +31,25 @@ function inRepo(turn: RolloutTurn, rollout: Rollout, cwd: string | undefined): b
   return where !== undefined && relatedPaths(where, cwd); // an unplaced turn is not claimed
 }
 
-/** The turns a rollout opened inside the window, in this repo. */
+/**
+ * The turns of a rollout that belong to the window, in this repo, each holding
+ * only what it spent inside the window (SES-6). A turn belongs when it started
+ * inside or spent inside: one that began before `session start` still billed
+ * this session for what it did after, and a turn still running at `stop` did
+ * not bill it for what came later. A spend whose line had no readable instant
+ * cannot be placed, so its turn's tokens are unknown rather than guessed.
+ */
 export function turnsInWindow(rollout: Rollout, window: CaptureWindow): RolloutTurn[] {
   const from = Date.parse(window.from);
   const to = Date.parse(window.to);
-  return turnsOf(rollout).filter((turn) => turn.at >= from && turn.at <= to && inRepo(turn, rollout, window.cwd));
+  const inside = (at: number) => at >= from && at <= to;
+  return turnsOf(rollout).filter((turn) => inRepo(turn, rollout, window.cwd)).flatMap((turn) => {
+    const spends = turn.spends ?? [];
+    const spent = spends.filter((spend) => inside(spend.at));
+    if (!inside(turn.at) && spent.length === 0) return [];
+    const placed = spends.every((spend) => !Number.isNaN(spend.at));
+    return [{ ...turn, tokens: spends.length === 0 || !placed ? null : sumSpends(spent) }];
+  });
 }
 
 /** Codex's id for history imported into a thread; `test/codex.test.ts` trips if it is renamed. */
@@ -68,7 +82,10 @@ async function turnsIn(root: string, window: CaptureWindow): Promise<RolloutTurn
   const from = Date.parse(window.from);
   if (Number.isNaN(from) || Number.isNaN(Date.parse(window.to))) return undefined;
   const turns: RolloutTurn[] = [];
-  for (const file of await rolloutsTouchedIn(root, from)) {
+  // A rollout is named `rollout-<time>-<thread id>.jsonl`, and the thread id is the hook's session id.
+  const bound = window.agentSessionId === undefined ? undefined : `-${window.agentSessionId}.jsonl`;
+  const files = (await rolloutsTouchedIn(root, from)).filter((file) => bound === undefined || file.endsWith(bound));
+  for (const file of files) {
     turns.push(...turnsInWindow(await readRollout(file), window));
   }
   return turns;
@@ -82,7 +99,9 @@ async function captureWindow(root: string, window: CaptureWindow): Promise<Sessi
 /** The earliest turn in the window that recorded what was typed, and that text; imported history is not this session's. */
 async function firstPromptIn(root: string, window: CaptureWindow): Promise<FirstPrompt | undefined> {
   const turns = (await turnsIn(root, window)) ?? [];
-  const typed = turns.filter((turn) => turn.prompt !== undefined && !turn.id.startsWith(IMPORTED));
+  // Typed before the session opened is not what it was asked to do, though the turn's later spend counts.
+  const from = Date.parse(window.from);
+  const typed = turns.filter((turn) => turn.prompt !== undefined && !turn.id.startsWith(IMPORTED) && turn.at >= from);
   const first = typed.sort((a, b) => a.at - b.at)[0];
   return first === undefined ? undefined : { at: first.at, text: first.prompt! };
 }
@@ -93,7 +112,7 @@ export interface CodexOptions {
 }
 
 /** A rollout names no API calls; only this adapter writes a per-turn model, which marks older records. */
-export const CODEX_AGENT: AgentInfo = { name: "codex", reportsCalls: false, recognises: (cost) => (cost.turnModels?.length ?? 0) > 0 };
+export const CODEX_AGENT: AgentInfo = { name: "codex", reportsCalls: false, reportsEnd: false, recognises: (cost) => (cost.turnModels?.length ?? 0) > 0 };
 
 /** Reads Codex rollouts for turns and per-turn models; reality stays git's, never FileChange's. */
 export function createCodexAdapter(options: CodexOptions = {}): Adapter {

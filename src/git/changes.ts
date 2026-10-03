@@ -16,12 +16,15 @@ export async function changedFilesSince(
   const resolved = await resolveCommit(root, commit);
 
   // --no-relative defeats a diff.relative config; -z avoids git's quoting of
-  // paths containing spaces, newlines or non-ASCII bytes. The revision here is
-  // the resolved 40-hex sha, so it can never be mistaken for an option.
+  // paths containing spaces, newlines or non-ASCII bytes. --no-renames keeps
+  // both sides of a rename: with rename detection on, a moved file reports
+  // only its new name and the path it left disappears from the record. The
+  // revision is the resolved 40-hex sha, never mistaken for an option.
   const tracked = await runGit(root, [
     "diff",
     "--name-only",
     "--no-relative",
+    "--no-renames",
     "-z",
     resolved,
     "--",

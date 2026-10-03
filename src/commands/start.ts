@@ -1,5 +1,6 @@
 import { attributionValues, hasAttribution, readConfig } from "../config.js";
 import type { PrimeProposal } from "../prime.js";
+import type { AgentSessionRef } from "../agent-sessions.js";
 import { parseAgreement, scopeForAgreement, type Agreement } from "../agreement.js";
 import { changedFilesSince, currentCommit, endStateOf, isRepo } from "../git.js";
 import { describePaths } from "../render/terminal.js";
@@ -196,8 +197,7 @@ function describeOpen(open: Session): string {
  * the same reason: there is nothing to record, and an error in that position
  * is an error in the editor every time it starts anywhere else.
  */
-
-export async function startPassiveSession(options: StoreOptions = {}): Promise<Session | undefined> {
+export async function startPassiveSession(options: StoreOptions & { openedBy?: AgentSessionRef } = {}): Promise<Session | undefined> {
   const cwd = options.cwd ?? process.cwd();
   if (!(await isRepo(cwd)) || (await getOpenSession(options))) {
     return undefined;
@@ -213,7 +213,7 @@ export async function startPassiveSession(options: StoreOptions = {}): Promise<S
       // that never sees one keeps the null: nothing was asked for.
       intent: null,
       intentSource: "captured",
-      scope: [],
+      scope: [], ...(options.openedBy ? { openedBy: options.openedBy } : {}),
       ...facts,
     },
     options,

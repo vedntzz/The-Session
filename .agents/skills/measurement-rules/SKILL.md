@@ -26,7 +26,11 @@ for the benefit of whoever reads the raw JSONL. Don't "simplify" this by reading
 the stored field — a session merges long after it stopped, and nothing tells
 the tool when.
 
-Merged is decided on **content**, never on commit shas. A squash merge keeps
+Merged is decided on **content**, never on commit shas — content that arrived
+**after the session began**: a blob counts only where some default-branch
+commit holding it is not an ancestor of `startCommit` (`git/preexisting.ts`,
+asked once per path per gather), so a revert is not merged at stop. A
+deletion lands only where the branch once had the path. A squash merge keeps
 none of the branch's commits and a rebase rewrites all of them, so
 `branch --contains` reports nearly every merged session as abandoned. The test
 is whether the blob the session left is at that path anywhere in the default
@@ -416,6 +420,16 @@ only actionable part — the reader's next move is to put a rate against that
 name. Note `stop` reports tokens and not money, and says nothing about pricing
 at all when it was handed no rate table: "unpriced" would then mean "nobody
 asked", which is a different fact.
+
+A session that used several models is priced model by model from
+`cost.modelTokens`; a record without the field keeps the dominant-model rule
+it was priced under. Never price one model's tokens at another's rate to
+"fill" a gap — an unrated model leaves the session unpriced, by name.
+
+Capture is per agent session where the record names any (`capture/bound.ts`),
+and by time window where it does not; `cost.capturedBy` says which, absent
+reading as `window`. A Codex spend counts at its own timestamp, not its
+turn's start, and a spend with no instant makes its turn's tokens unknown.
 
 `pricing.ts` is the only file that knows a price. Everything above `loadRates`
 is pure: `priceTokens`, `rateFor`, `priceSession`, `spendOf`, `formatUsd`.

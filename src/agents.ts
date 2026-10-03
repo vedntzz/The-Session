@@ -7,6 +7,8 @@ export interface AgentInfo {
   readonly name: string;
   /** False where the adapter never counts API calls: its sessions' calls are unknown, not nought. */
   readonly reportsCalls: boolean;
+  /** False where the editor never fires its end hook, so a live session of it cannot hold another open. */
+  readonly reportsEnd?: boolean;
   /** For records stopped before `cost.agents` existed: whether this adapter's own counters are on it. */
   recognises(cost: SessionCost): boolean;
 }

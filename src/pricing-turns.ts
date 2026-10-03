@@ -35,8 +35,33 @@ export function priceByTurn(cost: SessionCost, rates: RateTable): Price {
     const missing = pricePart(found, turns[i] ?? null, models[i] ?? null, rates);
     if (missing !== undefined) return { priced: false, model: missing };
   }
+  // Tokens no turn accounts for came from an adapter that reports none; where it named a model per call, each
+  // part is priced at its own rate, and otherwise the remainder at the session's model.
+  const missing = cost.modelTokens !== undefined ? priceModels(found, cost.modelTokens, rates)
+    : priceRemainder(found, cost, turns, rates);
+  if (missing !== undefined) return { priced: false, model: missing };
+  const matched = [...found.keys].sort().join(", ");
+  return { priced: true, model: cost.model, matched, usd: found.usd, ...(cost.emptyTurnTokens ? { emptyUsd: found.usd } : {}) };
+}
+
+function priceRemainder(found: Found, cost: SessionCost, turns: readonly (TokenCounts | null)[], rates: RateTable): string | undefined {
   const rest = remainder(cost, turns);
-  const missing = rest === null ? undefined : pricePart(found, rest, cost.model, rates);
+  return rest === null ? undefined : pricePart(found, rest, cost.model, rates);
+}
+
+/** Each model's counters at its own rate; the first model no rate covers, or nothing. */
+function priceModels(found: Found, byModel: Readonly<Record<string, TokenCounts>>, rates: RateTable): string | undefined {
+  for (const model of Object.keys(byModel).sort()) {
+    const missing = pricePart(found, byModel[model]!, model, rates);
+    if (missing !== undefined) return missing;
+  }
+  return undefined;
+}
+
+/** A session whose calls named their models, priced model by model (SES-5). */
+export function priceByModel(cost: SessionCost, rates: RateTable): Price {
+  const found: Found = { usd: 0, keys: new Set() };
+  const missing = priceModels(found, cost.modelTokens ?? {}, rates);
   if (missing !== undefined) return { priced: false, model: missing };
   const matched = [...found.keys].sort().join(", ");
   return { priced: true, model: cost.model, matched, usd: found.usd, ...(cost.emptyTurnTokens ? { emptyUsd: found.usd } : {}) };

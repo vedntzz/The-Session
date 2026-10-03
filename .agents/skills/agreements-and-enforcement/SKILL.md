@@ -65,7 +65,7 @@ because the spelling decides which terms apply.
 
 ## From a payload to a decision
 
-1. **Parse** (`claude-write.ts`): Edit, Write and the legacy MultiEdit shape.
+1. **Parse** (`claude-write.ts`): Edit, Write, the legacy MultiEdit shape, and NotebookEdit (its `notebook_path`).
    Keep `cwd` and `filePath` and drop everything else — content, replacement
    strings and transcript paths are never held. `unsupported` (another tool)
    and `invalid` (a malformed supported one) are different answers and stay
@@ -108,6 +108,12 @@ answers `writes` with a list of paths, or `unknown` — and unknown is never
   no option of it can write a file, run a program or name an output; a
   program with one such option is listed with that option refused, like
   `find` and `git`, or not at all, like `sort` and `uniq`.
+- **Trust a parse only where the program cannot move.** A package manager
+  walks up to the nearest manifest and a workspace root, so its parse holds
+  only at the checkout root over a regular-file `package.json`
+  (`resolve-package.ts`); elsewhere, and yarn beside Plug'n'Play files, it is
+  unknown. A path that looks compliant but is not the one written is worse
+  than a question.
 - **Unknown flags are unknown.** Each manager has an explicit flag list; a
   global install, another directory, a workspace or anything unlisted is
   unknown, not ignored.

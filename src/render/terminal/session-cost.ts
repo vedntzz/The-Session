@@ -18,11 +18,19 @@ export function costLines(session: Session, palette: Palette, view: View): strin
   }
   const price = priceSession(session.cost, view.rates ?? NO_RATES);
   const lines = [spentLine(session, palette, price), wasteLine(session, palette, price, callsCell(session.cost, view))];
+  const by = session.cost.capturedBy;
+  if (by !== undefined) lines.push(`${INDENT}${palette.meta(label("captured"))}${palette.meta(CAPTURED[by])}`);
   if (view.tokens) {
     lines.push(`${INDENT}${palette.meta(label("tokens"))}${palette.meta(breakdown(session.cost))}`);
   }
   return lines;
 }
+
+/** Which transcripts the cost was read from (SES-2). Records stopped before it say nothing; all were by window. */
+const CAPTURED = {
+  "agent-session": "its own agent sessions' transcripts",
+  window: "every transcript in its time window and repo",
+} as const;
 
 /**
  * How old the prices behind the cost row are, under everything else.

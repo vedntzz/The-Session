@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `c770db1 Merge pull request #16 from vedntzz/fix/rate-prefix-dates-only` (`v2.0.1-12-gc770db1`).
+Derived at `c36d984 test: pin the three capture bugs found in review (SES-12)` (`v2.0.1-42-gc36d984`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -60,14 +60,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     167
-   20284
+     178
+   21000
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-     102
-   22644
+     119
+   24921
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -215,7 +215,7 @@ From the code and `git log`, 21–23 September 2026:
 |---|---|---|
 | Agreement record | Terms (paths, actions, sensitive paths, policy) signed into the first record, never patched | `src/agreement.ts`, `src/store/` |
 | Review screen | `start --review`, `prime --start --review`; only `accept` saves | `src/commands/review.ts` |
-| Write check | `session hook check`: `ask`/`deny` or silence, never `allow`, for Edit, Write, MultiEdit and Bash | `src/commands/check-write.ts`, `src/agreement-decision.ts` |
+| Write check | `session hook check`: `ask`/`deny` or silence, never `allow`, for Edit, Write, MultiEdit, NotebookEdit and Bash | `src/commands/check-write.ts`, `src/agreement-decision.ts` |
 | Shell recognisers | npm/pnpm/yarn, `sed -i`, `>`, `tee`, `mv`, `cp`, `rm`, read-only list; unknown → ask "Can't tell what this writes." | `src/shell/`, `src/commands/resolve-shell.ts` |
 | Install | `session hook install --repo` / `--repo --uninstall`, this repository's `.claude/settings.local.json` only | `src/commands/hook.ts`, `src/capture/hook.ts` |
 | Start snapshot | Blob per dirty file at start; `stop` counts dirty files the session changed again | `src/commands/start.ts`, `src/commands/stop.ts` |
@@ -330,6 +330,10 @@ export interface Session {
    * records and never written as a field; see `tool-calls.ts`.
    */
   toolCalls?: import("../tool-calls.js").ToolCall[];
+  /** The agent session whose start hook opened this passive session. Creating record only; see `agent-sessions.ts`. */
+  openedBy?: import("../agent-sessions.js").AgentSessionRef;
+  /** Agents that started or ended while it was open, folded from `agentSession` events; never written as a field. */
+  agentEvents?: import("../agent-sessions.js").AgentSessionEvent[];
   /** The paths that actually changed, observed from git. */
   reality: string[];
   /** `reality` minus `scope` — recorded, never blocked. */
@@ -397,7 +401,7 @@ to nest here and its relative links repointed at this directory.
 
 ```console
 $ wc -l .claude/skills/measurement-rules/SKILL.md
-     606 .claude/skills/measurement-rules/SKILL.md
+     620 .claude/skills/measurement-rules/SKILL.md
 ```
 
 That file is the copy a change is held to. **If the two ever disagree, the
@@ -424,7 +428,11 @@ for the benefit of whoever reads the raw JSONL. Don't "simplify" this by reading
 the stored field — a session merges long after it stopped, and nothing tells
 the tool when.
 
-Merged is decided on **content**, never on commit shas. A squash merge keeps
+Merged is decided on **content**, never on commit shas — content that arrived
+**after the session began**: a blob counts only where some default-branch
+commit holding it is not an ancestor of `startCommit` (`git/preexisting.ts`,
+asked once per path per gather), so a revert is not merged at stop. A
+deletion lands only where the branch once had the path. A squash merge keeps
 none of the branch's commits and a rebase rewrites all of them, so
 `branch --contains` reports nearly every merged session as abandoned. The test
 is whether the blob the session left is at that path anywhere in the default
@@ -815,6 +823,16 @@ name. Note `stop` reports tokens and not money, and says nothing about pricing
 at all when it was handed no rate table: "unpriced" would then mean "nobody
 asked", which is a different fact.
 
+A session that used several models is priced model by model from
+`cost.modelTokens`; a record without the field keeps the dominant-model rule
+it was priced under. Never price one model's tokens at another's rate to
+"fill" a gap — an unrated model leaves the session unpriced, by name.
+
+Capture is per agent session where the record names any (`capture/bound.ts`),
+and by time window where it does not; `cost.capturedBy` says which, absent
+reading as `window`. A Codex spend counts at its own timestamp, not its
+turn's start, and a spend with no instant makes its turn's tokens unknown.
+
 `pricing.ts` is the only file that knows a price. Everything above `loadRates`
 is pure: `priceTokens`, `rateFor`, `priceSession`, `spendOf`, `formatUsd`.
 
@@ -1052,13 +1070,14 @@ Verbatim from `Claude.md`:
 
 ```
 src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything else is pure
-  store/ record.ts types · append.ts locked, signed writer · read.ts fold · intent-missing.ts · paths.ts · scratch.ts tmp
+  store/ record.ts types · append.ts signed writer · lock.ts owner-checked lock · torn.ts · read.ts fold · intent-missing.ts · paths.ts · scratch.ts tmp
   chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
   git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
-  capture/ hook.ts settings surgery · transcript.ts · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, files
-  scope.ts classify.ts outcome.ts observe.ts empty.ts pricing.ts (re-exports pricing-spend.ts, pricing-rates.ts) pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
+  capture/ hook.ts settings surgery · transcript.ts · model-tokens.ts · bound.ts (per agent session) · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, hook-payload, files
+  scope.ts classify.ts outcome.ts observe.ts (git/preexisting.ts) empty.ts pricing.ts (re-exports pricing-spend.ts, pricing-rates.ts) pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
   agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
-  commands/check-write.ts resolve-{write,shell,move,copy,remove}.ts   session hook check
+  agent-sessions.ts commands/agent-session.ts   which agent sessions a session holds; what a hook may close
+  commands/check-write.ts resolve-{write,shell,package,move,copy,remove}.ts   session hook check
   write-check-event.ts write-checks.ts commands/record-write-check.ts capture/check-adapter.ts   its signed events
   shell/ words.ts (zsh-safe) package-manager sed redirect tee move copy remove read-only
   tree-state.ts tool-calls.ts commands/tool-call.ts   per-call records — built, not wired to a hook
@@ -1084,10 +1103,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  98 passed (98)
-      Tests  2540 passed (2540)
-   Start at  03:52:02
-   Duration  242.83s (transform 2.66s, setup 1.53s, collect 13.93s, tests 1303.11s, environment 14ms, prepare 5.81s)
+ Test Files  115 passed (115)
+      Tests  2758 passed (2758)
+   Start at  12:57:42
+   Duration  199.51s (transform 1.88s, setup 1.25s, collect 11.48s, tests 952.45s, environment 9ms, prepare 4.42s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

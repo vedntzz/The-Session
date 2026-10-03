@@ -42,7 +42,7 @@ session opened elsewhere while the review waits prevents a second start.
 
 **Review does not activate enforcement by itself.** A policy is checked only
 in a repository where `session hook install --repo` has registered the check
-command below, and only for Edit, Write and MultiEdit. External
+command below, and only for Edit, Write, MultiEdit, NotebookEdit and shell commands. External
 proposal ingestion is not exposed, and this review refuses an external proposal
 rather than labelling it as Prime's.
 
@@ -116,7 +116,7 @@ none. Schema and codes: [decisions](decisions.md#every-check-recorded).
 
 `session hook install --repo` registers it for the current repository only,
 in `<root>/.claude/settings.local.json`, under the matcher
-`Edit|Write|MultiEdit` with a 10-second timeout. The file is created if absent;
+`Edit|Write|MultiEdit|NotebookEdit|Bash` with a 10-second timeout. The file is created if absent;
 other settings and hooks in it are kept, and a second install changes nothing.
 An entry filed under a narrower matcher is moved, not duplicated. User-level
 settings are never read or written, because outside a repository the check
@@ -147,7 +147,8 @@ attempts; ordinary stop-time diff measurement remains separate.
 #### Shell commands
 
 `session hook check` also reads Claude Code's `Bash` payloads, and the check's
-matcher is `Edit|Write|MultiEdit|Bash`. `parseClaudeBash` keeps only `cwd` and
+matcher is `Edit|Write|MultiEdit|NotebookEdit|Bash`. NotebookEdit is read
+as a write to its `notebook_path`, whichever cell mode it uses. `parseClaudeBash` keeps only `cwd` and
 the command, in memory; neither is stored, logged or echoed. The command goes
 through `resolveShellCommand` (below), and:
 
@@ -182,8 +183,17 @@ file. Where versions differ — whether `update` rewrites the manifest — the
 answer includes the file.
 
 What it cannot see, and says so: `node_modules`, package caches, and anything
-a dependency's install script writes. `npm-shrinkwrap.json` and yarn's Plug'n'Play
-files are not listed.
+an install script writes — a dependency's, or the repository's own `prepare`
+and `postinstall`. `npm-shrinkwrap.json` is not listed.
+
+The parse is trusted only where the manager cannot walk anywhere else
+(`packageManagerAtRoot` in `src/commands/resolve-package.ts`, metadata only):
+the command runs at the checkout root and a regular-file `package.json` is
+there. From a subdirectory npm, pnpm and yarn walk up to the nearest manifest
+and on to a workspace root, so the paths the parser named are not the ones
+written, and a compliant-looking path would let the real write through in
+silence. Such a command, and yarn beside `.pnp.cjs`, `.pnp.js`,
+`.pnp.loader.mjs` or `.yarnrc.yml`, is unknown, and asked about.
 
 `sedWrites` in `src/shell/sed.ts` is also pure.
 The caller must explicitly identify `gnu` or `macos` sed; omitted or unknown

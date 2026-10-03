@@ -11,6 +11,7 @@ import { redirectWrites } from "../shell/redirect.js";
 import { parseRemove } from "../shell/remove.js";
 import { sedWrites } from "../shell/sed.js";
 import { teeWrites } from "../shell/tee.js";
+import { packageWritesHere } from "./resolve-package.js";
 import { resolveCopy } from "./resolve-copy.js";
 import { resolveMove } from "./resolve-move.js";
 import { resolveRemove } from "./resolve-remove.js";
@@ -46,7 +47,8 @@ type Claim = () => Promise<ShellResolution>;
 export async function resolveShellCommand(command: string, cwd: string, repo: string): Promise<ShellResolution> {
   const claims: Claim[] = [];
   for (const writes of [
-    readOnlyWrites(command), packageManagerWrites(command), sedEitherDialect(command),
+    readOnlyWrites(command), await packageWritesHere(packageManagerWrites(command), command, cwd, repo),
+    sedEitherDialect(command),
     redirectWrites(command), teeWrites(command),
   ]) {
     if (writes.kind === "writes") claims.push(() => resolvePaths(writes, cwd, repo));

@@ -100,7 +100,7 @@ function inAnotherRepo(entry: Record<string, unknown>, window: CaptureWindow): b
 }
 
 /** Counts every call; a record without `cost.agents` was captured here if it holds calls. */
-export const CLAUDE_CODE_AGENT: AgentInfo = { name: CLAUDE_CODE, reportsCalls: true, recognises: (cost) => cost.apiCalls > 0 };
+export const CLAUDE_CODE_AGENT: AgentInfo = { name: CLAUDE_CODE, reportsCalls: true, reportsEnd: true, recognises: (cost) => cost.apiCalls > 0 };
 
 export interface ClaudeCodeOptions {
   /** Transcript root. Defaults to `~/.claude/projects`. */
@@ -133,7 +133,10 @@ async function captureWindow(root: string, window: CaptureWindow): Promise<Sessi
   }
 
   const fold: Fold = { calls: new Map(), nextTurn: 0 };
-  for (const file of await transcriptsTouchedIn(root, from)) {
+  // Claude Code names each transcript after its session id.
+  const bound = window.agentSessionId === undefined ? undefined : `${window.agentSessionId}.jsonl`;
+  const files = (await transcriptsTouchedIn(root, from)).filter((file) => bound === undefined || path.basename(file) === bound);
+  for (const file of files) {
     const text = await readText(file);
     if (text !== undefined) {
       foldTranscript(text, window, fold);

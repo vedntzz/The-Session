@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A hook never closes a declared session, and `/clear` closes nothing; a passive session closes when the agents in it have ended, so the agreement's write check no longer goes silent after `/clear`.
+- Cost is read from the session's own agent transcripts, so two agents in one repo are no longer each billed for both. `week <id> --full` says how a cost was captured.
+- A session that used several models is priced at each model's own rate.
+- Codex spend counts at the moment it was reported, not when its turn started.
+- A rename records both of its paths.
+- A revert no longer reads as merged the moment it stops; a deletion of a file the default branch never had is not a landing.
+- A write cut short no longer leaves the log unreadable; `verify` names the torn line.
+- The log lock is taken over only from a dead owner, so a sleeping laptop cannot fork the chain.
+- The write check covers NotebookEdit. Re-run `session hook install --repo`.
+- The write check asks about npm, pnpm and yarn run outside the checkout root, instead of checking a manifest they would not write.
+- The write check asks about yarn beside Plug'n'Play files, which writes more than its lockfile.
+- `session hook install` names each tool in its start hook, and `session start` accepts it. Re-run the install to record which agent opened a session.
+
 ## [2.0.1] — 2026-09-27
 
 ### Fixed

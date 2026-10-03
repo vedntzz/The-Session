@@ -34,7 +34,7 @@ added 3 packages in 185ms
 ```
 $ session hook install --repo
   wrote    …/demo/.claude/settings.local.json
-  hook     PreToolUse (Edit|Write|MultiEdit|Bash) → session hook check
+  hook     PreToolUse (Edit|Write|MultiEdit|NotebookEdit|Bash) → session hook check
   via      /…/bin/node /…/@vedantzz/session/dist/cli.js
 ```
 
@@ -83,7 +83,10 @@ $ session week last
 ```
 
 Next: `session hook install` (without `--repo`) registers user-level hooks so
-that sessions open and close by themselves. `session scan` shows what agent
+that sessions nobody declared open and close by themselves. A hook never
+closes a session you declared — that stays open until `session stop` — and
+`/clear` closes nothing. Each session records which agent sessions worked in
+it, and its cost is read from those agents' transcripts only. `session scan` shows what agent
 sessions already on this disk did, and `session pr` writes a pull request body
 from the record.
 
@@ -107,21 +110,25 @@ terms are signed into the session's first record and cannot change.
 
 `session hook install --repo`, run inside a repository, registers
 `session hook check` in that repository's `.claude/settings.local.json` only.
-Before each Edit, Write, MultiEdit or Bash call, the check answers `ask` or
+Before each Edit, Write, MultiEdit, NotebookEdit or Bash call, the check answers `ask` or
 `deny` when the write falls outside the accepted terms, and says nothing
 otherwise. It never grants a permission. `--repo --uninstall` removes it.
 
 - Shell commands are read, not run: npm/pnpm/yarn installs, `sed -i`, `>`,
   `tee`, `mv`, `cp`, `rm` and a short list of read-only commands are
   recognised. Anything else — chains, pipes, scripts, `node -e` — is asked
-  about: "Can't tell what this writes."
+  about: "Can't tell what this writes." A package manager is recognised only
+  at the checkout root, over a `package.json` there: anywhere else it walks up
+  to another manifest, and yarn with Plug'n'Play files writes more than its
+  lockfile, so both are asked about.
 - **When the check itself fails** it denies: a caught error, a malformed
   payload or its own 5-second deadline all answer `deny`, and anything
   unexpected exits 2, which blocks. **When the editor gives up on it** — its
   10-second timeout, a crash, or `session` not on the editor's `PATH` — Claude
   Code lets the write through. Nothing the check does can change that.
-- It cannot see what a dependency's install script writes, aliases or shell
-  functions, or tools other than those four. Under a `record` policy nothing is
+- It cannot see what an install script writes — a dependency's, or the
+  repository's own `prepare` and `postinstall` — aliases or shell functions,
+  or tools other than those five. Under a `record` policy nothing is
   blocked; the diff at `stop` is the record.
 
 ## What was recorded

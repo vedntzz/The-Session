@@ -13,8 +13,16 @@ export interface RolloutTurn {
   cwd?: string;
   /** Summed `last_token_usage`; null where no usage was recorded for the turn. */
   tokens: TokenCounts | null;
+  /** Each `token_count` the turn received, with its own instant (NaN where the line had none); absent for none. */
+  spends?: readonly Spend[];
   /** What the developer typed to start the turn, from its first `UserMessage`; absent where none was recorded. */
   prompt?: string;
+}
+
+/** One `token_count`'s `last_token_usage`, at the instant it was written. */
+export interface Spend {
+  at: number;
+  tokens: TokenCounts;
 }
 
 /** What a turn's `turn_context` adds; the first one written for a turn wins. */
@@ -28,7 +36,7 @@ export interface Rollout {
   cwd?: string;
   started: Map<string, number>;
   contexts: Map<string, TurnContext>;
-  usage: Map<string, TokenCounts>;
+  usage: Map<string, Spend[]>;
   /** Each turn's first typed message. Injected context is a `response_item`, never a `UserMessage`. */
   prompts: Map<string, string>;
   /** The turn a `token_count` belongs to: the last one started and not yet complete. */
@@ -92,10 +100,10 @@ function foldUsage(rollout: Rollout, record: Line): void {
   if (total === rollout.lastTotal) return; // the same total emitted twice in a row
   rollout.lastTotal = total;
   if (rollout.current === undefined) return;
-  const add = splitUsage(info["last_token_usage"]);
-  const sum = rollout.usage.get(rollout.current);
-  if (sum === undefined) rollout.usage.set(rollout.current, add);
-  else addTokens(sum, add);
+  const spend = { at: record.at, tokens: splitUsage(info["last_token_usage"]) };
+  const spends = rollout.usage.get(rollout.current);
+  if (spends === undefined) rollout.usage.set(rollout.current, [spend]);
+  else spends.push(spend);
 }
 
 /** Notes a turn's context; a context written again (at compaction) is ignored. */
@@ -134,11 +142,19 @@ export function foldRolloutLine(rollout: Rollout, line: string): void {
 export function turnsOf(rollout: Rollout): RolloutTurn[] {
   return [...rollout.started].map(([id, at]) => {
     const context = rollout.contexts.get(id);
-    const tokens = rollout.usage.get(id) ?? null;
+    const spends = rollout.usage.get(id) ?? [];
+    const tokens = spends.length === 0 ? null : sumSpends(spends);
     const prompt = rollout.prompts.get(id);
-    return { id, at, model: context?.model ?? null, tokens, ...(context?.cwd === undefined ? {} : { cwd: context.cwd }),
+    return { id, at, model: context?.model ?? null, tokens, ...(spends.length > 0 ? { spends } : {}), ...(context?.cwd === undefined ? {} : { cwd: context.cwd }),
       ...(prompt === undefined ? {} : { prompt }) };
   });
+}
+
+/** The four counters over a list of spends. */
+export function sumSpends(spends: readonly Spend[]): TokenCounts {
+  const sum = { inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, outputTokens: 0 };
+  for (const spend of spends) addTokens(sum, spend.tokens);
+  return sum;
 }
 
 /** A rollout read a line at a time; what was read before an error is kept. */
