@@ -1090,6 +1090,15 @@ gets no `~/.codex`.
 plan and how each was cut is [sweep-plan.md](sweep-plan.md). The decisions
 that change what the tool claims are here.
 
+**Cost is read from those agents' transcripts.** The window rule charged every
+transcript in the repo and the time window to the session, so two agents
+running at once were each billed for both, and a session in `~` was billed to
+every repository under it. Capture now runs once per recorded agent session —
+Claude Code's `<id>.jsonl`, Codex's `rollout-*-<id>.jsonl` — and adds them up.
+`cost.capturedBy` says which rule a record was captured under; absent reads as
+`window`, which is what every older record was. The ids are the editors'
+opaque session ids: no path, no prompt, nothing the agent wrote.
+
 **Money is per model.** A Claude session that ran Opus with Haiku subagents
 was priced entirely at whichever made more calls. `cost.modelTokens` keeps the
 four counters per model, and each part is priced at its own rate. A model no

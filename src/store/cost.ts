@@ -87,6 +87,12 @@ export interface SessionCost extends TokenCounts {
   modelTokens?: Record<string, TokenCounts>;
   /** Adapters that found turns or calls, sorted; absent on records stopped before it — see `agentsOf`. */
   agents?: string[];
+  /**
+   * How transcripts were chosen: `agent-session`, only the agent sessions the
+   * record names; `window`, every transcript in the time window and the repo.
+   * Absent reads as `window`, which is how every record before it was captured.
+   */
+  capturedBy?: "agent-session" | "window";
 }
 
 /**

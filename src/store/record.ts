@@ -118,6 +118,10 @@ export interface Session {
    * records and never written as a field; see `tool-calls.ts`.
    */
   toolCalls?: import("../tool-calls.js").ToolCall[];
+  /** The agent session whose start hook opened this passive session. Creating record only; see `agent-sessions.ts`. */
+  openedBy?: import("../agent-sessions.js").AgentSessionRef;
+  /** Agents that started or ended while it was open, folded from `agentSession` events; never written as a field. */
+  agentEvents?: import("../agent-sessions.js").AgentSessionEvent[];
   /** The paths that actually changed, observed from git. */
   reality: string[];
   /** `reality` minus `scope` — recorded, never blocked. */
@@ -210,15 +214,9 @@ export function hasDeclaredScope(session: Pick<Session, "intentSource">): boolea
 }
 
 /**
- * Whether the intent is the developer's own words.
- *
- * The same answers as `hasDeclaredScope` on today's two sources, and still a
- * separate question: one asks whether there is a scope to measure drift
- * against, the other whether the words are the developer's. `path` and `meta`
- * are two palette roles that are both dim for the same reason — the day a
- * source answers these differently is a line here, not an audit of every
- * caller. Views that label authorship ask this one: the marker in the tables,
- * the sentence in `week <id>`, whether `pr` shortens the summary.
+ * Whether the intent is the developer's own words: today the same answers as `hasDeclaredScope`, still a
+ * separate question, so a source that answers them differently is a line here and not an audit of every
+ * caller. Views that label authorship ask this one — the table marker, `week <id>`, `pr`'s summary.
  */
 const OWN_WORDS: Record<IntentSource, boolean> = {
   declared: true,
@@ -238,6 +236,8 @@ export type RecordFields = Partial<Omit<Session, "id" | "toolCalls">> & {
   toolCallEnd?: import("../tool-calls.js").ToolCallEnd;
   /** What one write check answered. An event, never a field: the fold skips it. */
   writeCheck?: import("../write-check-event.js").WriteCheckEvent;
+  /** An agent session starting or ending; folded into `Session.agentEvents`. */
+  agentSession?: import("../agent-sessions.js").AgentSessionEvent;
 };
 
 /**
@@ -253,7 +253,7 @@ export type RecordFields = Partial<Omit<Session, "id" | "toolCalls">> & {
 export type SessionPatch = Omit<
   RecordFields,
   "intent" | "intentSource" | "repo" | "attribution" | "proposal" | "agreement" | "checkout" | "baselineState"
-  | "intentMissing" | "toolCallStart" | "toolCallEnd" | "writeCheck"
+  | "intentMissing" | "toolCallStart" | "toolCallEnd" | "writeCheck" | "openedBy" | "agentEvents" | "agentSession"
 >;
 
 /**
@@ -261,7 +261,7 @@ export type SessionPatch = Omit<
  * yet — reality, drift, cost, where it ended up — is defaulted here and filled
  * in by later patches. `repo` is derived from the store's cwd, never passed.
  */
-export type NewSession = Partial<Omit<Session, "id" | "repo" | "checkout" | "toolCalls">> &
+export type NewSession = Partial<Omit<Session, "id" | "repo" | "checkout" | "toolCalls" | "agentEvents">> &
   Pick<Session, "intent" | "startedAt" | "startCommit"> & { id?: string };
 
 export interface StoreOptions {

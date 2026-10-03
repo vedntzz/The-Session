@@ -207,6 +207,7 @@ export function sessionFrom(input: NewSession, repo: string, intentSource: Inten
     intentSource,
     ...(input.proposal ? { proposal: input.proposal } : {}),
     ...(agreement ? { agreement } : {}),
+    ...(input.openedBy ? { openedBy: input.openedBy } : {}),
     scope: agreement ? scopeForAgreement(agreement, input.scope) : input.scope ?? [],
     baseline: input.baseline ?? [],
     ...(input.baselineState ? { baselineState: input.baselineState } : {}),
@@ -313,17 +314,15 @@ export function foldRecord(
   order: Map<string, number>,
 ): void {
   const existing = sessions.get(record.id);
-  // Tool calls are events, not fields: folded into a list, and a `toolCalls`
-  // value in any record is ignored — the list only ever comes from events.
-  const { toolCallStart, toolCallEnd, writeCheck: _event, ...rest } = record.set as RecordFields & { toolCalls?: unknown };
-  const { toolCalls: _ignored, ...fields } = rest;
+  // Tool calls and agent sessions are events: a `toolCalls` or `agentEvents` value in any record is ignored.
+  const { toolCallStart, toolCallEnd, writeCheck: _event, agentSession, ...rest } = record.set as RecordFields & { toolCalls?: unknown };
+  const { toolCalls: _ignored, agentEvents: _events, ...fields } = rest;
   const merged: Partial<Session> = {
     ...existing, ...fields, ...keptIntent(existing, record),
-    // Neither assistance nor its original suggestion may be added or revised
-    // after the creating record, including on logs that predate Prime.
+    // What the creating record fixed is never added or revised later, including on logs that predate it.
     ...(existing ? {
       proposal: existing.proposal, intentSource: existing.intentSource,
-      agreement: existing.agreement,
+      agreement: existing.agreement, openedBy: existing.openedBy, agentEvents: existing.agentEvents,
       checkout: existing.checkout,
       baselineState: existing.baselineState,
       toolCalls: existing.toolCalls,
@@ -335,6 +334,7 @@ export function foldRecord(
     const seq = calls.reduce((max, call) => Math.max(max, call.startSeq ?? 0, call.endSeq ?? 0), 0) + 1;
     merged.toolCalls = foldToolCall(calls, seq, { toolCallStart, toolCallEnd });
   }
+  if (existing && agentSession) merged.agentEvents = [...(existing.agentEvents ?? []), agentSession];
   if (!isComplete(merged)) {
     // A patch whose creating record is missing: nothing to anchor it to.
     return;

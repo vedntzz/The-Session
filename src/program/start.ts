@@ -1,6 +1,8 @@
 // `session start`.
 import type { Command } from "commander";
-import { formatClosedCaptured, formatStarted, startPassiveSession, startSession } from "../commands/start.js";
+import { formatClosedCaptured, formatStarted, startSession } from "../commands/start.js";
+import { startFromHook } from "../commands/agent-session.js";
+import { hookPayloadFrom } from "../capture/adapters/hook-payload.js";
 import type { Session } from "../store.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
@@ -21,7 +23,8 @@ export function registerStart(program: Command, options: ProgramOptions): void {
       // line here would arrive inside somebody's prompt.
       if (flags.passive) {
         if (flags.review) throw new Error("--review cannot be combined with --passive. Review a declared session instead.");
-        await startPassiveSession(options);
+        const agent = flags.agent !== undefined && /^[a-z0-9-]{1,32}$/.test(flags.agent) ? flags.agent : undefined;
+        await startFromHook(options, await hookPayloadFrom(options.stdin), agent);
         return;
       }
 

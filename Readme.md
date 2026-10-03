@@ -83,7 +83,9 @@ $ session week last
 ```
 
 Next: `session hook install` (without `--repo`) registers user-level hooks so
-that sessions open and close by themselves. `session scan` shows what agent
+that sessions open and close by themselves. Each session records which agent
+sessions worked in it, and its cost is read from those agents' transcripts
+only. `session scan` shows what agent
 sessions already on this disk did, and `session pr` writes a pull request body
 from the record.
 

@@ -1,4 +1,5 @@
-import { captureCost, firstPromptIn, knownAgents, type Adapter, type CaptureWindow } from "../capture/index.js";
+import { knownAgents, type Adapter, type CaptureWindow } from "../capture/index.js";
+import { captureFor, firstPromptFor } from "../capture/bound.js";
 import { classifyPaths } from "../classify.js";
 import { changedFilesSince, endStateOf, repoRoot, workingBlobs } from "../git.js";
 import { intentFromPrompt } from "./intent.js";
@@ -110,7 +111,7 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
   const reality = computeReality(changed, open.baseline, baselineChanges(open.baselineState, now));
   const endedAt = new Date().toISOString();
   const window = { from: open.startedAt, to: endedAt, cwd };
-  const captured = await captureCost(window, options.adapters ?? undefined);
+  const captured = await captureFor(open, window, options.adapters ?? undefined);
   await captureMissedIntent(open, window, options);
   // The one place both halves are in hand: what the agent spent, and what the
   // repository has to show for it. An adapter cannot do this for itself — a
@@ -136,7 +137,7 @@ async function captureMissedIntent(open: Session, window: CaptureWindow, options
   if (open.intent !== null || open.intentMissing !== undefined) {
     return;
   }
-  const prompt = await firstPromptIn(window, options.adapters ?? undefined);
+  const prompt = await firstPromptFor(open, window, options.adapters ?? undefined);
   const intent = prompt === undefined ? undefined : intentFromPrompt(prompt.text);
   if (intent !== undefined) {
     await captureIntent(open.id, intent, options);
@@ -197,11 +198,6 @@ export async function stopIfOpen(options: StopOptions = {}): Promise<Session | u
 }
 
 /**
- * The lines `session stop` prints. The `outside` line appears only when the
- * session declared a scope and drifted; without a scope, say why drift cannot
- * be reported.
- */
-/**
  * The tokens, and the model where no rate covers it.
  *
  * `stop` reports tokens rather than money — it is the line printed the moment
@@ -221,6 +217,7 @@ function tokensSpent(cost: SessionCost, rates?: RateTable): string {
   return unpricedTokens(cost);
 }
 
+/** The lines `session stop` prints; `outside` only where a declared scope drifted, else why it cannot be said. */
 export function formatStopped(session: Session, rates?: RateTable): string[] {
   // Capped the same way `week <id>` caps its sentence, by the same function: a
   // reader who learned the rule in one view should not meet a different

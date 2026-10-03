@@ -53,7 +53,7 @@ verifier already had. It cannot catch a wholesale rewrite under a new key —
 see [What it does not do](../../../docs/decisions.md#what-it-does-not-do).
 
 **Some fields exist only in the creating record.** `proposal`, `agreement`,
-`checkout`, `baselineState`, `intentSource` and `attribution` are written in the first record
+`checkout`, `baselineState`, `intentSource`, `openedBy` and `attribution` are written in the first record
 for a session and nowhere after (`intent` is the one exception: a passive
 session's arrives once, from its first prompt, through `captureIntent`). The
 writer refuses a patch that carries any of them,
@@ -98,6 +98,12 @@ git cannot say. Older records are never backfilled or re-signed: absent fields
 read through their defaults (`proposerOf` says `prime`), so the stored bytes
 and their hashes stay exactly as written. A new optional field needs no record
 version bump — `hash` already covers everything in `set`.
+
+**Agent sessions are events too.** A `set.agentSession` record (`agent-start`
+or `agent-end`, an editor's opaque session id and tool name) is appended under
+the lock by `commands/agent-session.ts` and folded into `agentEvents`; the
+fold ignores an `agentEvents` value in any record, and `updateSession`
+refuses all three keys. See `agent-sessions.ts`.
 
 `prev` makes the append a read-then-write, so appends take a lock file
 (`<log>.lock`, created `wx`, holding its owner's pid and host —

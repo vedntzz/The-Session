@@ -82,7 +82,10 @@ async function turnsIn(root: string, window: CaptureWindow): Promise<RolloutTurn
   const from = Date.parse(window.from);
   if (Number.isNaN(from) || Number.isNaN(Date.parse(window.to))) return undefined;
   const turns: RolloutTurn[] = [];
-  for (const file of await rolloutsTouchedIn(root, from)) {
+  // A rollout is named `rollout-<time>-<thread id>.jsonl`, and the thread id is the hook's session id.
+  const bound = window.agentSessionId === undefined ? undefined : `-${window.agentSessionId}.jsonl`;
+  const files = (await rolloutsTouchedIn(root, from)).filter((file) => bound === undefined || file.endsWith(bound));
+  for (const file of files) {
     turns.push(...turnsInWindow(await readRollout(file), window));
   }
   return turns;

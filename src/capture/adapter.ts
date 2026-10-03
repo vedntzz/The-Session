@@ -9,6 +9,13 @@ export interface CaptureWindow {
   to: string;
   /** The repo the session ran in, for adapters that can attribute by path. */
   cwd?: string;
+  /**
+   * The agent's own session id, as its hook payload names it. Where given,
+   * only that session's transcript is read, so two agents running in one repo
+   * at once are not each charged for both. Absent: every transcript in the
+   * window and the repo, which is how every record before it was captured.
+   */
+  agentSessionId?: string;
 }
 
 /** The first thing typed inside a window, and when its turn started. */

@@ -133,7 +133,10 @@ async function captureWindow(root: string, window: CaptureWindow): Promise<Sessi
   }
 
   const fold: Fold = { calls: new Map(), nextTurn: 0 };
-  for (const file of await transcriptsTouchedIn(root, from)) {
+  // Claude Code names each transcript after its session id.
+  const bound = window.agentSessionId === undefined ? undefined : `${window.agentSessionId}.jsonl`;
+  const files = (await transcriptsTouchedIn(root, from)).filter((file) => bound === undefined || path.basename(file) === bound);
+  for (const file of files) {
     const text = await readText(file);
     if (text !== undefined) {
       foldTranscript(text, window, fold);

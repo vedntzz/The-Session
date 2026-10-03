@@ -196,6 +196,9 @@ function refusePatch(patch: SessionPatch): void {
   if ("toolCalls" in patch || "toolCallStart" in patch || "toolCallEnd" in patch || "writeCheck" in patch) {
     throw new Error("Tool calls and write checks are recorded by their hooks and cannot be patched.");
   }
+  if ("openedBy" in patch || "agentEvents" in patch || "agentSession" in patch) {
+    throw new Error("Agent sessions are recorded by the editor hooks and cannot be patched. Start a new session instead.");
+  }
   if ("baselineState" in patch) {
     throw new Error("The starting snapshot is taken at start and cannot be added or edited later.");
   }

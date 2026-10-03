@@ -330,6 +330,10 @@ export interface Session {
    * records and never written as a field; see `tool-calls.ts`.
    */
   toolCalls?: import("../tool-calls.js").ToolCall[];
+  /** The agent session whose start hook opened this passive session. Creating record only; see `agent-sessions.ts`. */
+  openedBy?: import("../agent-sessions.js").AgentSessionRef;
+  /** Agents that started or ended while it was open, folded from `agentSession` events; never written as a field. */
+  agentEvents?: import("../agent-sessions.js").AgentSessionEvent[];
   /** The paths that actually changed, observed from git. */
   reality: string[];
   /** `reality` minus `scope` — recorded, never blocked. */
@@ -824,8 +828,10 @@ A session that used several models is priced model by model from
 it was priced under. Never price one model's tokens at another's rate to
 "fill" a gap — an unrated model leaves the session unpriced, by name.
 
-A Codex spend counts at its own timestamp, not its turn's start, and a spend
-with no instant makes its turn's tokens unknown.
+Capture is per agent session where the record names any (`capture/bound.ts`),
+and by time window where it does not; `cost.capturedBy` says which, absent
+reading as `window`. A Codex spend counts at its own timestamp, not its
+turn's start, and a spend with no instant makes its turn's tokens unknown.
 
 `pricing.ts` is the only file that knows a price. Everything above `loadRates`
 is pure: `priceTokens`, `rateFor`, `priceSession`, `spendOf`, `formatUsd`.
@@ -1067,9 +1073,10 @@ src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything el
   store/ record.ts types · append.ts signed writer · lock.ts owner-checked lock · torn.ts · read.ts fold · intent-missing.ts · paths.ts · scratch.ts tmp
   chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
   git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
-  capture/ hook.ts settings surgery · transcript.ts · model-tokens.ts · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, files
+  capture/ hook.ts settings surgery · transcript.ts · model-tokens.ts · bound.ts (per agent session) · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, hook-payload, files
   scope.ts classify.ts outcome.ts observe.ts (git/preexisting.ts) empty.ts pricing.ts (re-exports pricing-spend.ts, pricing-rates.ts) pricing-turns.ts survival.ts debt.ts prime.ts scan.ts
   agreement.ts agreement-decision.ts write-session.ts   accepted terms, defer/ask/deny, one session per checkout
+  agent-sessions.ts commands/agent-session.ts   which agent sessions a session holds
   commands/check-write.ts resolve-{write,shell,package,move,copy,remove}.ts   session hook check
   write-check-event.ts write-checks.ts commands/record-write-check.ts capture/check-adapter.ts   its signed events
   shell/ words.ts (zsh-safe) package-manager sed redirect tee move copy remove read-only
