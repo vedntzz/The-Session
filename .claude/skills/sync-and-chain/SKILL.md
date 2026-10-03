@@ -100,9 +100,15 @@ and their hashes stay exactly as written. A new optional field needs no record
 version bump — `hash` already covers everything in `set`.
 
 `prev` makes the append a read-then-write, so appends take a lock file
-(`<log>.lock`, created `wx`, stale after 10s). Reading is untouched:
-`readSessions` folds records exactly as before and checks nothing — `session
-verify` is the only thing that walks the chain.
+(`<log>.lock`, created `wx`, stale after 10s).
+
+A line an append cut short becomes a mid-file line once the next append
+starts fresh and chains to it. `store/torn.ts` is the one rule: it is torn
+only when the next record is signed and its `prev` is that line's hash. The
+fold skips it and `verify` counts it apart (`verify-torn.ts`); anything else
+that does not parse is still damage. Beyond that one rule, reading checks
+nothing: `readSessions` folds records as before, and `session verify` is the
+only thing that walks the chain.
 
 `session verify --log <path> --key <pubkey>` must keep working on a machine
 with no `~/.session` at all: with `--log`, nothing derives a store path, and

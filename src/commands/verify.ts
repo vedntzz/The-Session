@@ -3,6 +3,7 @@ import { shortId } from "../render/terminal.js";
 import { readLog, readLogFile, storeHome, type StoreOptions } from "../store.js";
 import { linesOf, peerFingerprints, readPeerLogs } from "../sync.js";
 import { checkChain, isEmpty, isIntact, type ChainCheck } from "../verify.js";
+import { describeTorn } from "../verify-torn.js";
 
 /** What `session verify` can be pointed at. */
 export interface VerifyOptions extends StoreOptions {
@@ -220,9 +221,8 @@ export function formatVerify(result: VerifyResult): string[] {
     ...unsignedLines(check),
     ...chainLines(check),
   ];
-  if (check.truncatedTail) {
-    out.push(line("tail", "the last line was cut short mid-write and was not checked"));
-  }
+  if (check.torn !== undefined) out.push(line("torn", describeTorn(check.torn)));
+  if (check.truncatedTail) out.push(line("tail", "the last line was cut short mid-write and was not checked"));
   if (result.otherChains > 0) {
     out.push(otherChainsLine(result.otherChains));
   }

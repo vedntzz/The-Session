@@ -1106,6 +1106,15 @@ spend with no readable instant makes its turn's tokens unknown, never guessed.
 name, so the path it left vanished from `reality`, `drift` and the outcome
 evidence. The diff runs with `--no-renames`.
 
+**A torn write no longer breaks the log.** An append cut short leaves a line
+with no newline; the next append starts on a fresh line and chains to it. That
+line then sat mid-file, and every read threw `corrupt JSON` — every view, and
+the write check, which denies when it cannot read. A line that does not parse
+is now read as torn when, and only when, the next record is signed and its
+`prev` is that line's hash. Only the writer holding the lock and the key can
+have named it, so an edit or an insertion still breaks the chain where it did.
+`verify` counts torn lines apart from records and names them.
+
 **The write check reaches further, and claims less.** NotebookEdit is checked
 as a write to its notebook. A package manager is recognised only at the
 checkout root over a regular-file `package.json`: from a subdirectory it walks

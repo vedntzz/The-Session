@@ -5,6 +5,7 @@ import path from "node:path";
 import { hasAttribution } from "../config.js";
 import { parseAgreement, scopeForAgreement } from "../agreement.js";
 import { foldToolCall } from "../tool-calls.js";
+import { acknowledgedTorn } from "./torn.js";
 import {
   RECORD_VERSION,
   zeroCost,
@@ -294,9 +295,8 @@ export function foldLogs(logs: readonly RawLog[]): Session[] {
       try {
         record = parseRecord(line.text, file, line.no);
       } catch (error) {
-        if (index === lines.length - 1 && !complete) {
-          break; // interrupted append; the rest of the log is intact
-        }
+        if (index === lines.length - 1 && !complete) break; // interrupted append; the rest of the log is intact
+        if (acknowledgedTorn(line.text, lines[index + 1]?.text)) continue; // one a later append chained past
         throw error;
       }
       foldRecord(record, sessions, order);

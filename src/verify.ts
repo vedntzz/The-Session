@@ -1,5 +1,6 @@
 import { GENESIS, lineHash, recordHash } from "./chain.js";
 import { verifyHash, type PublicKey } from "./keys.js";
+import { walkPastTorn } from "./verify-torn.js";
 import type { RawLine } from "./store.js";
 
 /**
@@ -55,11 +56,10 @@ export interface ChainCheck {
   claimedKey?: string;
   /** The first place the log stops adding up. Absent when it is intact. */
   break?: ChainBreak;
-  /**
-   * True when the last line has no newline on it: an append cut short. The
-   * record is skipped rather than reported, matching how the log is read.
-   */
+  /** True when the last line has no newline on it: an append cut short, skipped as the log is read. */
   truncatedTail: boolean;
+  /** Lines an append cut short that a later record chains past (`verify-torn.ts`); absent when none. */
+  torn?: number[];
 }
 
 /** True when nothing about the log contradicts itself. */
@@ -113,6 +113,7 @@ export function checkChain(
       break;
     }
     const found = checkRecord(line, walk, check, publicKey);
+    if (found && walkPastTorn(found, line, lines[index + 1], walk, check)) continue;
     if (found) {
       check.break = { line: line.no, ...found };
       return check;
@@ -141,8 +142,7 @@ interface Walk {
   signedSeen: boolean;
 }
 
-/** A break, before the walk attaches the line number it was found on. */
-type Fault = Omit<ChainBreak, "line">;
+type Fault = Omit<ChainBreak, "line">; // a break, before the walk attaches its line number
 
 function fault(kind: BreakKind, detail: string, id?: string, at?: string): Fault {
   return { kind, detail, ...(id ? { id } : {}), ...(at ? { at } : {}) };

@@ -21,7 +21,7 @@ Node 20+, TypeScript, ESM. `commander` and `picocolors` are the only runtime dep
 
 ```
 src/ cli.ts, program/*.ts registration; commands/*.ts do the work; everything else is pure
-  store/ record.ts types · append.ts locked, signed writer · read.ts fold · intent-missing.ts · paths.ts · scratch.ts tmp
+  store/ record.ts types · append.ts locked, signed writer · torn.ts · read.ts fold · intent-missing.ts · paths.ts · scratch.ts tmp
   chain.ts keys.ts verify.ts sync.ts   hash chain, Ed25519, verify, refs/session/*
   git/ run.ts changes.ts blobs.ts (treeStateSince, treeStateCached) branch.ts
   capture/ hook.ts settings surgery · transcript.ts · model-tokens.ts · adapters/ claude-code, claude-prompt (paste tag), claude-write, claude-bash, codex, codex-rollout, files
