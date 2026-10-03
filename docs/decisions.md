@@ -1096,6 +1096,12 @@ four counters per model, and each part is priced at its own rate. A model no
 rate covers leaves the session unpriced, by name, as before. Records without
 the field keep the dominant-model rule they were priced under.
 
+**A Codex spend counts at its own instant.** A turn was counted whole or not
+at all by when it started. Each `token_count` now carries its own timestamp:
+a turn that began before `session start` contributes what it spent after it,
+and a turn still running at `stop` does not contribute what came later. A
+spend with no readable instant makes its turn's tokens unknown, never guessed.
+
 **A rename keeps both paths.** `git diff` reports only a renamed file's new
 name, so the path it left vanished from `reality`, `drift` and the outcome
 evidence. The diff runs with `--no-renames`.

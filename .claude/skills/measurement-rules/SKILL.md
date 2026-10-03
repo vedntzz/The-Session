@@ -422,6 +422,9 @@ A session that used several models is priced model by model from
 it was priced under. Never price one model's tokens at another's rate to
 "fill" a gap — an unrated model leaves the session unpriced, by name.
 
+A Codex spend counts at its own timestamp, not its turn's start, and a spend
+with no instant makes its turn's tokens unknown.
+
 `pricing.ts` is the only file that knows a price. Everything above `loadRates`
 is pure: `priceTokens`, `rateFor`, `priceSession`, `spendOf`, `formatUsd`.
 
