@@ -1115,6 +1115,16 @@ is now read as torn when, and only when, the next record is signed and its
 have named it, so an edit or an insertion still breaks the chain where it did.
 `verify` counts torn lines apart from records and names them.
 
+**A lock is taken over only from an owner that is gone.** The lock file holds
+its owner's pid and host. On the same host it is stale when that pid is dead,
+however young; a living owner's lock is never taken, however old — a laptop
+that sleeps mid-append used to wake to its lock taken and the chain forked.
+With no owner to ask (an older lock, another host's), the ten-second age rule
+stands. Takeover renames the file aside and checks it is the file that was
+judged, so a lock another waiter has just taken is put back, not deleted. The
+cost: a crashed process whose pid has been reused holds its lock until the
+twenty-second wait gives up and says which file to delete.
+
 **The write check reaches further, and claims less.** NotebookEdit is checked
 as a write to its notebook. A package manager is recognised only at the
 checkout root over a regular-file `package.json`: from a subdirectory it walks
