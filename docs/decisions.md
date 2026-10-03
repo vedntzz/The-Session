@@ -1098,7 +1098,8 @@ evidence. The diff runs with `--no-renames`.
 as a write to its notebook. A package manager is recognised only at the
 checkout root over a regular-file `package.json`: from a subdirectory it walks
 up to another manifest and a workspace root, and checking the path it was
-given let the real write through in silence.
+given let the real write through in silence. yarn beside Plug'n'Play files is
+unknown, since it writes more than its lockfile.
 
 ## Finding your way around
 

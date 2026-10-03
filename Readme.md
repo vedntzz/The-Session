@@ -116,14 +116,16 @@ otherwise. It never grants a permission. `--repo --uninstall` removes it.
   recognised. Anything else — chains, pipes, scripts, `node -e` — is asked
   about: "Can't tell what this writes." A package manager is recognised only
   at the checkout root, over a `package.json` there: anywhere else it walks up
-  to another manifest, so it is asked about.
+  to another manifest, and yarn with Plug'n'Play files writes more than its
+  lockfile, so both are asked about.
 - **When the check itself fails** it denies: a caught error, a malformed
   payload or its own 5-second deadline all answer `deny`, and anything
   unexpected exits 2, which blocks. **When the editor gives up on it** — its
   10-second timeout, a crash, or `session` not on the editor's `PATH` — Claude
   Code lets the write through. Nothing the check does can change that.
-- It cannot see what a dependency's install script writes, aliases or shell
-  functions, or tools other than those five. Under a `record` policy nothing is
+- It cannot see what an install script writes — a dependency's, or the
+  repository's own `prepare` and `postinstall` — aliases or shell functions,
+  or tools other than those five. Under a `record` policy nothing is
   blocked; the diff at `stop` is the record.
 
 ## What was recorded

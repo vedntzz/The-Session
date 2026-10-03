@@ -183,8 +183,8 @@ file. Where versions differ — whether `update` rewrites the manifest — the
 answer includes the file.
 
 What it cannot see, and says so: `node_modules`, package caches, and anything
-a dependency's install script writes. `npm-shrinkwrap.json` and yarn's Plug'n'Play
-files are not listed.
+an install script writes — a dependency's, or the repository's own `prepare`
+and `postinstall`. `npm-shrinkwrap.json` is not listed.
 
 The parse is trusted only where the manager cannot walk anywhere else
 (`packageManagerAtRoot` in `src/commands/resolve-package.ts`, metadata only):
@@ -192,7 +192,8 @@ the command runs at the checkout root and a regular-file `package.json` is
 there. From a subdirectory npm, pnpm and yarn walk up to the nearest manifest
 and on to a workspace root, so the paths the parser named are not the ones
 written, and a compliant-looking path would let the real write through in
-silence. Such a command is unknown, and asked about.
+silence. Such a command, and yarn beside `.pnp.cjs`, `.pnp.js`,
+`.pnp.loader.mjs` or `.yarnrc.yml`, is unknown, and asked about.
 
 `sedWrites` in `src/shell/sed.ts` is also pure.
 The caller must explicitly identify `gnu` or `macos` sed; omitted or unknown

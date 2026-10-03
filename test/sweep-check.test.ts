@@ -1,4 +1,4 @@
-// SES-4, SES-10: writes the check used to miss or place at the wrong path.
+// SES-4, SES-10, SES-11: writes the check used to miss or place at the wrong path.
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -54,6 +54,14 @@ describe("SES-4: a package manager below the root", () => {
     await writeFile(path.join(temp, "elsewhere.json"), "{}");
     await symlink(path.join(temp, "elsewhere.json"), path.join(cwd, "package.json"));
     await expect(packageManagerAtRoot("npm install", cwd, cwd)).resolves.toBe(false);
+  });
+});
+
+describe("SES-11: yarn Plug'n'Play writes more than the lockfile", () => {
+  it.each([".pnp.cjs", ".pnp.js", ".pnp.loader.mjs", ".yarnrc.yml"])("cannot tell what yarn writes beside %s", async (name) => {
+    await writeFile(path.join(cwd, name), "");
+    await expect(packageManagerAtRoot("yarn add lodash", cwd, cwd)).resolves.toBe(false);
+    await expect(packageManagerAtRoot("npm install lodash", cwd, cwd)).resolves.toBe(true);
   });
 });
 
