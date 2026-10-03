@@ -7,7 +7,7 @@ command's real output. Nothing here is typed from memory and nothing is
 summarised from a conversation: a number that has gone stale can be caught by
 running the line printed above it.
 
-Derived at `c770db1 Merge pull request #16 from vedntzz/fix/rate-prefix-dates-only` (`v2.0.1-12-gc770db1`).
+Derived at `c36d984 test: pin the three capture bugs found in review (SES-12)` (`v2.0.1-42-gc36d984`).
 
 This replaced a summary that lived only in a chat log and was three releases
 out of date before anyone noticed. The rule that follows from that: **this file
@@ -60,14 +60,14 @@ bundler, no monorepo.
 
 ```console
 $ find src -name '*.ts' | wc -l && find src -name '*.ts' -exec cat {} + | wc -l
-     167
-   20284
+     178
+   21000
 ```
 
 ```console
 $ find test -name '*.ts' | wc -l && find test -name '*.ts' -exec cat {} + | wc -l
-     102
-   22644
+     119
+   24921
 ```
 
 The commands above count the source and tests currently in the checkout.
@@ -401,7 +401,7 @@ to nest here and its relative links repointed at this directory.
 
 ```console
 $ wc -l .claude/skills/measurement-rules/SKILL.md
-     606 .claude/skills/measurement-rules/SKILL.md
+     620 .claude/skills/measurement-rules/SKILL.md
 ```
 
 That file is the copy a change is held to. **If the two ever disagree, the
@@ -1103,10 +1103,10 @@ model's rate. A release of this tool is not a price update.
 
 ```console
 $ npm test -- --exclude test/context.test.ts 2>&1 | tail -5
- Test Files  98 passed (98)
-      Tests  2540 passed (2540)
-   Start at  03:52:02
-   Duration  242.83s (transform 2.66s, setup 1.53s, collect 13.93s, tests 1303.11s, environment 14ms, prepare 5.81s)
+ Test Files  115 passed (115)
+      Tests  2758 passed (2758)
+   Start at  12:57:42
+   Duration  199.51s (transform 1.88s, setup 1.25s, collect 11.48s, tests 952.45s, environment 9ms, prepare 4.42s)
 ```
 
 The generator runs the behavioral suite before writing this document, then

@@ -142,3 +142,29 @@ Decided 3 October 2026: record agent session ids.
 
 - `sync`, `scan`, `survival`, `debt`, `knowledge`, the HTML and TUI views and
   `keys.ts` were not reviewed in this sweep.
+
+## Status, 3 October 2026
+
+Every part above is done except 13b, which is a note and not a change. The
+sweep lands as one commit per ticket, in the order of this plan's
+dependencies: SES-3, 10, 4, 11, 5, 6, 7, 8, 9, 14, 2 (with 13), 1, then 12.
+Each commit carries its own tests and docs. Typecheck, `check:size` and the
+full suite were run at every one of them.
+
+Each fix has a failing case first, and the new tests live in
+`test/sweep-*.test.ts`. A fix was seen failing on the old code for SES-3,
+SES-4, SES-7 (by the CLI reproduction), SES-14 (by the CLI), and SES-2, SES-5
+and SES-6 (`capture-bugs.test.ts`, unchanged). SES-9's tests were written
+against the fix and not run against master.
+
+Existing tests changed because they pinned the old behaviour on purpose:
+`resolve-shell` (npm from `src/` now asks), `claude-write` (NotebookEdit is no
+longer unsupported), `hook` (the matcher, and `--agent` in the start hook),
+`outcome` (a landed deletion needs the branch to have had the file) and `stop`
+(cost carries `capturedBy`).
+
+Not verified on a live editor: that Claude Code's `/clear` sends `SessionEnd`
+with `reason: clear` and a fresh `session_id` on the next `SessionStart`, and
+that Codex's hook payload carries `session_id` equal to the rollout's thread
+id. Both are handled either way, since a missing or unknown id falls back to
+the old rule, but each needs one real run.
