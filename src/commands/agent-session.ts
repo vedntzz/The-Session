@@ -1,13 +1,22 @@
-// What the editors' start hooks do once they name their agent session
-// (SES-2): open a passive session that remembers who opened it, or join a
-// session already open in this checkout. A hook that sends no payload keeps
-// the old behaviour exactly, and so does a person typing the same command.
+// What the editors' session hooks do once they name their agent session
+// (SES-1, SES-2): open a passive session that remembers who opened it, join a
+// session already open in this checkout, and close only what the rule in
+// agent-sessions.ts allows. A hook that sends no payload keeps the old
+// behaviour exactly, and so does a person typing the same commands.
 import { realpath } from "node:fs/promises";
-import { startEvent, type AgentSessionEvent, type AgentSessionRef } from "../agent-sessions.js";
+import { endEvent, hookMayClose, startEvent, type AgentSessionEvent, type AgentSessionRef } from "../agent-sessions.js";
+import type { AgentInfo } from "../agents.js";
+import { knownAgents } from "../capture/index.js";
 import type { HookPayload } from "../capture/adapters/hook-payload.js";
 import { repoRoot } from "../git.js";
 import { foldLog, getOpenSession, writeRecordFrom, type Session, type StoreOptions } from "../store.js";
 import { startPassiveSession } from "./start.js";
+import { stopIfOpen, stopSession, type StopOptions } from "./stop.js";
+
+/** True for an agent that fires its end hook; an agent nobody named is taken to. */
+export function reportsEnd(known: readonly AgentInfo[]): (agent: string | undefined) => boolean {
+  return (agent) => known.find((info) => info.name === agent)?.reportsEnd ?? true;
+}
 
 /** Appends one agent-session event, decided against the session as the log holds it under the lock. */
 async function recordEvent(
@@ -43,4 +52,20 @@ export async function startFromHook(options: StoreOptions, payload: HookPayload 
     return;
   }
   await startPassiveSession({ ...options, ...(ref === undefined ? {} : { openedBy: ref }) });
+}
+
+/**
+ * `stop --if-open` from an end hook. With no payload — a person, or an editor
+ * that sends none — it is the plain `--if-open`. With one, the agent session's
+ * end is recorded and the session is closed only where `hookMayClose` says.
+ */
+export async function stopFromHook(options: StopOptions, payload: HookPayload | undefined): Promise<Session | undefined> {
+  if (payload === undefined) return stopIfOpen(options);
+  const open = await getOpenSession(options);
+  if (open === undefined) return undefined;
+  const id = payload.sessionId;
+  if (id !== undefined) await recordEvent(open, (current) => endEvent(current, id), options);
+  if (!hookMayClose(open, { ...(id === undefined ? {} : { sessionId: id }), ...(payload.reason ? { reason: payload.reason } : {}) },
+    reportsEnd(knownAgents()))) return undefined;
+  return stopSession(options);
 }

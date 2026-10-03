@@ -1090,6 +1090,22 @@ gets no `~/.codex`.
 plan and how each was cut is [sweep-plan.md](sweep-plan.md). The decisions
 that change what the tool claims are here.
 
+**A hook closes only what its own agent opened.** `SessionEnd` used to run
+`session stop --if-open` against whatever was open, so `/clear` — which ends
+one agent session and starts the next — closed a declared session part way
+through, and the passive session that replaced it carried no agreement: the
+write check went silent for the rest of the work. A second `claude` in
+another terminal did the same when it exited. Now the editors' payloads are
+read for their session id and why they started or ended, and nothing else.
+A declared or primed session is never closed by a hook; `session stop` is the
+developer's. `/clear` closes nothing. A passive session records the agent
+session that opened it (`openedBy`, creating record only), and every agent
+that starts while it is open appends a signed `agentSession` event; it closes
+once no agent in it that reports its end is still live. Codex never fires its
+end hook, so a Codex agent cannot hold a session open. A session with no
+agent ids, a hook that sends no payload, and a stop typed by hand keep the old
+rule exactly.
+
 **Cost is read from those agents' transcripts.** The window rule charged every
 transcript in the repo and the time window to the session, so two agents
 running at once were each billed for both, and a session in `~` was billed to

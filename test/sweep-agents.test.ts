@@ -1,13 +1,14 @@
-// SES-2, SES-14: hooks that name their agent session.
+// SES-1, SES-2, SES-14: hooks that name their agent session.
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { agentSessionsOf, hookMayClose } from "../src/agent-sessions.js";
 import { parseHookPayload } from "../src/capture/adapters/hook-payload.js";
 import { createClaudeCodeAdapter } from "../src/capture/adapters/claude-code.js";
 import { runGit } from "../src/git.js";
 import { buildProgram } from "../src/program.js";
-import { readSessions, updateSession, type Session, type SessionPatch } from "../src/store.js";
+import { appendSession, readSessions, updateSession, type Session, type SessionPatch } from "../src/store.js";
 
 let root: string;
 let cwd: string;
@@ -38,6 +39,58 @@ async function hook(input: string, ...argv: string[]): Promise<void> {
 const sessions = () => readSessions({ cwd, home });
 const begin = (id: string, source = "startup") => hook(payload("SessionStart", id, { source }), "start", "--passive", "--agent", "claude-code");
 const end = (id: string, reason = "prompt_input_exit") => hook(payload("SessionEnd", id, { reason }), "stop", "--if-open");
+
+describe("SES-1: what an end hook may close", () => {
+  it("never closes a declared session, on an agent's exit or on /clear", async () => {
+    await appendSession({ intent: "declared work", startedAt: new Date().toISOString(), startCommit: "abc" }, { cwd, home });
+    await begin("A");
+    await end("A", "clear");
+    await begin("A2", "clear");
+    await end("A2");
+    const [session] = await sessions();
+    expect(session).toMatchObject({ intent: "declared work", endedAt: null });
+    expect(agentSessionsOf(session!).map((state) => [state.id, state.live])).toEqual([["A", false], ["A2", false]]);
+  });
+
+  it("keeps a passive session open through /clear and closes it when its agent exits", async () => {
+    await begin("A");
+    await end("A", "clear");
+    expect((await sessions())[0]?.endedAt).toBeNull();
+    await begin("A2", "clear");
+    await end("A2");
+    expect((await sessions())[0]?.endedAt).not.toBeNull();
+  });
+
+  it("does not close a passive session when a second agent in the repo exits first", async () => {
+    await begin("A");
+    await begin("B");
+    await end("B");
+    expect((await sessions())[0]?.endedAt).toBeNull();
+    await end("A");
+    expect((await sessions())[0]?.endedAt).not.toBeNull();
+  });
+
+  it("does not let an agent that never joined close it", async () => {
+    await begin("A");
+    await end("stranger");
+    expect((await sessions())[0]?.endedAt).toBeNull();
+  });
+
+  it("keeps the old rule for a session no agent named, and for a stop typed by hand", async () => {
+    await hook("", "start", "--passive");
+    await end("A");
+    expect((await sessions())[0]?.endedAt).not.toBeNull();
+    await begin("B");
+    await hook("", "stop", "--if-open");
+    expect((await sessions())[1]?.endedAt).not.toBeNull();
+  });
+
+  it("is not held open by an agent that never reports its end", () => {
+    const passive = { intentSource: "captured" as const, openedBy: { id: "A", agent: "claude-code" },
+      agentEvents: [{ type: "agent-start" as const, id: "C", agent: "codex" }] };
+    expect(hookMayClose(passive, { sessionId: "A" }, (agent) => agent !== "codex")).toBe(true);
+  });
+});
 
 describe("SES-14: the start hook may name its tool", () => {
   it("accepts the --agent an installer writes, which start used to refuse as an unknown option", async () => {

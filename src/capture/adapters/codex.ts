@@ -112,7 +112,7 @@ export interface CodexOptions {
 }
 
 /** A rollout names no API calls; only this adapter writes a per-turn model, which marks older records. */
-export const CODEX_AGENT: AgentInfo = { name: "codex", reportsCalls: false, recognises: (cost) => (cost.turnModels?.length ?? 0) > 0 };
+export const CODEX_AGENT: AgentInfo = { name: "codex", reportsCalls: false, reportsEnd: false, recognises: (cost) => (cost.turnModels?.length ?? 0) > 0 };
 
 /** Reads Codex rollouts for turns and per-turn models; reality stays git's, never FileChange's. */
 export function createCodexAdapter(options: CodexOptions = {}): Adapter {

@@ -1,6 +1,8 @@
 // `session stop`.
 import type { Command } from "commander";
-import { formatStopped, stopIfOpen, stopSession } from "../commands/stop.js";
+import { formatStopped, stopSession } from "../commands/stop.js";
+import { stopFromHook } from "../commands/agent-session.js";
+import { hookPayloadFrom } from "../capture/adapters/hook-payload.js";
 import { sweepFirst } from "../commands/sweep.js";
 import { loadRates } from "../pricing.js";
 import { storeHome } from "../store.js";
@@ -13,7 +15,8 @@ export function registerStop(program: Command, options: ProgramOptions): void {
     .description("End the active session")
     .option("--if-open", "do nothing when no session is open, instead of failing")
     .action(async (flags: { ifOpen?: boolean }) => {
-      const session = flags.ifOpen ? await stopIfOpen(options) : await stopSession(options);
+      // A hook's payload says which agent session ended, and decides what it may close (`stopFromHook`).
+      const session = flags.ifOpen ? await stopFromHook(options, await hookPayloadFrom(options.stdin)) : await stopSession(options);
       if (session) {
         printLines(formatStopped(session, await loadRates(storeHome(options))));
       }
