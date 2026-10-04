@@ -87,7 +87,7 @@ export function buildProgram(options: ProgramOptions = {}): Command {
  * registration order, since that list is read off the tree itself.
  */
 function registerCommands(program: Command, options: ProgramOptions, palette: Palette): void {
-  registerStart(program, options);
+  registerStart(program, options, palette);
   registerPrime(program, options, palette);
   registerIntent(program, options);
   registerStop(program, options);

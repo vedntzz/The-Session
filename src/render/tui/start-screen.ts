@@ -53,6 +53,9 @@ export function renderStartUi(view: StartView, columns: number, rows: number,
     add("Your goal and file boundaries stay fixed once you start.", "meta");
     if (view.capturedOpen) add("Starting will close the session the editor hook opened.", "meta");
 
+  } else {
+    add("Your plan is on the record.", "intent");
+    add("q returns to the terminal; your session stays open.", "meta");
   }
   const footer: Line[] = [{ text: "─".repeat(width), role: "meta" },
     ...fold(view.notice || (view.busy ? "Saving the record…" : view.session
