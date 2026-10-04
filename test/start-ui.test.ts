@@ -65,6 +65,26 @@ describe("start editing and terminal rendering", () => {
     expect(plain.join("\n")).toContain("What are you building?");
   });
 
+  it("makes every long path and the original goal reachable by paging", () => {
+    const session = example({endedAt:"2026-10-04T12:10:00Z",intent:"a".repeat(200)+"LAST WORD",
+      reality:Array.from({length:40},(_,i)=>`src/path${i}.ts`),scope:["src/"]});
+    const view = {repo:"example",branch:"main",draft:initialStartState(),session};
+    const max = renderStartUi(view,60,20).maxScroll;
+    const frames=Array.from({length:max+1},(_,scroll)=>renderStartUi({...view,draft:{...view.draft,scroll}},60,20).lines.join("\n")).join("\n");
+    expect(frames).toContain("LAST"); expect(frames).toContain("WORD"); expect(frames).toContain('"src/path39.ts"');
+  });
+
+  it("does not invent drift or money and sanitizes terminal-supplied data", () => {
+    const view = {repo:"bad\u001b[2Jrepo",branch:"branch",draft:initialStartState(),
+      session:example({endedAt:"done",scope:[],reality:["outside.ts"],cost:zeroCost()})};
+    const lines=renderStartUi(view,120,45).lines.join("\n");
+    expect(lines).toContain("Outside-plan changes are not measured");
+    expect(lines).not.toContain("$0.00"); expect(lines).not.toContain("\u001b");
+    const unknown=renderStartUi({...view,outcomeKnown:false},120,45).lines.join("\n");
+    expect(unknown).toContain("could not be checked");
+    expect(unknown).not.toContain("has not landed");
+  });
+
   it("lets the developer page through a long draft before starting", () => {
     const draft={...initialStartState(),goal:"long intent ".repeat(60),goalCursor:0,field:"start" as const,followCursor:false};
     const view={repo:"example",branch:"branch",draft};
@@ -120,6 +140,32 @@ describe("interactive start with real records", () => {
     expect((await readSessions(options()))[0]?.intent).toBe("first line  second line");
   });
 
+  it("resumes an open session, finishes real changes, and preserves the original declaration", async()=>{
+    const opened=await startSession("edit a",{...options(),scope:["a.txt"]});
+    const term=terminal();const running=runStartUi({...options(),startTerminal:term.io});await ready(term);
+    await writeFile(path.join(cwd,"a.txt"),"edited");await writeFile(path.join(cwd,"surprise.txt"),"outside");
+    term.input.write("f");await settled(term.text,"Session finished.");
+    expect(term.text()).toContain('! "surprise.txt"');term.input.write("q");const result=await running;
+    expect(result.action).toBe("stopped");expect(result.session?.id).toBe(opened.id);
+    expect(result.session?.scope).toEqual(["a.txt"]);expect(result.session?.intent).toBe("edit a");
+    expect(result.session?.reality).toEqual(["a.txt","surprise.txt"]);expect(result.session?.drift).toEqual(["surprise.txt"]);
+    expect(term.text()).not.toContain("$0.00");expect((await readSessions(options())).length).toBe(1);
+  });
+
+  it("never finishes a replacement session opened while the screen was waiting", async()=>{
+    await startSession("first",options());const term=terminal();const running=runStartUi({...options(),startTerminal:term.io});await ready(term);
+    await stopSession(options());const next=await startSession("next",options());
+    term.input.write("f");await settled(term.text,"open session changed");term.input.write("q");await running;
+    expect((await getOpenSession(options()))?.id).toBe(next.id);
+  });
+
+  it("refreshes a session the editor already closed", async()=>{
+    const opened=await startSession("first",options());const term=terminal();const running=runStartUi({...options(),startTerminal:term.io});await ready(term);
+    await stopSession(options());term.input.write("r");await settled(term.text,"Refreshed from the record.");
+    term.input.write("q");const result=await running;expect(result.session?.id).toBe(opened.id);expect(result.session?.endedAt).not.toBeNull();
+    expect(result.session?.outcome).toBe("empty");
+  });
+
   it("closes captured work only when the developer explicitly starts", async()=>{
     const captured=await startPassiveSession(options());const term=terminal();const running=runStartUi({...options(),startTerminal:term.io});await ready(term);
     expect(term.text()).toContain("Starting will close");expect((await getOpenSession(options()))?.id).toBe(captured?.id);
@@ -162,23 +208,5 @@ describe("interactive start with real records", () => {
       expect(log.mock.calls.flat().join("\n")).toContain("started  declare a plan");
       expect((await readSessions(options()))[0]?.intent).toBe("declare a plan");
     } finally {log.mockRestore();}
-  });
-
-  it("resumes an open session without changing its original declaration", async()=>{
-    const opened=await startSession("edit a",{...options(),scope:["a.txt"]});
-    const term=terminal();const running=runStartUi({...options(),startTerminal:term.io});await ready(term);
-    expect(term.text()).toContain("Your plan is on the record.");
-    expect(term.text()).toContain("edit a");
-    term.input.write("q");const result=await running;
-    expect(result.action).toBe("open");expect(result.session?.id).toBe(opened.id);
-    expect(result.session?.intent).toBe("edit a");expect(result.session?.scope).toEqual(["a.txt"]);
-    expect((await readSessions(options()))[0]?.endedAt).toBeNull();
-  });
-
-  it("refreshes a session the editor already closed", async()=>{
-    const opened=await startSession("first",options());const term=terminal();const running=runStartUi({...options(),startTerminal:term.io});await ready(term);
-    await stopSession(options());term.input.write("r");await settled(term.text,"Refreshed from the record.");
-    term.input.write("q");const result=await running;expect(result.session?.id).toBe(opened.id);expect(result.session?.endedAt).not.toBeNull();
-    expect(result.session?.outcome).toBe("empty");
   });
 });

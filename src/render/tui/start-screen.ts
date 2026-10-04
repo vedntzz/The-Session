@@ -1,8 +1,9 @@
-import type { Session } from "../../store.js";
+import { hasDeclaredScope, type Session } from "../../store.js";
 import { plainUiTheme, type UiRole, type UiTheme } from "../palette.js";
 import { intentOf, INTENT_NOTE } from "../terminal/intent.js";
 import { WHERE_IT_WENT } from "../terminal/brief-sentences.js";
 import { intentSourceOf } from "../../store.js";
+import { shortId } from "../terminal/text.js";
 import { characters, type StartState } from "./start-state.js";
 import { cellWidth, fit, fold } from "./text.js";
 
@@ -74,13 +75,26 @@ export function renderStartUi(view: StartView, columns: number, rows: number,
     add("EXPECTED FILES", "meta");
     if (session.scope.length) session.scope.forEach(path => add(JSON.stringify(path), "meta"));
     else add("None declared. Outside-plan changes are not measured.", "meta");
-    if (session.endedAt === null) {
+    if (session.endedAt !== null) {
+      add("");
+      add("CHANGED FILES", "meta");
+      if (!session.reality.length) add("No files changed.", "meta");
+      for (const path of session.reality) {
+        const outside = hasDeclaredScope(session) && session.drift.includes(path);
+        add(`${outside ? "! " : "  "}${JSON.stringify(path)}${outside ? "  /  outside plan" : ""}`, outside ? "drift" : "text");
+      }
+      if (hasDeclaredScope(session)) add(session.drift.length
+        ? `${session.drift.length} ${session.drift.length === 1 ? "file changed" : "files changed"} outside the original plan.`
+        : "No files changed outside the original plan.", session.drift.length ? "drift" : "meta");
+      add("");
+      add(`session week ${shortId(session.id)} --full shows usage and evidence.`, "meta");
+    } else {
       add("");
       add("Changes are recorded when the session finishes.", "meta");
       add("Your coding tool still handles permissions.", "meta");
       if (session.agreement) add(`Accepted agreement policy: ${session.agreement.policy}.`, "meta");
       add("");
-      add("[r] Refresh session   [q] Return to terminal", "focus");
+      add("[f] Finish & review   [r] Refresh session   [q] Return to terminal", "focus");
     }
   }
   const footer: Line[] = [{ text: "─".repeat(width), role: "meta" },
