@@ -92,6 +92,16 @@ from the record.
 
 ## Declaring before the agent runs
 
+Run `session start` with no arguments to open a full-screen setup inside your
+terminal. Write your goal, press Tab to add expected files or folders (one per
+line), then Ctrl-S to start. Your plan stays fixed after starting. Keep building
+in your coding tool; `q` returns to the shell with the session still open.
+Run `session start` again to return to it, `r` to refresh, and `f` to finish and
+review what changed. Esc cancels an unsaved draft without creating a record.
+The screen needs at least 60 columns and 20 rows; `NO_COLOR` keeps it readable
+without color. Explicit intents, scripts, passive hooks, and `--review` retain
+their existing behavior.
+
 `session start "<intent>" --scope <paths...>` records your intent and the files
 you expect to change. The intent can never be edited afterwards. Without
 `start`, the hook records the first prompt as the intent and no scope.
