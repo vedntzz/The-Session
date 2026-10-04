@@ -7,8 +7,13 @@ import type { Session } from "../store.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
 import { startReviewed } from "../commands/review.js";
+import { runStartUi } from "../commands/start-ui.js";
+import { formatStopped } from "../commands/stop.js";
+import { plainPalette, type Palette } from "../render/palette.js";
+import { safeText } from "../render/tui/text.js";
+import { intentOf } from "../render/terminal/intent.js";
 
-export function registerStart(program: Command, options: ProgramOptions): void {
+export function registerStart(program: Command, options: ProgramOptions, palette: Palette = plainPalette): void {
   program
     .command("start")
     .description("Begin a new session")
@@ -29,6 +34,17 @@ export function registerStart(program: Command, options: ProgramOptions): void {
       }
 
       if (intent === undefined) {
+        if (!flags.review) {
+          const closed: string[] = [];
+          const result = await runStartUi({ ...options, scope: flags.scope,
+            onCapturedClosed: (session) => closed.push(formatClosedCaptured(session)),
+          }, palette);
+          const session = result.session;
+          printLines([...closed, ...(!session ? ["  Cancelled. No session started."] : result.action === "stopped"
+            ? formatStopped(session) : result.action === "started" ? formatStarted(session)
+            : [safeText(`  open     ${intentOf(session)}. Run session stop when you finish.`)])]);
+          return;
+        }
         throw new Error('No intent given. Run: session start "what you are about to do"');
       }
       const closed: string[] = [];

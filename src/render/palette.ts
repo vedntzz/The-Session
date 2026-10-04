@@ -5,6 +5,8 @@ export const screenControl = {
   enter: "\u001b[?1049h\u001b[?25l",
   leave: "\u001b[?25h\u001b[?1049l",
   paint: "\u001b[H\u001b[2J",
+  pasteOn: "\u001b[?2004h",
+  pasteOff: "\u001b[?2004l",
 };
 
 /**

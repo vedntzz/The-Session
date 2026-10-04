@@ -23,6 +23,8 @@ import { emptyTurnsOf, reconcileEmpty } from "../empty.js";
 
 /** What `session stop` needs, on top of where the store lives. */
 export interface StopOptions extends StoreOptions {
+  /** A long-lived interface must never finish a different session that opened later. */
+  expectedSessionId?: string;
   /** Transcript adapters to read. Defaults to every tool `session` knows. */
   adapters?: readonly Adapter[];
 }
@@ -102,6 +104,9 @@ export async function stopSession(options: StopOptions = {}): Promise<Session> {
   const open = await getOpenSession(options);
   if (!open) {
     throw new Error("No session is open. Run session start before session stop.");
+  }
+  if (options.expectedSessionId !== undefined && open.id !== options.expectedSessionId) {
+    throw new Error("The open session changed while this screen was open. Refresh before finishing.");
   }
 
   const cwd = options.cwd ?? process.cwd();

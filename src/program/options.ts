@@ -6,6 +6,7 @@ import type { StopOptions } from "../commands/stop.js";
 import type { WeekOptions } from "../commands/week.js";
 import type { Palette } from "../render/palette.js";
 import type { ReviewOptions } from "../commands/review.js";
+import type { UiTerminal } from "../commands/ui.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
 export type ProgramOptions = StopOptions &
@@ -23,6 +24,8 @@ export type ProgramOptions = StopOptions &
      * over without a pipe.
      */
     stdin?: AsyncIterable<Buffer | string>;
+    /** Injected terminal for the interactive start flow. Hooks never use it. */
+    startTerminal?: UiTerminal;
   } & ReviewOptions;
 
 /**
