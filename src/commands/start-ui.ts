@@ -1,6 +1,7 @@
 import { emitKeypressEvents } from "node:readline";
 import { currentCommit, isRepo, tryGit } from "../git.js";
-import { getOpenSession, repoIdentity, repoName, intentSourceOf, type Session } from "../store.js";
+import { withOutcomes } from "../observe.js";
+import { getOpenSession, readSessions, repoIdentity, repoName, intentSourceOf, type Session } from "../store.js";
 import { plainPalette, plainUiTheme, screenControl, uiThemeFor, type Palette } from "../render/palette.js";
 import { renderStartUi } from "../render/tui/start-screen.js";
 import { draftScope, editStart, initialStartState, pasteStartText, type StartKey } from "../render/tui/start-state.js";
@@ -28,13 +29,10 @@ export async function runStartUi(options: StartUiOptions = {}, palette: Palette 
   const [identity, branch, open] = await Promise.all([
     repoIdentity(cwd), tryGit(cwd, ["branch", "--show-current"]), getOpenSession(options),
   ]);
-  if (open && intentSourceOf(open) !== "captured") {
-    throw new Error("A session is already open. Run session stop before starting another.");
-  }
   const { input, output } = terminal;
   const theme = palette === plainPalette ? plainUiTheme : uiThemeFor({ isTTY: output.isTTY });
   let draft = initialStartState(options.scope);
-  let session: Session | undefined;
+  let session = open && intentSourceOf(open) !== "captured" ? open : undefined;
   let action: StartUiResult["action"] = session ? "open" : "cancelled";
   let notice = "";
   let busy = false;
@@ -76,15 +74,27 @@ export async function runStartUi(options: StartUiOptions = {}, palette: Palette 
     const terminate = (): void => cancel(143);
     const hangup = (): void => cancel(129);
     const repaint = (): void => { try { draw(); } catch (error) { fail(error); } };
-    const perform = async (_kind: "start"): Promise<void> => {
-      busy = true; notice = "Saving your starting plan…"; repaint();
+    const perform = async (kind: "start" | "refresh"): Promise<void> => {
+      busy = true; notice = kind === "start" ? "Saving your starting plan…" : "Refreshing the session…";
+      repaint();
       try {
-        const scope = draftScope(draft);
-        session = await startSession(draft.goal, { ...options, scope: scope.length ? scope : undefined,
-          onCapturedClosed: stopped => options.onCapturedClosed?.(stopped),
-        });
-        action = "started";
-        notice = "Session started. q returns to the terminal; your session stays open.";
+        if (kind === "start") {
+          const scope = draftScope(draft);
+          session = await startSession(draft.goal, { ...options, scope: scope.length ? scope : undefined,
+            onCapturedClosed: stopped => options.onCapturedClosed?.(stopped),
+          });
+          action = "started";
+          notice = "Session started. q returns to the terminal; your session stays open.";
+        } else {
+          const current = (await readSessions(options)).find(value => value.id === session!.id);
+          if (!current) throw new Error("This session could not be found. Return to the terminal and run session week.");
+          session = current;
+          if (session.endedAt !== null) {
+            action = "stopped"; outcomeKnown = false;
+            session = (await withOutcomes([session], cwd))[0]!; outcomeKnown = true;
+          }
+          notice = "Refreshed from the record.";
+        }
       } catch (error) {
         notice = safeText(error instanceof Error ? error.message : String(error));
       } finally {
@@ -110,6 +120,7 @@ export async function runStartUi(options: StartUiOptions = {}, palette: Palette 
           draft.scroll = Math.max(0, Math.min(maxScroll, draft.scroll + (key.name === "pageup" ? -5 : 5)));
           draft.followCursor = false;
         } else if (session) {
+          if (key.name === "r") { void perform("refresh"); return; }
         } else if (key.ctrl && key.name === "s" || key.name === "return" && draft.field === "start") {
           if (!draft.goal.trim()) { notice = "Write a goal before starting. Nothing has been saved."; draft.field = "goal"; }
           else { void perform("start"); return; }

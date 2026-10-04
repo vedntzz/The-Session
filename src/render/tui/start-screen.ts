@@ -1,7 +1,11 @@
 import type { Session } from "../../store.js";
 import { plainUiTheme, type UiRole, type UiTheme } from "../palette.js";
+import { intentOf, INTENT_NOTE } from "../terminal/intent.js";
+import { WHERE_IT_WENT } from "../terminal/brief-sentences.js";
+import { intentSourceOf } from "../../store.js";
 import { characters, type StartState } from "./start-state.js";
 import { cellWidth, fit, fold } from "./text.js";
+
 /** Text rendition of the supplied open-ring mark; no terminal image protocol needed. */
 export const SESSION_MARK = ["⠀⠀⢀⣠⣄⠀⠀⠀", "⠀⣰⠋⠀⠀⠀⣆⠀", "⠀⠹⣄⠀⠀⣠⠏⠀", "⠀⠀⠈⠙⠋⠁⠀⠀"] as const;
 export interface StartView {
@@ -52,10 +56,32 @@ export function renderStartUi(view: StartView, columns: number, rows: number,
     body.push({ text: `${view.draft.field === "start" ? ">" : " "} Start session`, role: "focus", selected: view.draft.field === "start", anchor: view.draft.field === "start" });
     add("Your goal and file boundaries stay fixed once you start.", "meta");
     if (view.capturedOpen) add("Starting will close the session the editor hook opened.", "meta");
-
   } else {
-    add("Your plan is on the record.", "intent");
-    add("q returns to the terminal; your session stays open.", "meta");
+    const session = view.session;
+    if (session.endedAt === null) {
+      add("Your plan is on the record.", "intent");
+      add("Keep building in your coding tool. Finish here when you are ready.", "meta");
+    } else {
+      add(view.outcomeKnown === false ? "Session finished. Where the work landed could not be checked." : WHERE_IT_WENT[session.outcome]);
+      if (session.reality.length === 0) add("This session changed no files.", "meta");
+    }
+    add("");
+    add("ORIGINAL GOAL  /  FIXED AT START", "meta");
+    add(intentOf(session), "intent");
+    const sourceNote = INTENT_NOTE[intentSourceOf(session)];
+    if (sourceNote) add(sourceNote, "meta");
+    add("");
+    add("EXPECTED FILES", "meta");
+    if (session.scope.length) session.scope.forEach(path => add(JSON.stringify(path), "meta"));
+    else add("None declared. Outside-plan changes are not measured.", "meta");
+    if (session.endedAt === null) {
+      add("");
+      add("Changes are recorded when the session finishes.", "meta");
+      add("Your coding tool still handles permissions.", "meta");
+      if (session.agreement) add(`Accepted agreement policy: ${session.agreement.policy}.`, "meta");
+      add("");
+      add("[r] Refresh session   [q] Return to terminal", "focus");
+    }
   }
   const footer: Line[] = [{ text: "─".repeat(width), role: "meta" },
     ...fold(view.notice || (view.busy ? "Saving the record…" : view.session

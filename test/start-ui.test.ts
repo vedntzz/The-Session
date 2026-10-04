@@ -163,4 +163,22 @@ describe("interactive start with real records", () => {
       expect((await readSessions(options()))[0]?.intent).toBe("declare a plan");
     } finally {log.mockRestore();}
   });
+
+  it("resumes an open session without changing its original declaration", async()=>{
+    const opened=await startSession("edit a",{...options(),scope:["a.txt"]});
+    const term=terminal();const running=runStartUi({...options(),startTerminal:term.io});await ready(term);
+    expect(term.text()).toContain("Your plan is on the record.");
+    expect(term.text()).toContain("edit a");
+    term.input.write("q");const result=await running;
+    expect(result.action).toBe("open");expect(result.session?.id).toBe(opened.id);
+    expect(result.session?.intent).toBe("edit a");expect(result.session?.scope).toEqual(["a.txt"]);
+    expect((await readSessions(options()))[0]?.endedAt).toBeNull();
+  });
+
+  it("refreshes a session the editor already closed", async()=>{
+    const opened=await startSession("first",options());const term=terminal();const running=runStartUi({...options(),startTerminal:term.io});await ready(term);
+    await stopSession(options());term.input.write("r");await settled(term.text,"Refreshed from the record.");
+    term.input.write("q");const result=await running;expect(result.session?.id).toBe(opened.id);expect(result.session?.endedAt).not.toBeNull();
+    expect(result.session?.outcome).toBe("empty");
+  });
 });
