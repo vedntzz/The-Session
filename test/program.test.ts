@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { PassThrough } from "node:stream";
+import type { UiTerminal } from "../src/commands/ui.js";
 import type { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOOKS } from "../src/capture/hook.js";
@@ -35,6 +37,7 @@ beforeEach(async () => {
   // `adapters: []` keeps these tests off the machine's real transcripts, and
   // `launch` keeps `--open` from opening a browser on whoever runs them.
   store = {
+    appTerminal: { input: new PassThrough(), output: new PassThrough() } as unknown as UiTerminal,
     home: path.join(root, "store"),
     cwd,
     adapters: [],
