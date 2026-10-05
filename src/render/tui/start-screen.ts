@@ -6,9 +6,9 @@ import { intentSourceOf } from "../../store.js";
 import { shortId } from "../terminal/text.js";
 import { characters, type StartState } from "./start-state.js";
 import { cellWidth, fit, fold } from "./text.js";
+import { paintUiLine, sessionHeader } from "./chrome.js";
 
-/** Text rendition of the supplied open-ring mark; no terminal image protocol needed. */
-export const SESSION_MARK = ["⠀⠀⢀⣠⣄⠀⠀⠀", "⠀⣰⠋⠀⠀⠀⣆⠀", "⠀⠹⣄⠀⠀⣠⠏⠀", "⠀⠀⠈⠙⠋⠁⠀⠀"] as const;
+export { SESSION_MARK } from "./chrome.js";
 export interface StartView {
   repo: string;
   branch: string;
@@ -32,11 +32,7 @@ export function renderStartUi(view: StartView, columns: number, rows: number,
   const width = Math.min(82, terminalWidth - 8);
   const left = Math.max(2, Math.floor((terminalWidth - width) / 2));
   const phase = !view.session ? "NEW SESSION" : view.session.endedAt === null ? "SESSION OPEN" : "SESSION FINISHED";
-  const captions = ["SESSION", view.repo, view.branch, phase];
-  const header: Line[] = [
-    ...SESSION_MARK.map((mark, i) => ({ text: mark + "   " + fit(captions[i]!, width - 11), role: i === 0 ? "intent" as const : "meta" as const })),
-    { text: "" }, { text: "─".repeat(width), role: "meta" }, { text: "" },
-  ];
+  const header: Line[] = sessionHeader(view.repo, view.branch, phase, width);
   const body: Line[] = [];
   const add = (text: string, role: UiRole = "text"): void => {
     body.push(...fold(text, width).map(part => ({ text: part, role })));
@@ -113,9 +109,7 @@ export function renderStartUi(view: StartView, columns: number, rows: number,
   }
   const visible = body.slice(start, start + height);
   while (visible.length < height) visible.push({ text: "" });
-  const paint = (line: Line): string => theme.paint(" ".repeat(left)) +
-    theme.paint(fit(line.text, width), line.role, line.selected) + theme.paint(" ".repeat(terminalWidth - left - width));
-  return { lines: [...header, ...visible, ...footer].map(paint), maxScroll };
+  return { lines: [...header, ...visible, ...footer].map(line => paintUiLine(line, { width, left, terminalWidth }, theme)), maxScroll };
 }
 
 function field(value: string, position: number, focused: boolean, placeholder: string, width: number, lines: Line[]): void {
