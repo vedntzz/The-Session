@@ -18,6 +18,7 @@ export interface StartView {
   busy?: boolean;
   capturedOpen?: boolean;
   outcomeKnown?: boolean;
+  returnToHome?: boolean;
 }
 interface Line { text: string; role?: UiRole; selected?: boolean; anchor?: boolean }
 
@@ -25,8 +26,9 @@ interface Line { text: string; role?: UiRole; selected?: boolean; anchor?: boole
 export function renderStartUi(view: StartView, columns: number, rows: number,
   theme: UiTheme = plainUiTheme): { lines: string[]; maxScroll: number } {
   const terminalWidth = Math.max(1, columns - 1);
+  const destination = view.returnToHome ? "Home" : "the terminal";
   if (columns < 60 || rows < 20) return {
-    lines: fold("Resize to at least 60 columns and 20 rows. Esc exits; an open session stays open.", terminalWidth)
+    lines: fold(`Resize to at least 60 columns and 20 rows. Esc returns to ${destination}; an open session stays open.`, terminalWidth)
       .slice(0, Math.max(1, rows - 1)), maxScroll: 0,
   };
   const width = Math.min(82, terminalWidth - 8);
@@ -90,13 +92,13 @@ export function renderStartUi(view: StartView, columns: number, rows: number,
       add("Your coding tool still handles permissions.", "meta");
       if (session.agreement) add(`Accepted agreement policy: ${session.agreement.policy}.`, "meta");
       add("");
-      add("[f] Finish & review   [r] Refresh session   [q] Return to terminal", "focus");
+      add(`[f] Finish & review   [r] Refresh session   [q] Return to ${view.returnToHome ? "Home" : "terminal"}`, "focus");
     }
   }
   const footer: Line[] = [{ text: "─".repeat(width), role: "meta" },
     ...fold(view.notice || (view.busy ? "Saving the record…" : view.session
-      ? "PgUp/PgDn scroll · q or Esc returns to the terminal."
-      : "Tab next · Ctrl-S start · Esc cancel · PgUp/PgDn scroll"), width).map(text => ({ text, role: "focus" as const })),
+      ? `PgUp/PgDn scroll · q or Esc returns to ${destination}.`
+      : `Tab next · Ctrl-S start · Esc ${view.returnToHome ? "Home" : "cancel"} · PgUp/PgDn scroll`), width).map(text => ({ text, role: "focus" as const })),
     { text: "Stored on your machine.", role: "meta" }];
   if (rows < 26) for (let i = header.length - 1; i >= 0; i--) if (!header[i]!.text) header.splice(i, 1);
   const height = Math.max(1, rows - 1 - header.length - footer.length);

@@ -27,9 +27,9 @@ describe("Session app entry and terminal ownership", () => {
     const term = terminal();
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const running = buildProgram({ cwd: root, home: path.join(root, "store"), palette: plainPalette, appTerminal: term.io }).parseAsync([], { from: "user" });
-    await vi.waitFor(() => expect(term.text()).toContain("OVERVIEW")); term.input.write("\r"); await running;
+    await vi.waitFor(() => expect(term.text()).toContain("OVERVIEW")); term.input.write("\u001b[B\r"); await running;
     expect(term.raw.mock.calls).toEqual([[true], [false]]); expect(term.text()).toContain(screenControl.leave);
-    expect(log.mock.calls.flat().join("\n")).toContain("Open Start session with: session start");
+    expect(log.mock.calls.flat().join("\n")).toContain("Open Capture setup with: session hook --help");
     expect(await readdir(root)).toEqual([]);
   });
 
