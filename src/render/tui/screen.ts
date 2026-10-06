@@ -6,12 +6,12 @@ import { plainPalette, plainUiTheme, type Palette, type UiRole, type UiTheme } f
 import { intentOf, INTENT_NOTE } from "../terminal/intent.js";
 import { clock, day } from "../terminal/text.js";
 import { outcomeHeadline, spentFigure } from "../terminal/week.js";
-import { OUTCOMES, parseQuery, visibleSessions, type UiState } from "./state.js";
+import { canReturnHome, OUTCOMES, parseQuery, visibleSessions, type UiState } from "./state.js";
 import { cellWidth, fit, fold } from "./text.js";
 
 interface Line { text: string; role?: UiRole; prefix?: string; selected?: boolean }
 /** `agents` lets a call count no agent made read as unknown; absent, calls print as recorded. */
-export interface UiData { sessions: Session[]; rates: RateTable; repo: string; days: number; agents?: readonly AgentInfo[] }
+export interface UiData { sessions: Session[]; rates: RateTable; repo: string; days?: number; agents?: readonly AgentInfo[] }
 
 function drift(session: Session): string {
   if (!hasDeclaredScope(session)) return "No scope declared · drift is not measured";
@@ -109,11 +109,11 @@ function entry(session: Session, selected: boolean, state: UiState, data: UiData
   return lines;
 }
 
-const HELP = [
+const helpLines = (returnToHome: boolean): string[] => [
   "KEYBOARD", "↑↓ / j k   Select a session", "Enter      Expand or collapse selected session",
   "e          Show or hide usage and evidence", "PgUp/PgDn  Scroll through long entries (also Ctrl-U / Ctrl-D)",
-  "Home/End   First or last session", "/          Search; Enter finishes typing", "Esc        Clear filters; close help",
-  "o          Cycle outcome filter", "r          Refresh records and Git outcomes", "q / Ctrl-C Quit",
+  "Home/End   First or last session", "/          Search; Enter finishes typing", `Esc        ${returnToHome ? "Back; " : ""}clear filters; close help`,
+  "o          Cycle outcome filter", "r          Refresh records and Git outcomes", returnToHome ? "q          Home; Ctrl-C exits" : "q / Ctrl-C Quit",
   "", "FILTERS", "outside:yes   Recorded drift only", "outside:no    Measured zero drift; excludes running and captured sessions",
   "outcome:merged   Also open, abandoned, empty", "source:declared  Also primed, captured", "",
   "Combine filters and text: outside:yes source:declared rate limiting",
@@ -122,10 +122,10 @@ const HELP = [
 
 /** A bounded timeline viewport; records remain read-only and colours are applied last. */
 export function renderUi(data: UiData, state: UiState, columns: number, rows: number,
-  _palette: Palette = plainPalette, notice = "", theme: UiTheme = plainUiTheme): { lines: string[]; maxScroll: number } {
+  _palette: Palette = plainPalette, notice = "", theme: UiTheme = plainUiTheme, returnToHome = false): { lines: string[]; maxScroll: number } {
   const width = Math.max(1, columns - 1);
   if (columns < 60 || rows < 20) return {
-    lines: fold("Resize to at least 60 columns and 20 rows, or q to quit.", width).slice(0, Math.max(1, rows - 1)), maxScroll: 0,
+    lines: fold(`Resize to at least 60 columns and 20 rows, or q to ${returnToHome ? "return Home" : "quit"}.`, width).slice(0, Math.max(1, rows - 1)), maxScroll: 0,
   };
   const sessions = visibleSessions(data.sessions, state);
   const query = parseQuery(state.query);
@@ -140,13 +140,13 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
   header.push({ text: `└${"─".repeat(inset - 2)}┘`, role: "focus" });
   const filters = [...new Set([...query.filters.map(([key, value]) => `[${key}:${value}]`), ...(state.outcome ? [`[outcome:${OUTCOMES[state.outcome]}]`] : [])])];
   header.push(...fold(query.error ?? `FILTERS  ${filters.join("  ") || "none"}  ·  / edit`, inset).map((text) => ({ text, role: "focus" as const })));
-  header.push({ text: `${sessions.length} matching sessions / last ${data.days} days`, role: "meta" }, { text: "" });
+  header.push({ text: `${sessions.length} matching sessions / ${data.days === undefined ? "all recorded history" : `last ${data.days} days`}`, role: "meta" }, { text: "" });
   const spend = spendOf(sessions, data.rates);
   const money = sessions.length ? `${spentFigure(spend)} · ${spend.unpriced} unpriced · ${spend.uncaptured} uncaptured` : "No spend to report.";
   const footer: Line[] = [
     { text: "─".repeat(inset), role: "meta" },
-    { text: "/ Search   ↑↓ Select   Enter Expand   Esc Clear   ? Help", role: "focus" },
-    { text: notice || `Session ${sessions.length ? state.selected + 1 : 0}/${sessions.length} · PgUp/PgDn scroll · q quit`, role: "meta" },
+    { text: `/ Search   ↑↓ Select   Enter Expand   Esc ${returnToHome && canReturnHome(state) ? "Back" : "Clear"}   ? Help`, role: "focus" },
+    { text: notice || `Session ${sessions.length ? state.selected + 1 : 0}/${sessions.length} · PgUp/PgDn scroll · q ${returnToHome ? "Home" : "quit"}`, role: "meta" },
     ...fold(money, inset).map((text) => ({ text, role: "meta" as const })),
   ];
   // On short terminals remove decorative whitespace, never measurements or controls.
@@ -154,7 +154,7 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
   const height = Math.max(1, rows - 1 - header.length - footer.length);
   const content: Line[] = [];
   let anchor = 0;
-  if (state.help) content.push(...HELP.flatMap((text) => fold(text, inset).map((part) => ({ text: part }))));
+  if (state.help) content.push(...helpLines(returnToHome).flatMap((text) => fold(text, inset).map((part) => ({ text: part }))));
   else sessions.forEach((session, index) => {
     if (index === state.selected) anchor = content.length;
     content.push(...entry(session, index === state.selected, state, data, inset));

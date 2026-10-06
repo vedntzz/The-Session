@@ -15,6 +15,11 @@ export function initialState(): UiState {
   return { selected: 0, scroll: 0, query: "", searching: false, outcome: 0, expanded: true, evidence: false, help: false };
 }
 
+/** Search, filters and help handle Escape before the browser returns Home. */
+export function canReturnHome(state: UiState): boolean {
+  return !state.searching && !state.help && !state.query && state.outcome === 0;
+}
+
 /** Exact, deterministic filters. Unknown filter values never silently broaden a query. */
 export function parseQuery(query: string): { terms: string[]; filters: [string, string][]; error?: string } {
   const terms: string[] = [];

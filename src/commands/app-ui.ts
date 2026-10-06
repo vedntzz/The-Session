@@ -5,10 +5,10 @@ import { plainPalette, plainUiTheme, screenControl, uiThemeFor, type Palette } f
 import { homeActions, renderHomeUi, type HomeAction, type HomeView } from "../render/tui/home.js";
 import { moveMenuSelection, renderUiMenu, UI_MENU } from "../render/tui/menu.js";
 import type { UiScreen } from "../render/tui/navigation.js";
-import type { UiKey } from "../render/tui/state.js";
+import { initialState, type UiKey } from "../render/tui/state.js";
 import { homeState } from "./home.js";
 import { runStartUi, type StartUiOptions } from "./start-ui.js";
-import { requireTerminal, type UiTerminal } from "./ui.js";
+import { loadUi, requireTerminal, runUi, type UiBrowserResult, type UiTerminal } from "./ui.js";
 
 export async function loadAppUi(options: StoreOptions = {}): Promise<HomeView> {
   const cwd = options.cwd ?? process.cwd();
@@ -98,12 +98,21 @@ export async function runWorkspaceUi(options: StartUiOptions = {}, palette: Pale
   terminal: UiTerminal = { input: process.stdin, output: process.stdout }): Promise<HomeAction | undefined> {
   let view = await loadAppUi(options);
   let position = { selected: 0, scroll: 0 };
+  let history: UiBrowserResult | undefined;
   while (!terminal.input.readableEnded && !terminal.input.destroyed && !terminal.output.destroyed) {
     const action = await runAppUi(view, palette, terminal, state => { position = state; });
-    if (action?.screen !== "start") return action;
-    const result = await runStartUi({ ...options, startTerminal: terminal, returnToHome: true }, palette);
-    if (result.exitWorkspace) return;
-    if (result.action === "started") position = { selected: 0, scroll: 0 };
+    if (action?.screen === "start") {
+      const result = await runStartUi({ ...options, startTerminal: terminal, returnToHome: true }, palette);
+      if (result.exitWorkspace) return;
+      if (result.action === "started") position = { selected: 0, scroll: 0 };
+    } else if (action?.screen === "sessions") {
+      const refresh = (): ReturnType<typeof loadUi> => loadUi(undefined, options);
+      const browser = { returnToHome: true,
+        state: action.selectedSessionId ? initialState() : history?.state,
+        selectedSessionId: action.selectedSessionId ?? history?.selectedSessionId };
+      history = await runUi(await refresh(), refresh, palette, terminal, browser);
+      if (history.exitWorkspace) return;
+    } else return action;
     view = { ...await loadAppUi(options), ...position };
   }
   return undefined;
