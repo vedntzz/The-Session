@@ -10,8 +10,8 @@ import { startSession, type StartOptions } from "./start.js";
 import { stopSession } from "./stop.js";
 import type { UiTerminal } from "./ui.js";
 
-export interface StartUiOptions extends StartOptions { startTerminal?: UiTerminal }
-export interface StartUiResult { session?: Session; action: "cancelled" | "open" | "started" | "stopped" }
+export interface StartUiOptions extends StartOptions { startTerminal?: UiTerminal; returnToHome?: boolean }
+export interface StartUiResult { session?: Session; action: "cancelled" | "open" | "started" | "stopped"; exitWorkspace?: boolean }
 
 export function canStartUi(terminal: UiTerminal): boolean {
   return terminal.input.isTTY === true && terminal.output.isTTY === true && process.env["TERM"] !== "dumb";
@@ -39,17 +39,20 @@ export async function runStartUi(options: StartUiOptions = {}, palette: Palette 
   let busy = false;
   let closed = false;
   let exitRequested = false;
+  let exitWorkspace = false;
   let maxScroll = 0;
   let paste: string | undefined;
   let outcomeKnown = true;
   const wasRaw = input.isRaw;
   const wasFlowing = input.readableFlowing === true;
+  if (input.readableEnded || input.destroyed || output.destroyed) return { session, action, exitWorkspace: true };
 
   return new Promise<StartUiResult>((resolve, reject) => {
     const draw = (): void => {
       if (closed) return;
       const frame = renderStartUi({ repo: repoName(identity), branch: branch?.trim() || "detached HEAD",
-        draft, session, notice, busy, outcomeKnown, capturedOpen: open !== undefined && intentSourceOf(open) === "captured" },
+        draft, session, notice, busy, outcomeKnown, returnToHome: options.returnToHome,
+        capturedOpen: open !== undefined && intentSourceOf(open) === "captured" },
       output.columns || 80, output.rows || 24, theme);
       maxScroll = frame.maxScroll;
       output.write(theme.background + screenControl.paint + frame.lines.join("\r\n"));
@@ -57,20 +60,22 @@ export async function runStartUi(options: StartUiOptions = {}, palette: Palette 
     const cleanup = (): void => {
       if (closed) return;
       closed = true;
-      input.off("keypress", keypress); input.off("end", finish); input.off("error", fail);
+      input.off("keypress", keypress); input.off("end", end); input.off("error", fail);
       output.off("error", fail); output.off("resize", repaint);
       process.off("SIGINT", interrupt); process.off("SIGTERM", terminate); process.off("SIGHUP", hangup); process.off("exit", cleanup);
       try { input.setRawMode(wasRaw); } finally {
         if (!wasFlowing) input.pause();
-        output.write(screenControl.pasteOff + theme.reset + screenControl.leave);
+        if (!output.destroyed) output.write(screenControl.pasteOff + theme.reset + screenControl.leave);
       }
     };
     const finish = (): void => {
-      if (busy) { exitRequested = true; notice = "Finishing the current action before returning to the terminal."; repaint(); return; }
-      cleanup(); resolve({ session, action });
+      if (closed) return;
+      if (busy) { exitRequested = true; notice = `Finishing the current action before returning to ${options.returnToHome && !exitWorkspace ? "Home" : "the terminal"}.`; repaint(); return; }
+      try { cleanup(); resolve({ session, action, ...(exitWorkspace ? { exitWorkspace: true } : {}) }); } catch (error) { reject(error); }
     };
-    const fail = (error: unknown): void => { cleanup(); reject(error); };
-    const cancel = (code: number): void => { process.exitCode = code; finish(); };
+    const fail = (error: unknown): void => { try { cleanup(); } catch { /* Preserve the original failure. */ } reject(error); };
+    const end = (): void => { exitWorkspace = true; finish(); };
+    const cancel = (code: number): void => { process.exitCode = code; end(); };
     const interrupt = (): void => cancel(130);
     const terminate = (): void => cancel(143);
     const hangup = (): void => cancel(129);
@@ -85,7 +90,8 @@ export async function runStartUi(options: StartUiOptions = {}, palette: Palette 
             onCapturedClosed: stopped => options.onCapturedClosed?.(stopped),
           });
           action = "started";
-          notice = "Session started. q returns to the terminal; your session stays open.";
+          notice = options.returnToHome ? "Session started. Returning to Home; your session stays open."
+            : "Session started. q returns to the terminal; your session stays open.";
         } else if (kind === "finish") {
           const stopped = await stopSession({ ...options, expectedSessionId: session!.id });
           // Recompute the outcome through the same path as week, never from the stored field.
@@ -93,7 +99,7 @@ export async function runStartUi(options: StartUiOptions = {}, palette: Palette 
           outcomeKnown = false;
           session = (await withOutcomes([stopped], cwd))[0]!;
           outcomeKnown = true;
-          notice = "Session finished. Review every changed path; q returns to the terminal.";
+          notice = `Session finished. Review every changed path; q returns to ${options.returnToHome ? "Home" : "the terminal"}.`;
           draft.scroll = 0;
         } else {
           const current = (await readSessions(options)).find(value => value.id === session!.id);
@@ -110,11 +116,12 @@ export async function runStartUi(options: StartUiOptions = {}, palette: Palette 
       } finally {
         busy = false;
         if (closed) return;
-        if (exitRequested) finish(); else repaint();
+        if (exitRequested || options.returnToHome && kind === "start" && action === "started") finish(); else repaint();
       }
     };
     const keypress = (text: string, key: StartKey = {}): void => {
       try {
+        if (closed) return;
         if (key.sequence === "\u001b[200~") { paste = ""; return; }
         if (paste !== undefined) {
           if (key.sequence === "\u001b[201~") {
@@ -143,7 +150,7 @@ export async function runStartUi(options: StartUiOptions = {}, palette: Palette 
     };
     try {
       emitKeypressEvents(input);
-      input.on("keypress", keypress); input.on("end", finish); input.on("error", fail);
+      input.on("keypress", keypress); input.on("end", end); input.on("error", fail);
       output.on("error", fail); output.on("resize", repaint);
       process.on("SIGINT", interrupt); process.on("SIGTERM", terminate); process.on("SIGHUP", hangup); process.on("exit", cleanup);
       input.setRawMode(true); input.resume();

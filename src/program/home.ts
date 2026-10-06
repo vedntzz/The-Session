@@ -9,7 +9,7 @@ import { storeHome } from "../store.js";
 import { unknownCommand } from "./help.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
-import { loadAppUi, runAppUi } from "../commands/app-ui.js";
+import { runWorkspaceUi } from "../commands/app-ui.js";
 import { canStartUi } from "../commands/start-ui.js";
 import type { HomeAction } from "../render/tui/home.js";
 import type { UiScreen } from "../render/tui/navigation.js";
@@ -50,7 +50,7 @@ export function registerHome(program: Command, options: ProgramOptions, palette:
       }
       const terminal = options.appTerminal ?? { input: process.stdin, output: process.stdout };
       if (canStartUi(terminal)) {
-        const action = await runAppUi(await loadAppUi(options), palette, terminal);
+        const action = await runWorkspaceUi(options, palette, terminal);
         if (action) printLines([safeText(`  Open ${action.label} with: ${sectionCommand(action)}`)]);
         return;
       }

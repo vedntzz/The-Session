@@ -7,6 +7,7 @@ import { moveMenuSelection, renderUiMenu, UI_MENU } from "../render/tui/menu.js"
 import type { UiScreen } from "../render/tui/navigation.js";
 import type { UiKey } from "../render/tui/state.js";
 import { homeState } from "./home.js";
+import { runStartUi, type StartUiOptions } from "./start-ui.js";
 import { requireTerminal, type UiTerminal } from "./ui.js";
 
 export async function loadAppUi(options: StoreOptions = {}): Promise<HomeView> {
@@ -19,7 +20,8 @@ export async function loadAppUi(options: StoreOptions = {}): Promise<HomeView> {
 
 /** Owns the terminal until exit or selection; feature commands run only after it returns. */
 export async function runAppUi(view: HomeView, palette: Palette = plainPalette,
-  terminal: UiTerminal = { input: process.stdin, output: process.stdout }): Promise<HomeAction | undefined> {
+  terminal: UiTerminal = { input: process.stdin, output: process.stdout },
+  remember?: (position: { selected: number; scroll: number }) => void): Promise<HomeAction | undefined> {
   requireTerminal(terminal);
   const { input, output } = terminal;
   const theme = palette === plainPalette ? plainUiTheme : uiThemeFor({ isTTY: output.isTTY });
@@ -50,7 +52,7 @@ export async function runAppUi(view: HomeView, palette: Palette = plainPalette,
         if (!output.destroyed) output.write(screenControl.pasteOff + theme.reset + screenControl.leave);
       }
     };
-    const finish = (action?: HomeAction): void => { try { cleanup(); resolve(action); } catch (error) { reject(error); } };
+    const finish = (action?: HomeAction): void => { try { cleanup(); remember?.({ selected, scroll }); resolve(action); } catch (error) { reject(error); } };
     const end = (): void => finish();
     const fail = (error: unknown): void => { try { cleanup(); } catch { /* Preserve the original failure. */ } reject(error); };
     const cancel = (code: number): void => { process.exitCode = code; finish(); };
@@ -89,4 +91,20 @@ export async function runAppUi(view: HomeView, palette: Palette = plainPalette,
       input.setRawMode(true); input.resume(); output.write(screenControl.enter + screenControl.pasteOn); draw();
     } catch (error) { fail(error); }
   });
+}
+
+/** Each screen releases the terminal before the next takes ownership. */
+export async function runWorkspaceUi(options: StartUiOptions = {}, palette: Palette = plainPalette,
+  terminal: UiTerminal = { input: process.stdin, output: process.stdout }): Promise<HomeAction | undefined> {
+  let view = await loadAppUi(options);
+  let position = { selected: 0, scroll: 0 };
+  while (!terminal.input.readableEnded && !terminal.input.destroyed && !terminal.output.destroyed) {
+    const action = await runAppUi(view, palette, terminal, state => { position = state; });
+    if (action?.screen !== "start") return action;
+    const result = await runStartUi({ ...options, startTerminal: terminal, returnToHome: true }, palette);
+    if (result.exitWorkspace) return;
+    if (result.action === "started") position = { selected: 0, scroll: 0 };
+    view = { ...await loadAppUi(options), ...position };
+  }
+  return undefined;
 }
