@@ -117,7 +117,8 @@ const helpLines = (returnToHome: boolean, grouped: boolean): string[] => [
   "e          Show or hide usage and evidence", "PgUp/PgDn  Scroll through long entries (also Ctrl-U / Ctrl-D)",
   "Home/End   First or last session", "/          Search; Enter finishes typing", `Esc        ${returnToHome ? "Back; " : ""}clear filters; close help`,
   ...HISTORY_FILTERS.map(filter => `${filter.shortcut}          Cycle ${filter.label.toLowerCase()} filter`),
-  ...(grouped ? ["w          Cycle day range: 7 / 14 / 30", "u          Show or hide usage totals for each source"] : []),
+  ...(grouped ? ["w          Cycle day range: 7 / 14 / 30", "u          Show or hide usage totals for each source",
+    "c          Copy this selection as Markdown", "h          Open this selection as a local HTML report"] : []),
   "r          Refresh records and Git outcomes", returnToHome ? "q          Home; Ctrl-C exits" : "q / Ctrl-C Quit",
   "", "FILTERS", "outside:yes   Recorded drift only", "outside:no    Measured zero drift; excludes running and captured sessions",
   "outcome:merged   Also open, abandoned, empty", "source:declared  Also primed, captured", "",
@@ -155,10 +156,13 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
   header.push({ text: `${sessions.length} matching sessions / ${data.days === undefined ? "all recorded history" : `last ${data.days} days`}`, role: "meta" }, { text: "" });
   const spend = spendOf(sessions, data.rates);
   const money = sessions.length ? `${spentFigure(spend)} · ${spend.unpriced} unpriced · ${spend.uncaptured} uncaptured` : "No spend to report.";
+  const noticeLines = grouped ? fold(notice, inset) : [];
+  const detailedNotice = noticeLines.length > 1;
   const footer: Line[] = [
     { text: "─".repeat(inset), role: "meta" },
+    ...(grouped ? [{ text: "[c] Copy Markdown · [h] Open HTML", role: "focus" as const }] : []),
     { text: `/ Search   ↑↓ Select   Enter Expand   Esc ${returnToHome && canReturnHome(state) ? "Back" : "Clear"}   ? Help`, role: "focus" },
-    { text: notice || `Session ${sessions.length ? state.selected + 1 : 0}/${sessions.length} · PgUp/PgDn scroll · q ${returnToHome ? "Home" : "quit"}`, role: "meta" },
+    { text: detailedNotice ? "Status details above · PgUp/PgDn scroll" : notice || `Session ${sessions.length ? state.selected + 1 : 0}/${sessions.length} · PgUp/PgDn scroll · q ${returnToHome ? "Home" : "quit"}`, role: "meta" },
     ...fold(money, inset).map((text) => ({ text, role: "meta" as const })),
     ...(grouped && sessions.length && data.checked && !unpricedThroughout(spend)
       ? fold(pricesChecked(data.checked), inset).map(text => ({ text, role: "meta" as const })) : []),
@@ -175,7 +179,7 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
     }
   }
   const height = Math.max(1, rows - 1 - header.length - footer.length);
-  const content: Line[] = [];
+  const content: Line[] = detailedNotice ? [...noticeLines.map(text => ({ text, role: "focus" as const })), { text: "" }] : [];
   const selectedSession = sessions[state.selected];
   let anchor = 0;
   if (state.help) content.push(...helpLines(returnToHome, grouped).flatMap((text) => fold(text, inset).map((part) => ({ text: part }))));
@@ -189,7 +193,7 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
     group.sessions.forEach((session, index) => {
       const selected = session === selectedSession;
       // Opening totals starts at the source heading, even for a later selected record.
-      if (selected) anchor = grouped && state.selected === 0 ? 0
+      if (selected && !detailedNotice) anchor = grouped && state.selected === 0 ? 0
         : index === 0 || (grouped && state.usage) ? heading : content.length;
       content.push(...entry(session, selected, state, data, inset));
     });

@@ -21,11 +21,16 @@ export async function loadUi(days: number | undefined, options: StoreOptions = {
 }
 
 export interface UiTerminal { input: ReadStream; output: WriteStream }
+export interface UiBrowserAction {
+  key: string; label: string;
+  run: (data: UiData, state: UiState) => Promise<string>;
+}
 export interface UiBrowserOptions {
   returnToHome?: boolean; state?: UiState; selectedSessionId?: string;
   render?: typeof renderUi;
   navigate?: typeof navigate;
   windows?: readonly number[];
+  actions?: readonly UiBrowserAction[];
 }
 export interface UiBrowserResult { state: UiState; selectedSessionId?: string; days?: number; exitWorkspace: boolean }
 
@@ -56,6 +61,7 @@ export async function runUi(
   let maxScroll = 0;
   let notice = "";
   let refreshing = false;
+  let acting = false;
   let closed = false;
   let pasting = false;
   const result = (exitWorkspace: boolean): UiBrowserResult => ({ state: { ...state },
@@ -94,6 +100,22 @@ export async function runUi(
     const terminate = (): void => cancel(143);
     const hangup = (): void => cancel(129);
     const repaint = (): void => { try { draw(); } catch (error) { fail(error); } };
+    const perform = async (action: UiBrowserAction): Promise<void> => {
+      acting = true;
+      notice = `${action.label}…`;
+      repaint();
+      if (closed) { acting = false; return; }
+      try {
+        const message = await action.run(data, { ...state });
+        if (!closed) notice = message;
+      } catch (error) {
+        notice = `${action.label} failed: ${error instanceof Error ? error.message : String(error)} ${action.key} retries.`;
+      } finally {
+        acting = false;
+        if (!closed) state.scroll = 0;
+        repaint();
+      }
+    };
     const reload = async (days = data.days): Promise<void> => {
       refreshing = true;
       notice = "Refreshing records and Git outcomes…";
@@ -126,13 +148,15 @@ export async function runUi(
         if (tooSmall) return;
         if (options.windows?.length && !state.searching && !state.help && !key.ctrl && key.name === "w") {
           const next = (options.windows.indexOf(data.days ?? options.windows[0]!) + 1) % options.windows.length;
-          if (!refreshing) void reload(options.windows[next]);
+          if (!refreshing && !acting) void reload(options.windows[next]);
           return;
         }
         if (!state.searching && key.name === "r") {
-          if (!refreshing) void reload();
+          if (!refreshing && !acting) void reload();
           return;
         }
+        const action = !state.searching && !state.help && !key.ctrl && options.actions?.find(action => action.key === key.name);
+        if (action) { if (!refreshing && !acting) void perform(action); return; }
         state = (options.navigate ?? navigate)(state, key, visibleSessions(data.sessions, state).length, maxScroll);
         draw();
       } catch (error) { fail(error); }
