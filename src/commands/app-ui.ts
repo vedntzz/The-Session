@@ -6,9 +6,11 @@ import { homeActions, renderHomeUi, type HomeAction, type HomeView } from "../re
 import { moveMenuSelection, renderUiMenu, UI_MENU } from "../render/tui/menu.js";
 import type { UiScreen } from "../render/tui/navigation.js";
 import { initialState, type UiKey } from "../render/tui/state.js";
+import { renderWeekUi, WEEK_WINDOWS } from "../render/tui/week.js";
 import { homeState } from "./home.js";
 import { runStartUi, type StartUiOptions } from "./start-ui.js";
 import { loadUi, requireTerminal, runUi, type UiBrowserResult, type UiTerminal } from "./ui.js";
+import { loadWeekUi } from "./week-ui.js";
 
 export async function loadAppUi(options: StoreOptions = {}): Promise<HomeView> {
   const cwd = options.cwd ?? process.cwd();
@@ -99,6 +101,7 @@ export async function runWorkspaceUi(options: StartUiOptions = {}, palette: Pale
   let view = await loadAppUi(options);
   let position = { selected: 0, scroll: 0 };
   let history: UiBrowserResult | undefined;
+  let week: UiBrowserResult | undefined;
   while (!terminal.input.readableEnded && !terminal.input.destroyed && !terminal.output.destroyed) {
     const action = await runAppUi(view, palette, terminal, state => { position = state; });
     if (action?.screen === "start") {
@@ -112,6 +115,11 @@ export async function runWorkspaceUi(options: StartUiOptions = {}, palette: Pale
         selectedSessionId: action.selectedSessionId ?? history?.selectedSessionId };
       history = await runUi(await refresh(), refresh, palette, terminal, browser);
       if (history.exitWorkspace) return;
+    } else if (action?.screen === "week") {
+      const refresh = (days = week?.days ?? WEEK_WINDOWS[0]): ReturnType<typeof loadWeekUi> => loadWeekUi(days, options);
+      week = await runUi(await refresh(), refresh, palette, terminal, { ...week,
+        returnToHome: true, render: renderWeekUi, windows: WEEK_WINDOWS });
+      if (week.exitWorkspace) return;
     } else return action;
     view = { ...await loadAppUi(options), ...position };
   }

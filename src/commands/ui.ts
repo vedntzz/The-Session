@@ -21,8 +21,12 @@ export async function loadUi(days: number | undefined, options: StoreOptions = {
 }
 
 export interface UiTerminal { input: ReadStream; output: WriteStream }
-export interface UiBrowserOptions { returnToHome?: boolean; state?: UiState; selectedSessionId?: string }
-export interface UiBrowserResult { state: UiState; selectedSessionId?: string; exitWorkspace: boolean }
+export interface UiBrowserOptions {
+  returnToHome?: boolean; state?: UiState; selectedSessionId?: string;
+  render?: typeof renderUi;
+  windows?: readonly number[];
+}
+export interface UiBrowserResult { state: UiState; selectedSessionId?: string; days?: number; exitWorkspace: boolean }
 
 export function requireTerminal(terminal: UiTerminal): void {
   if (!terminal.input.isTTY || !terminal.output.isTTY || process.env["TERM"] === "dumb") {
@@ -33,7 +37,7 @@ export function requireTerminal(terminal: UiTerminal): void {
 /** Terminal ownership is scoped to this promise, including failure and signals. */
 export async function runUi(
   initial: UiData,
-  refresh: () => Promise<UiData>,
+  refresh: (days?: number) => Promise<UiData>,
   palette: Palette,
   terminal: UiTerminal = { input: process.stdin, output: process.stdout },
   options: UiBrowserOptions = {},
@@ -54,13 +58,13 @@ export async function runUi(
   let closed = false;
   let pasting = false;
   const result = (exitWorkspace: boolean): UiBrowserResult => ({ state: { ...state },
-    selectedSessionId: visibleSessions(data.sessions, state)[state.selected]?.id, exitWorkspace });
+    selectedSessionId: visibleSessions(data.sessions, state)[state.selected]?.id, days: data.days, exitWorkspace });
   if (input.readableEnded || input.destroyed || output.destroyed) return result(true);
 
   return new Promise<UiBrowserResult>((resolve, reject) => {
     const draw = (): void => {
       if (closed) return;
-      const frame = renderUi(data, state, output.columns || 80, output.rows || 24, palette, notice, theme, options.returnToHome);
+      const frame = (options.render ?? renderUi)(data, state, output.columns || 80, output.rows || 24, palette, notice, theme, options.returnToHome);
       maxScroll = frame.maxScroll;
       output.write(theme.background + screenControl.paint + frame.lines.join("\r\n"));
     };
@@ -89,20 +93,21 @@ export async function runUi(
     const terminate = (): void => cancel(143);
     const hangup = (): void => cancel(129);
     const repaint = (): void => { try { draw(); } catch (error) { fail(error); } };
-    const reload = async (): Promise<void> => {
+    const reload = async (days = data.days): Promise<void> => {
       refreshing = true;
       notice = "Refreshing records and Git outcomes…";
       repaint();
       const id = visibleSessions(data.sessions, state)[state.selected]?.id;
       try {
-        const updated = await refresh();
+        const updated = await refresh(days);
         if (closed) return;
         data = updated;
         state.selected = Math.max(0, visibleSessions(data.sessions, state).findIndex((session) => session.id === id));
         state.scroll = 0;
         notice = `Refreshed. r refresh · q ${options.returnToHome ? "Home" : "quit"}`;
       } catch (error) {
-        notice = `Refresh failed: ${error instanceof Error ? error.message : String(error)}. r retries.`;
+        const retry = days === data.days ? "r retries" : "w retries the range; r refreshes the current range";
+        notice = `Refresh failed: ${error instanceof Error ? error.message : String(error)}. ${retry}.`;
       } finally {
         refreshing = false;
         repaint();
@@ -118,6 +123,11 @@ export async function runUi(
         if (key.name === "q" && (!state.searching || tooSmall)) { finish(); return; }
         if (options.returnToHome && key.name === "escape" && (tooSmall || canReturnHome(state))) { finish(); return; }
         if (tooSmall) return;
+        if (options.windows?.length && !state.searching && !state.help && !key.ctrl && key.name === "w") {
+          const next = (options.windows.indexOf(data.days ?? options.windows[0]!) + 1) % options.windows.length;
+          if (!refreshing) void reload(options.windows[next]);
+          return;
+        }
         if (!state.searching && key.name === "r") {
           if (!refreshing) void reload();
           return;
