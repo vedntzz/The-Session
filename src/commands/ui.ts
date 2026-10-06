@@ -24,6 +24,7 @@ export interface UiTerminal { input: ReadStream; output: WriteStream }
 export interface UiBrowserOptions {
   returnToHome?: boolean; state?: UiState; selectedSessionId?: string;
   render?: typeof renderUi;
+  navigate?: typeof navigate;
   windows?: readonly number[];
 }
 export interface UiBrowserResult { state: UiState; selectedSessionId?: string; days?: number; exitWorkspace: boolean }
@@ -132,7 +133,7 @@ export async function runUi(
           if (!refreshing) void reload();
           return;
         }
-        state = navigate(state, key, visibleSessions(data.sessions, state).length, maxScroll);
+        state = (options.navigate ?? navigate)(state, key, visibleSessions(data.sessions, state).length, maxScroll);
         draw();
       } catch (error) { fail(error); }
     };

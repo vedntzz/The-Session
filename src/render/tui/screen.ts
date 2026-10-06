@@ -1,18 +1,20 @@
 import { callsOf, type AgentInfo } from "../../agents.js";
 import { emptyTurnsOf } from "../../empty.js";
-import { sessionFigure, spendOf, wasMeasured, type RateTable } from "../../pricing.js";
+import { sessionFigure, spendOf, unpricedThroughout, wasMeasured, type RateTable } from "../../pricing.js";
 import { hasDeclaredScope, INTENT_SOURCES, intentSourceOf, type Session } from "../../store.js";
 import { plainPalette, plainUiTheme, type Palette, type UiRole, type UiTheme } from "../palette.js";
 import { intentOf, INTENT_NOTE } from "../terminal/intent.js";
 import { clock, day } from "../terminal/text.js";
+import { pricesChecked } from "../terminal/cost.js";
 import { outcomeHeadline, spentFigure, weekSourceHeadline } from "../terminal/week.js";
 import { sessionHeader } from "./chrome.js";
 import { canReturnHome, HISTORY_FILTERS, parseQuery, visibleSessions, type UiState } from "./state.js";
 import { cellWidth, fit, fold } from "./text.js";
+import { weekCoverage, weekSummary } from "./week-summary.js";
 
 interface Line { text: string; role?: UiRole; prefix?: string; selected?: boolean }
 /** `agents` lets a call count no agent made read as unknown; absent, calls print as recorded. */
-export interface UiData { sessions: Session[]; rates: RateTable; repo: string; branch?: string; days?: number; agents?: readonly AgentInfo[] }
+export interface UiData { sessions: Session[]; rates: RateTable; repo: string; branch?: string; checked?: string; days?: number; agents?: readonly AgentInfo[] }
 
 function drift(session: Session): string {
   if (!hasDeclaredScope(session)) return "No scope declared · drift is not measured";
@@ -115,7 +117,7 @@ const helpLines = (returnToHome: boolean, grouped: boolean): string[] => [
   "e          Show or hide usage and evidence", "PgUp/PgDn  Scroll through long entries (also Ctrl-U / Ctrl-D)",
   "Home/End   First or last session", "/          Search; Enter finishes typing", `Esc        ${returnToHome ? "Back; " : ""}clear filters; close help`,
   ...HISTORY_FILTERS.map(filter => `${filter.shortcut}          Cycle ${filter.label.toLowerCase()} filter`),
-  ...(grouped ? ["w          Cycle day range: 7 / 14 / 30"] : []),
+  ...(grouped ? ["w          Cycle day range: 7 / 14 / 30", "u          Show or hide usage totals for each source"] : []),
   "r          Refresh records and Git outcomes", returnToHome ? "q          Home; Ctrl-C exits" : "q / Ctrl-C Quit",
   "", "FILTERS", "outside:yes   Recorded drift only", "outside:no    Measured zero drift; excludes running and captured sessions",
   "outcome:merged   Also open, abandoned, empty", "source:declared  Also primed, captured", "",
@@ -144,7 +146,7 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
   header.push({ text: `│ > ${fit(state.searching ? searchParts.at(-1)! + "▌" : search, inset - 6)} │`, role: "focus" });
   header.push({ text: `└${"─".repeat(inset - 2)}┘`, role: "focus" });
   const controls = HISTORY_FILTERS.map(filter => `[${filter.shortcut}] ${filter.label}: ${filter.values[state[filter.key]] ?? "invalid"}`);
-  if (grouped) controls.unshift(`[w] Range: ${data.days} days`);
+  if (grouped) controls.unshift(`[w] Range: ${data.days} days`, `[u] Usage: ${state.usage ? "hide" : "show"}`);
   header.push(...fold(`FILTERS  ${controls.join(" · ")}`, inset).map(text => ({ text, role: "focus" as const })));
   if (query.error || query.filters.length) {
     const filters = [...new Set(query.filters.map(([key, value]) => `[${key}:${value}]`))];
@@ -158,12 +160,19 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
     { text: `/ Search   ↑↓ Select   Enter Expand   Esc ${returnToHome && canReturnHome(state) ? "Back" : "Clear"}   ? Help`, role: "focus" },
     { text: notice || `Session ${sessions.length ? state.selected + 1 : 0}/${sessions.length} · PgUp/PgDn scroll · q ${returnToHome ? "Home" : "quit"}`, role: "meta" },
     ...fold(money, inset).map((text) => ({ text, role: "meta" as const })),
+    ...(grouped && sessions.length && data.checked && !unpricedThroughout(spend)
+      ? fold(pricesChecked(data.checked), inset).map(text => ({ text, role: "meta" as const })) : []),
   ];
   // On short terminals remove decorative whitespace, never measurements or controls.
   if (rows < 28) for (let index = header.length - 1; index >= 0; index--) if (!header[index]!.text) header.splice(index, 1);
   if (grouped && header.length + footer.length > rows - 2) {
     const brandingRows = branding.filter(line => rows >= 28 || line.text).length;
     header.splice(0, brandingRows, { text: `WEEK REPORT  /  ${data.repo}`, role: "meta" });
+  }
+  if (grouped && header.length + footer.length > rows - 2) {
+    for (let index = header.length - 1; index >= 0; index--) {
+      if (/^[┌└]/u.test(header[index]!.text)) header.splice(index, 1);
+    }
   }
   const height = Math.max(1, rows - 1 - header.length - footer.length);
   const content: Line[] = [];
@@ -174,12 +183,20 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
     : [{ source: undefined, sessions }]).forEach(group => {
     const heading = content.length;
     if (group.source) content.push(...fold(weekSourceHeadline(group.source, group.sessions), inset).map(text => ({ text, role: "focus" as const })));
+    if (group.source) for (const line of weekSummary(group.sessions, state.usage)) {
+      content.push(...fold(line.text, inset).map(text => ({ ...line, text })));
+    }
     group.sessions.forEach((session, index) => {
       const selected = session === selectedSession;
-      if (selected) anchor = grouped && state.selected === 0 ? 0 : index === 0 ? heading : content.length;
+      // Opening totals starts at the source heading, even for a later selected record.
+      if (selected) anchor = grouped && state.selected === 0 ? 0
+        : index === 0 || (grouped && state.usage) ? heading : content.length;
       content.push(...entry(session, selected, state, data, inset));
     });
   });
+  if (grouped && !state.help) for (const line of weekCoverage(spend, sessions)) {
+    content.push(...fold(line.text, inset).map(text => ({ ...line, text })));
+  }
   if (!sessions.length && !state.help) content.push(...fold(data.sessions.length ? "No matches. Esc clears filters." : 'No sessions. Run session start "your intent" --scope <paths>.', inset).map((text) => ({ text })));
   const maxScroll = Math.max(0, content.length - anchor - height);
   const start = Math.min(anchor + Math.min(state.scroll, maxScroll), Math.max(0, content.length - height));

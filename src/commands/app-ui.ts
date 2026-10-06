@@ -6,7 +6,7 @@ import { homeActions, renderHomeUi, type HomeAction, type HomeView } from "../re
 import { moveMenuSelection, renderUiMenu, UI_MENU } from "../render/tui/menu.js";
 import type { UiScreen } from "../render/tui/navigation.js";
 import { initialState, type UiKey } from "../render/tui/state.js";
-import { renderWeekUi, WEEK_WINDOWS } from "../render/tui/week.js";
+import { navigateWeek, renderWeekUi, WEEK_WINDOWS } from "../render/tui/week.js";
 import { homeState } from "./home.js";
 import { runStartUi, type StartUiOptions } from "./start-ui.js";
 import { loadUi, requireTerminal, runUi, type UiBrowserResult, type UiTerminal } from "./ui.js";
@@ -118,7 +118,7 @@ export async function runWorkspaceUi(options: StartUiOptions = {}, palette: Pale
     } else if (action?.screen === "week") {
       const refresh = (days = week?.days ?? WEEK_WINDOWS[0]): ReturnType<typeof loadWeekUi> => loadWeekUi(days, options);
       week = await runUi(await refresh(), refresh, palette, terminal, { ...week,
-        returnToHome: true, render: renderWeekUi, windows: WEEK_WINDOWS });
+        returnToHome: true, render: renderWeekUi, navigate: navigateWeek, windows: WEEK_WINDOWS });
       if (week.exitWorkspace) return;
     } else return action;
     view = { ...await loadAppUi(options), ...position };

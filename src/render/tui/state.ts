@@ -17,11 +17,12 @@ export interface UiState {
   outside: number;
   expanded: boolean;
   evidence: boolean;
+  usage: boolean;
   help: boolean;
 }
 export function initialState(): UiState {
   return { selected: 0, scroll: 0, query: "", searching: false, outcome: 0, source: 0, outside: 0,
-    expanded: true, evidence: false, help: false };
+    expanded: true, evidence: false, usage: false, help: false };
 }
 
 /** Search, filters and help handle Escape before the browser returns Home. */
