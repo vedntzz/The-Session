@@ -206,10 +206,10 @@ function sourceBlock(source: IntentSource, all: readonly Session[], layout: Layo
   const mine = all.filter((session) => intentSourceOf(session) === source);
   const { palette, limit } = layout;
   if (mine.length === 0) {
-    return [`${INDENT}${source} · no sessions`];
+    return [`${INDENT}${weekSourceHeadline(source, mine)}`];
   }
   return [
-    ...note(blockHeadline(source, mine), (text) => text, limit),
+    ...note(weekSourceHeadline(source, mine), (text) => text, limit),
     ...note(driftLine(mine), palette.meta, limit),
     palette.meta(headingRow(layout.widths, layout.show)),
     ...mine.flatMap((session) => sessionLines(session, layout)),
@@ -224,7 +224,8 @@ function sourceBlock(source: IntentSource, all: readonly Session[], layout: Layo
  * The buckets with nothing in them are left unnamed: a nought here is a
  * category with no members rather than a measurement of one.
  */
-function blockHeadline(source: IntentSource, mine: readonly Session[]): string {
+export function weekSourceHeadline(source: IntentSource, mine: readonly Session[]): string {
+  if (!mine.length) return `${source} · no sessions`;
   const marked = count(mine, "abandoned");
   const open = count(mine, "open");
   const empty = count(mine, "empty");

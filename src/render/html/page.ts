@@ -141,7 +141,7 @@ export function renderWeek(
   const window = plural(days, "day", "days");
   // The same reason the terminal says so: a filtered page whose heading does
   // not admit it is a page whose totals mean something other than they look.
-  const narrowed = describeFilter(filter);
+  const narrowed = [describeFilter(filter), view.selection].filter(Boolean).join("; ");
   const suffix = narrowed ? `, ${narrowed}` : "";
   const heading = `The last ${window}${suffix}`;
 

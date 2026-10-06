@@ -31,6 +31,8 @@ export interface View {
   width?: number;
   /** The agents adapters describe, so a call count none of them made reads as unknown. */
   agents?: readonly AgentInfo[];
+  /** Selection provenance for reports exported from a filtered view. */
+  selection?: string;
 }
 
 export const NO_RATES: RateTable = new Map();

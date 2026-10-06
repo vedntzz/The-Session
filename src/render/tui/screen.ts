@@ -1,17 +1,20 @@
 import { callsOf, type AgentInfo } from "../../agents.js";
 import { emptyTurnsOf } from "../../empty.js";
-import { sessionFigure, spendOf, wasMeasured, type RateTable } from "../../pricing.js";
-import { hasDeclaredScope, intentSourceOf, type Session } from "../../store.js";
+import { sessionFigure, spendOf, unpricedThroughout, wasMeasured, type RateTable } from "../../pricing.js";
+import { hasDeclaredScope, INTENT_SOURCES, intentSourceOf, type Session } from "../../store.js";
 import { plainPalette, plainUiTheme, type Palette, type UiRole, type UiTheme } from "../palette.js";
 import { intentOf, INTENT_NOTE } from "../terminal/intent.js";
 import { clock, day } from "../terminal/text.js";
-import { outcomeHeadline, spentFigure } from "../terminal/week.js";
-import { OUTCOMES, parseQuery, visibleSessions, type UiState } from "./state.js";
+import { pricesChecked } from "../terminal/cost.js";
+import { outcomeHeadline, spentFigure, weekSourceHeadline } from "../terminal/week.js";
+import { sessionHeader } from "./chrome.js";
+import { canReturnHome, HISTORY_FILTERS, parseQuery, visibleSessions, type UiState } from "./state.js";
 import { cellWidth, fit, fold } from "./text.js";
+import { weekCoverage, weekSummary } from "./week-summary.js";
 
 interface Line { text: string; role?: UiRole; prefix?: string; selected?: boolean }
 /** `agents` lets a call count no agent made read as unknown; absent, calls print as recorded. */
-export interface UiData { sessions: Session[]; rates: RateTable; repo: string; days: number; agents?: readonly AgentInfo[] }
+export interface UiData { sessions: Session[]; rates: RateTable; repo: string; branch?: string; checked?: string; days?: number; agents?: readonly AgentInfo[] }
 
 function drift(session: Session): string {
   if (!hasDeclaredScope(session)) return "No scope declared · drift is not measured";
@@ -109,11 +112,14 @@ function entry(session: Session, selected: boolean, state: UiState, data: UiData
   return lines;
 }
 
-const HELP = [
+const helpLines = (returnToHome: boolean, grouped: boolean): string[] => [
   "KEYBOARD", "↑↓ / j k   Select a session", "Enter      Expand or collapse selected session",
   "e          Show or hide usage and evidence", "PgUp/PgDn  Scroll through long entries (also Ctrl-U / Ctrl-D)",
-  "Home/End   First or last session", "/          Search; Enter finishes typing", "Esc        Clear filters; close help",
-  "o          Cycle outcome filter", "r          Refresh records and Git outcomes", "q / Ctrl-C Quit",
+  "Home/End   First or last session", "/          Search; Enter finishes typing", `Esc        ${returnToHome ? "Back; " : ""}clear filters; close help`,
+  ...HISTORY_FILTERS.map(filter => `${filter.shortcut}          Cycle ${filter.label.toLowerCase()} filter`),
+  ...(grouped ? ["w          Cycle day range: 7 / 14 / 30", "u          Show or hide usage totals for each source",
+    "c          Copy this selection as Markdown", "h          Open this selection as a local HTML report"] : []),
+  "r          Refresh records and Git outcomes", returnToHome ? "q          Home; Ctrl-C exits" : "q / Ctrl-C Quit",
   "", "FILTERS", "outside:yes   Recorded drift only", "outside:no    Measured zero drift; excludes running and captured sessions",
   "outcome:merged   Also open, abandoned, empty", "source:declared  Also primed, captured", "",
   "Combine filters and text: outside:yes source:declared rate limiting",
@@ -122,43 +128,79 @@ const HELP = [
 
 /** A bounded timeline viewport; records remain read-only and colours are applied last. */
 export function renderUi(data: UiData, state: UiState, columns: number, rows: number,
-  _palette: Palette = plainPalette, notice = "", theme: UiTheme = plainUiTheme): { lines: string[]; maxScroll: number } {
+  _palette: Palette = plainPalette, notice = "", theme: UiTheme = plainUiTheme, returnToHome = false,
+  grouped = false): { lines: string[]; maxScroll: number } {
   const width = Math.max(1, columns - 1);
   if (columns < 60 || rows < 20) return {
-    lines: fold("Resize to at least 60 columns and 20 rows, or q to quit.", width).slice(0, Math.max(1, rows - 1)), maxScroll: 0,
+    lines: fold(`Resize to at least 60 columns and 20 rows, or q to ${returnToHome ? "return Home" : "quit"}.`, width).slice(0, Math.max(1, rows - 1)), maxScroll: 0,
   };
   const sessions = visibleSessions(data.sessions, state);
   const query = parseQuery(state.query);
   const inset = width - 4;
-  const header: Line[] = fold(outcomeHeadline(sessions), inset).map((text) => ({ text }));
-  header.push({ text: `THE SESSION  /  ${data.repo}`, role: "meta" }, { text: "" });
+  const branding: Line[] = grouped ? sessionHeader(data.repo, data.branch ?? "Branch unavailable", "WEEK REPORT", inset)
+    : [...fold(outcomeHeadline(sessions), inset).map(text => ({ text })), { text: `THE SESSION  /  ${data.repo}`, role: "meta" }, { text: "" }];
+  const header = [...branding];
   header.push({ text: `┌${"─".repeat(inset - 2)}┐`, role: "focus" });
   const search = state.searching ? state.query || "" : state.query || "/ Search sessions or add a filter";
   // Keep the editing end visible for long queries.
   const searchParts = fold(search, inset - 7);
   header.push({ text: `│ > ${fit(state.searching ? searchParts.at(-1)! + "▌" : search, inset - 6)} │`, role: "focus" });
   header.push({ text: `└${"─".repeat(inset - 2)}┘`, role: "focus" });
-  const filters = [...new Set([...query.filters.map(([key, value]) => `[${key}:${value}]`), ...(state.outcome ? [`[outcome:${OUTCOMES[state.outcome]}]`] : [])])];
-  header.push(...fold(query.error ?? `FILTERS  ${filters.join("  ") || "none"}  ·  / edit`, inset).map((text) => ({ text, role: "focus" as const })));
-  header.push({ text: `${sessions.length} matching sessions / last ${data.days} days`, role: "meta" }, { text: "" });
+  const controls = HISTORY_FILTERS.map(filter => `[${filter.shortcut}] ${filter.label}: ${filter.values[state[filter.key]] ?? "invalid"}`);
+  if (grouped) controls.unshift(`[w] Range: ${data.days} days`, `[u] Usage: ${state.usage ? "hide" : "show"}`);
+  header.push(...fold(`FILTERS  ${controls.join(" · ")}`, inset).map(text => ({ text, role: "focus" as const })));
+  if (query.error || query.filters.length) {
+    const filters = [...new Set(query.filters.map(([key, value]) => `[${key}:${value}]`))];
+    header.push(...fold(query.error ?? `Search filters: ${filters.join("  ")}`, inset).map(text => ({ text, role: "focus" as const })));
+  }
+  header.push({ text: `${sessions.length} matching sessions / ${data.days === undefined ? "all recorded history" : `last ${data.days} days`}`, role: "meta" }, { text: "" });
   const spend = spendOf(sessions, data.rates);
   const money = sessions.length ? `${spentFigure(spend)} · ${spend.unpriced} unpriced · ${spend.uncaptured} uncaptured` : "No spend to report.";
+  const noticeLines = grouped ? fold(notice, inset) : [];
+  const detailedNotice = noticeLines.length > 1;
   const footer: Line[] = [
     { text: "─".repeat(inset), role: "meta" },
-    { text: "/ Search   ↑↓ Select   Enter Expand   Esc Clear   ? Help", role: "focus" },
-    { text: notice || `Session ${sessions.length ? state.selected + 1 : 0}/${sessions.length} · PgUp/PgDn scroll · q quit`, role: "meta" },
+    ...(grouped ? [{ text: "[c] Copy Markdown · [h] Open HTML", role: "focus" as const }] : []),
+    { text: `/ Search   ↑↓ Select   Enter Expand   Esc ${returnToHome && canReturnHome(state) ? "Back" : "Clear"}   ? Help`, role: "focus" },
+    { text: detailedNotice ? "Status details above · PgUp/PgDn scroll" : notice || `Session ${sessions.length ? state.selected + 1 : 0}/${sessions.length} · PgUp/PgDn scroll · q ${returnToHome ? "Home" : "quit"}`, role: "meta" },
     ...fold(money, inset).map((text) => ({ text, role: "meta" as const })),
+    ...(grouped && sessions.length && data.checked && !unpricedThroughout(spend)
+      ? fold(pricesChecked(data.checked), inset).map(text => ({ text, role: "meta" as const })) : []),
   ];
   // On short terminals remove decorative whitespace, never measurements or controls.
   if (rows < 28) for (let index = header.length - 1; index >= 0; index--) if (!header[index]!.text) header.splice(index, 1);
+  if (grouped && header.length + footer.length > rows - 2) {
+    const brandingRows = branding.filter(line => rows >= 28 || line.text).length;
+    header.splice(0, brandingRows, { text: `WEEK REPORT  /  ${data.repo}`, role: "meta" });
+  }
+  if (grouped && header.length + footer.length > rows - 2) {
+    for (let index = header.length - 1; index >= 0; index--) {
+      if (/^[┌└]/u.test(header[index]!.text)) header.splice(index, 1);
+    }
+  }
   const height = Math.max(1, rows - 1 - header.length - footer.length);
-  const content: Line[] = [];
+  const content: Line[] = detailedNotice ? [...noticeLines.map(text => ({ text, role: "focus" as const })), { text: "" }] : [];
+  const selectedSession = sessions[state.selected];
   let anchor = 0;
-  if (state.help) content.push(...HELP.flatMap((text) => fold(text, inset).map((part) => ({ text: part }))));
-  else sessions.forEach((session, index) => {
-    if (index === state.selected) anchor = content.length;
-    content.push(...entry(session, index === state.selected, state, data, inset));
+  if (state.help) content.push(...helpLines(returnToHome, grouped).flatMap((text) => fold(text, inset).map((part) => ({ text: part }))));
+  else (grouped ? INTENT_SOURCES.map(source => ({ source, sessions: sessions.filter(session => intentSourceOf(session) === source) }))
+    : [{ source: undefined, sessions }]).forEach(group => {
+    const heading = content.length;
+    if (group.source) content.push(...fold(weekSourceHeadline(group.source, group.sessions), inset).map(text => ({ text, role: "focus" as const })));
+    if (group.source) for (const line of weekSummary(group.sessions, state.usage)) {
+      content.push(...fold(line.text, inset).map(text => ({ ...line, text })));
+    }
+    group.sessions.forEach((session, index) => {
+      const selected = session === selectedSession;
+      // Opening totals starts at the source heading, even for a later selected record.
+      if (selected && !detailedNotice) anchor = grouped && state.selected === 0 ? 0
+        : index === 0 || (grouped && state.usage) ? heading : content.length;
+      content.push(...entry(session, selected, state, data, inset));
+    });
   });
+  if (grouped && !state.help) for (const line of weekCoverage(spend, sessions)) {
+    content.push(...fold(line.text, inset).map(text => ({ ...line, text })));
+  }
   if (!sessions.length && !state.help) content.push(...fold(data.sessions.length ? "No matches. Esc clears filters." : 'No sessions. Run session start "your intent" --scope <paths>.', inset).map((text) => ({ text })));
   const maxScroll = Math.max(0, content.length - anchor - height);
   const start = Math.min(anchor + Math.min(state.scroll, maxScroll), Math.max(0, content.length - height));

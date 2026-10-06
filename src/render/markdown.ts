@@ -154,6 +154,8 @@ export function renderMarkdownWeek(
 ): string {
   const rates: RateTable = view.rates ?? new Map();
   const heading = `### ${TITLE} · ${formatRange(windowStart(now, days), now)}`;
+  const selection = view.selection === undefined ? undefined : `Selection: ${view.selection
+    .replace(/\s+/gu, " ").replace(/([\\`*_{}\[\]()#+.!|<>~-])/gu, "\\$1")}`;
 
   // Empty sessions come out before anything is counted. They changed no files,
   // so they are not rows about work — but they were still paid for, which is
@@ -164,7 +166,7 @@ export function renderMarkdownWeek(
 
   if (shown.length === 0) {
     const nothing = "No sessions with any changes in them were recorded in this window.";
-    return blocksOf([heading, nothing, emptyNote(empties, rates)]);
+    return blocksOf([heading, selection, nothing, emptyNote(empties, rates)]);
   }
 
   const spend = spendOf(shown, rates);
@@ -173,6 +175,7 @@ export function renderMarkdownWeek(
 
   return blocksOf([
     heading,
+    selection,
     headline(shown, merged, unplanned),
     weekTable(shown, rates, merged, unplanned),
     emptyNote(empties, rates),
