@@ -1,23 +1,37 @@
-import { hasDeclaredScope, intentSourceOf, type Session, type SessionOutcome } from "../../store.js";
+import { hasDeclaredScope, INTENT_SOURCES, intentSourceOf, type Session, type SessionOutcome } from "../../store.js";
 
 export const OUTCOMES: readonly (SessionOutcome | "all")[] = ["all", "open", "merged", "abandoned", "empty"];
+interface HistoryFilter { key: "outcome" | "source" | "outside"; shortcut: string; label: string; values: readonly string[] }
+export const HISTORY_FILTERS: readonly HistoryFilter[] = [
+  { key: "outcome", shortcut: "o", label: "Result", values: OUTCOMES },
+  { key: "source", shortcut: "s", label: "Goal source", values: ["all", ...INTENT_SOURCES] },
+  { key: "outside", shortcut: "d", label: "Outside plan", values: ["all", "yes", "no"] },
+];
 export interface UiState {
   selected: number;
   scroll: number;
   query: string;
   searching: boolean;
   outcome: number;
+  source: number;
+  outside: number;
   expanded: boolean;
   evidence: boolean;
   help: boolean;
 }
 export function initialState(): UiState {
-  return { selected: 0, scroll: 0, query: "", searching: false, outcome: 0, expanded: true, evidence: false, help: false };
+  return { selected: 0, scroll: 0, query: "", searching: false, outcome: 0, source: 0, outside: 0,
+    expanded: true, evidence: false, help: false };
 }
 
 /** Search, filters and help handle Escape before the browser returns Home. */
 export function canReturnHome(state: UiState): boolean {
-  return !state.searching && !state.help && !state.query && state.outcome === 0;
+  return !state.searching && !state.help && !state.query && HISTORY_FILTERS.every(filter => state[filter.key] === 0);
+}
+
+export function selectedFilters(state: UiState): [string, string][] {
+  return HISTORY_FILTERS.filter(filter => state[filter.key] !== 0)
+    .map<[string, string]>(filter => [filter.key, filter.values[state[filter.key]] ?? "invalid"]);
 }
 
 /** Exact, deterministic filters. Unknown filter values never silently broaden a query. */
@@ -29,25 +43,28 @@ export function parseQuery(query: string): { terms: string[]; filters: [string, 
     if (!match) { terms.push(token); continue; }
     const key = match[1]!;
     const value = match[2]!;
-    const valid = key === "outside" ? ["yes", "no"] : key === "source" ? ["declared", "primed", "captured"] : OUTCOMES.slice(1);
+    const valid = HISTORY_FILTERS.find(filter => filter.key === key)!.values.slice(1);
     if (!valid.includes(value)) return { terms, filters, error: `${key}: use ${valid.join(" / ")}` };
     filters.push([key, value]);
   }
   return { terms, filters };
 }
+
+/** Typed filters and keyboard choices measure the same facts. */
+function matchesFilter(session: Session, [key, value]: [string, string]): boolean {
+  if (key === "source") return intentSourceOf(session) === value;
+  if (key === "outcome") return session.outcome === value;
+  // Neither passive capture nor a running session can claim zero drift.
+  return key === "outside" && (value === "yes" || value === "no") && hasDeclaredScope(session) && session.endedAt !== null &&
+    (value === "yes" ? session.drift.length > 0 : session.drift.length === 0);
+}
 export function visibleSessions(sessions: readonly Session[], state: UiState): Session[] {
   const query = parseQuery(state.query);
   if (query.error) return [];
+  const filters = [...query.filters, ...selectedFilters(state)];
   return sessions.filter((session) => {
-    if (OUTCOMES[state.outcome] !== "all" && session.outcome !== OUTCOMES[state.outcome]) return false;
     const text = [session.id, session.intent ?? "", ...session.reality, ...session.scope].join(" ").toLowerCase();
-    return query.terms.every((term) => text.includes(term)) && query.filters.every(([key, value]) => {
-      if (key === "source") return intentSourceOf(session) === value;
-      if (key === "outcome") return session.outcome === value;
-      // Neither passive capture nor a running session can claim zero drift.
-      return hasDeclaredScope(session) && session.endedAt !== null &&
-        (value === "yes" ? session.drift.length > 0 : session.drift.length === 0);
-    });
+    return query.terms.every(term => text.includes(term)) && filters.every(filter => matchesFilter(session, filter));
   });
 }
 export interface UiKey { name?: string; ctrl?: boolean; sequence?: string }
@@ -77,11 +94,13 @@ export function navigate(state: UiState, key: UiKey, count: number, maxScroll: n
     const delta = name === "pageup" || name === "up" ? -5 : name === "pagedown" || name === "down" ? 5 : 0;
     return { ...next, scroll: scrolled(state, maxScroll, delta) };
   }
+  const filter = !key.ctrl && HISTORY_FILTERS.find(choice => choice.shortcut === name);
   if (key.sequence === "/") next.searching = true;
   else if (name === "return") { next.expanded = !next.expanded; next.scroll = 0; }
   else if (name === "e") { next.evidence = !next.evidence; next.expanded = true; next.scroll = 0; }
   else if (name === "escape") return initialState();
-  else if (name === "o") { next.outcome = (state.outcome + 1) % OUTCOMES.length; next.selected = 0; next.scroll = 0; }
+  else if (filter) return { ...next, [filter.key]: (state[filter.key] + 1) % filter.values.length,
+    selected: 0, scroll: 0, evidence: false };
   else if (name === "pageup" || name === "pagedown" || (key.ctrl && (name === "u" || name === "d"))) {
     next.scroll = scrolled(state, maxScroll, name === "pageup" || name === "u" ? -5 : 5);
   } else {

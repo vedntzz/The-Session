@@ -6,7 +6,7 @@ import { plainPalette, plainUiTheme, type Palette, type UiRole, type UiTheme } f
 import { intentOf, INTENT_NOTE } from "../terminal/intent.js";
 import { clock, day } from "../terminal/text.js";
 import { outcomeHeadline, spentFigure } from "../terminal/week.js";
-import { canReturnHome, OUTCOMES, parseQuery, visibleSessions, type UiState } from "./state.js";
+import { canReturnHome, HISTORY_FILTERS, parseQuery, visibleSessions, type UiState } from "./state.js";
 import { cellWidth, fit, fold } from "./text.js";
 
 interface Line { text: string; role?: UiRole; prefix?: string; selected?: boolean }
@@ -113,7 +113,8 @@ const helpLines = (returnToHome: boolean): string[] => [
   "KEYBOARD", "↑↓ / j k   Select a session", "Enter      Expand or collapse selected session",
   "e          Show or hide usage and evidence", "PgUp/PgDn  Scroll through long entries (also Ctrl-U / Ctrl-D)",
   "Home/End   First or last session", "/          Search; Enter finishes typing", `Esc        ${returnToHome ? "Back; " : ""}clear filters; close help`,
-  "o          Cycle outcome filter", "r          Refresh records and Git outcomes", returnToHome ? "q          Home; Ctrl-C exits" : "q / Ctrl-C Quit",
+  ...HISTORY_FILTERS.map(filter => `${filter.shortcut}          Cycle ${filter.label.toLowerCase()} filter`),
+  "r          Refresh records and Git outcomes", returnToHome ? "q          Home; Ctrl-C exits" : "q / Ctrl-C Quit",
   "", "FILTERS", "outside:yes   Recorded drift only", "outside:no    Measured zero drift; excludes running and captured sessions",
   "outcome:merged   Also open, abandoned, empty", "source:declared  Also primed, captured", "",
   "Combine filters and text: outside:yes source:declared rate limiting",
@@ -138,8 +139,12 @@ export function renderUi(data: UiData, state: UiState, columns: number, rows: nu
   const searchParts = fold(search, inset - 7);
   header.push({ text: `│ > ${fit(state.searching ? searchParts.at(-1)! + "▌" : search, inset - 6)} │`, role: "focus" });
   header.push({ text: `└${"─".repeat(inset - 2)}┘`, role: "focus" });
-  const filters = [...new Set([...query.filters.map(([key, value]) => `[${key}:${value}]`), ...(state.outcome ? [`[outcome:${OUTCOMES[state.outcome]}]`] : [])])];
-  header.push(...fold(query.error ?? `FILTERS  ${filters.join("  ") || "none"}  ·  / edit`, inset).map((text) => ({ text, role: "focus" as const })));
+  const controls = HISTORY_FILTERS.map(filter => `[${filter.shortcut}] ${filter.label}: ${filter.values[state[filter.key]] ?? "invalid"}`);
+  header.push(...fold(`FILTERS  ${controls.join(" · ")}`, inset).map(text => ({ text, role: "focus" as const })));
+  if (query.error || query.filters.length) {
+    const filters = [...new Set(query.filters.map(([key, value]) => `[${key}:${value}]`))];
+    header.push(...fold(query.error ?? `Search filters: ${filters.join("  ")}`, inset).map(text => ({ text, role: "focus" as const })));
+  }
   header.push({ text: `${sessions.length} matching sessions / ${data.days === undefined ? "all recorded history" : `last ${data.days} days`}`, role: "meta" }, { text: "" });
   const spend = spendOf(sessions, data.rates);
   const money = sessions.length ? `${spentFigure(spend)} · ${spend.unpriced} unpriced · ${spend.uncaptured} uncaptured` : "No spend to report.";
