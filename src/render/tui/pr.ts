@@ -1,12 +1,14 @@
-import { plainUiTheme, type UiRole } from "../palette.js";
-import { prParts, renderPr } from "../pr.js";
+import { plainPalette, plainUiTheme, type Palette, type UiRole, type UiTheme } from "../palette.js";
+import { fillTemplate, placeholderList, prParts, renderPr } from "../pr.js";
 import { intentOf } from "../terminal/intent.js";
 import { day, shortId } from "../terminal/text.js";
 import { intentSourceOf } from "../../store.js";
 import { paintUiLine, sessionHeader, type UiLine } from "./chrome.js";
-import type { renderUi } from "./screen.js";
-import { canReturnHome, HISTORY_FILTERS, initialState, navigate, parseQuery, visibleSessions } from "./state.js";
+import type { UiData } from "./screen.js";
+import { canReturnHome, HISTORY_FILTERS, initialState, navigate, parseQuery, visibleSessions, type UiState } from "./state.js";
 import { fit, fold } from "./text.js";
+
+export interface PrUiTemplate { path: string; source: string }
 
 const HELP = [
   "KEYBOARD",
@@ -16,6 +18,9 @@ const HELP = [
   "o / s / d Cycle recorded result, goal source, outside plan",
   "Search supports outcome:, source: and outside: filters",
   "Results are recorded; r reloads the record without resolving outcomes",
+  "t Choose a local Markdown template; blank restores the default",
+  "Relative paths start in the directory you launched session from",
+  `Supported placeholders: ${placeholderList()}`,
   "PgUp/PgDn or Ctrl-U/Ctrl-D scroll through the full preview",
   "Esc closes help, search, preview or filters before returning Home",
   "q returns Home; Ctrl-C exits",
@@ -32,7 +37,9 @@ export const navigatePr: typeof navigate = (state, key, count, maxScroll) => {
 };
 
 /** The native Markdown, wrapped safely for a terminal; every line remains reachable. */
-export const renderPrUi: typeof renderUi = (data, state, columns, rows, _palette, notice = "", theme = plainUiTheme) => {
+export function renderPrUi(data: UiData & { template?: PrUiTemplate }, state: UiState, columns: number, rows: number,
+  _palette: Palette = plainPalette, notice = "", theme: UiTheme = plainUiTheme): { lines: string[]; maxScroll: number } {
+  const template = data.template;
   const width = Math.max(1, columns - 5);
   if (columns < 60 || rows < 20) return {
     lines: fold("Resize to at least 60 columns and 20 rows, or q to return Home.", Math.max(1, columns - 1)).slice(0, Math.max(1, rows - 1)), maxScroll: 0,
@@ -47,6 +54,7 @@ export const renderPrUi: typeof renderUi = (data, state, columns, rows, _palette
   };
   if (preview) {
     add(header, `${shortId(selected.id)} · ${intentSourceOf(selected)} · ${selected.endedAt === null ? "Running; stop to record changed files" : "Finished session"}`, "meta");
+    add(header, `Format: ${template ? "custom template snapshot" : "default"}`, "meta");
     add(header, "MARKDOWN PREVIEW", "focus");
   } else {
     const search = state.searching ? state.query + "▌" : state.query || "/ Search recorded sessions";
@@ -59,7 +67,7 @@ export const renderPrUi: typeof renderUi = (data, state, columns, rows, _palette
   const details = fold(notice, width);
   const footer: UiLine[] = [{ text: "─".repeat(width), role: "meta" }];
   add(footer, preview ? "↑↓ Select · Enter / Esc Sessions · PgUp/PgDn Scroll" : "/ Search · ↑↓ Select · Enter Preview · Esc Back/Clear", "focus");
-  add(footer, "r Refresh · ? Help · q Home · Ctrl-C Exit", "focus");
+  add(footer, "[t] Template · r Refresh · ? Help · q Home · Ctrl-C Exit", "focus");
   add(footer, details.length > 1 ? "Status details above · PgUp/PgDn scroll" : notice || `Session ${selected ? state.selected + 1 : 0}/${sessions.length}`, "meta");
   if (rows < 28) for (let i = header.length - 1; i >= 0; i--) if (!header[i]!.text) header.splice(i, 1);
   if (header.length + footer.length > rows - 2) header.splice(0, branding.filter(line => rows >= 28 || line.text).length, { text: `PULL REQUEST / ${data.repo}`, role: "meta" });
@@ -69,8 +77,10 @@ export const renderPrUi: typeof renderUi = (data, state, columns, rows, _palette
   if (state.help) HELP.forEach(text => add(content, text));
   else if (preview) {
     const cost = `_${prParts(selected, data.rates).cost}_`;
-    renderPr(selected, data.rates).split("\n").forEach((line, index) => {
-      add(content, line, line === cost ? "meta" : index === 0 ? "intent" : "text");
+    if (template) add(content, `Template file: ${template.path}`, "meta");
+    const document = template ? fillTemplate(template.source, prParts(selected, data.rates), template.path) : renderPr(selected, data.rates);
+    document.split("\n").forEach((line, index) => {
+      add(content, line, template ? "text" : line === cost ? "meta" : index === 0 ? "intent" : "text");
     });
   } else sessions.forEach((session, index) => {
     if (session === selected && details.length <= 1) anchor = content.length;
@@ -84,4 +94,4 @@ export const renderPrUi: typeof renderUi = (data, state, columns, rows, _palette
   const body = content.slice(start, start + height);
   while (body.length < height) body.push({ text: "" });
   return { lines: [...header, ...body, ...footer].map(line => paintUiLine(line, { width, left: 2, terminalWidth: columns - 1 }, theme)), maxScroll };
-};
+}

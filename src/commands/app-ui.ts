@@ -13,8 +13,9 @@ import { loadUi, requireTerminal, runUi, type UiBrowserResult, type UiTerminal }
 import { loadWeekUi } from "./week-ui.js";
 import { weekExportActions } from "./week-export-ui.js";
 import type { WeekOptions } from "./week.js";
+import { prTemplateUi } from "./pr-template-ui.js";
 import { loadPrUi } from "./pr-ui.js";
-import { canReturnPrHome, navigatePr, renderPrUi } from "../render/tui/pr.js";
+import { canReturnPrHome, navigatePr } from "../render/tui/pr.js";
 
 export async function loadAppUi(options: StoreOptions = {}): Promise<HomeView> {
   const cwd = options.cwd ?? process.cwd();
@@ -107,6 +108,7 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions = {},
   let history: UiBrowserResult | undefined;
   let week: UiBrowserResult | undefined;
   let pr: UiBrowserResult | undefined;
+  const templates = prTemplateUi(options);
   while (!terminal.input.readableEnded && !terminal.input.destroyed && !terminal.output.destroyed) {
     const action = await runAppUi(view, palette, terminal, state => { position = state; });
     if (action?.screen === "start") {
@@ -131,7 +133,7 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions = {},
       pr = await runUi(data, refresh, palette, terminal, { ...pr, returnToHome: true,
         state: pr?.state ?? { ...initialState(), expanded: false },
         selectedSessionId: pr?.selectedSessionId ?? data.sessions.find(session => session.endedAt !== null)?.id,
-        render: renderPrUi, navigate: navigatePr, canReturnHome: canReturnPrHome, refreshNotice: "Refreshing recorded sessions…" });
+        ...templates, navigate: navigatePr, canReturnHome: canReturnPrHome, refreshNotice: "Refreshing recorded sessions…" });
       if (pr.exitWorkspace) return;
     } else return action;
     view = { ...await loadAppUi(options), ...position };

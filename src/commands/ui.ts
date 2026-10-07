@@ -7,6 +7,8 @@ import { withOutcomes } from "../observe.js";
 import { screenControl, plainPalette, plainUiTheme, uiThemeFor, type Palette } from "../render/palette.js";
 import { renderUi, type UiData } from "../render/tui/screen.js";
 import { canReturnHome, initialState, navigate, visibleSessions, type UiKey, type UiState } from "../render/tui/state.js";
+import { paintUiLine } from "../render/tui/chrome.js";
+import { fit, fold } from "../render/tui/text.js";
 import { weekSessions } from "./week.js";
 
 /** Read-only: outcomes are resolved through the same path as `week`. */
@@ -23,7 +25,8 @@ export async function loadUi(days: number | undefined, options: StoreOptions = {
 export interface UiTerminal { input: ReadStream; output: WriteStream }
 export interface UiBrowserAction {
   key: string; label: string;
-  run: (data: UiData, state: UiState) => Promise<string>;
+  input?: { label: string; initial?: () => string };
+  run: (data: UiData, state: UiState, value?: string, signal?: AbortSignal) => Promise<string>;
 }
 export interface UiBrowserOptions {
   returnToHome?: boolean; state?: UiState; selectedSessionId?: string;
@@ -66,6 +69,9 @@ export async function runUi(
   let acting = false;
   let closed = false;
   let pasting = false;
+  let editing: { action: UiBrowserAction; value: string } | undefined;
+  const pending = new AbortController();
+  const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
   const result = (exitWorkspace: boolean): UiBrowserResult => ({ state: { ...state },
     selectedSessionId: visibleSessions(data.sessions, state)[state.selected]?.id, days: data.days, exitWorkspace });
   if (input.readableEnded || input.destroyed || output.destroyed) return result(true);
@@ -75,11 +81,20 @@ export async function runUi(
       if (closed) return;
       const frame = (options.render ?? renderUi)(data, state, output.columns || 80, output.rows || 24, palette, notice, theme, options.returnToHome);
       maxScroll = frame.maxScroll;
+      if (editing && (output.columns || 80) >= 60 && (output.rows || 24) >= 20) {
+        const width = (output.columns || 80) - 5;
+        const prompt = [editing.action.input!.label,
+          `> ${fold(editing.value + "▌", width - 2).at(-1)!}`,
+          "Enter Apply · Esc Cancel · Ctrl-U Clear · Ctrl-C Exit"];
+        frame.lines.splice(-3, 3, ...prompt.map(text => paintUiLine({ text: fit(text, width), role: "focus" },
+          { width, left: 2, terminalWidth: (output.columns || 80) - 1 }, theme)));
+      }
       output.write(theme.background + screenControl.paint + frame.lines.join("\r\n"));
     };
     const cleanup = (): void => {
       if (closed) return;
       closed = true;
+      pending.abort();
       input.off("keypress", keypress);
       input.off("end", end);
       input.off("error", fail);
@@ -102,13 +117,13 @@ export async function runUi(
     const terminate = (): void => cancel(143);
     const hangup = (): void => cancel(129);
     const repaint = (): void => { try { draw(); } catch (error) { fail(error); } };
-    const perform = async (action: UiBrowserAction): Promise<void> => {
+    const perform = async (action: UiBrowserAction, value?: string): Promise<void> => {
       acting = true;
       notice = `${action.label}…`;
       repaint();
       if (closed) { acting = false; return; }
       try {
-        const message = await action.run(data, { ...state });
+        const message = await action.run(data, { ...state }, value, pending.signal);
         if (!closed) notice = message;
       } catch (error) {
         notice = `${action.label} failed: ${error instanceof Error ? error.message : String(error)} ${action.key} retries.`;
@@ -141,10 +156,25 @@ export async function runUi(
     const keypress = (_text: string, key: UiKey = {}): void => {
       try {
         if (closed) return;
-        if (key.sequence === "\u001b[200~") { pasting = true; return; }
-        if (pasting) { if (key.sequence === "\u001b[201~") pasting = false; return; }
         if (key.ctrl && key.name === "c") { interrupt(); return; }
+        if (key.sequence === "\u001b[200~") { pasting = true; return; }
+        if (pasting) {
+          if (key.sequence === "\u001b[201~") pasting = false;
+          else if (editing && key.sequence && !/[\u0000-\u001f\u007f-\u009f]/u.test(key.sequence)) {
+            editing.value += key.sequence; draw();
+          }
+          return;
+        }
         const tooSmall = (output.columns || 80) < 60 || (output.rows || 24) < 20;
+        if (editing && !tooSmall) {
+          if (key.name === "escape") { editing = undefined; notice = "Input cancelled; previous selection kept."; }
+          else if (key.name === "return") {
+            const { action, value } = editing; editing = undefined; void perform(action, value); return;
+          } else if (key.ctrl && key.name === "u") editing.value = "";
+          else if (key.name === "backspace") editing.value = editing.value.slice(0, [...graphemes.segment(editing.value)].at(-1)?.index ?? 0);
+          else if (!key.ctrl && key.sequence && !/[\u0000-\u001f\u007f-\u009f]/u.test(key.sequence)) editing.value += key.sequence;
+          draw(); return;
+        }
         if (key.name === "q" && (!state.searching || tooSmall)) { finish(); return; }
         if (options.returnToHome && key.name === "escape" && (tooSmall || (options.canReturnHome ?? canReturnHome)(state))) { finish(); return; }
         if (tooSmall) return;
@@ -158,7 +188,13 @@ export async function runUi(
           return;
         }
         const action = !state.searching && !state.help && !key.ctrl && options.actions?.find(action => action.key === key.name);
-        if (action) { if (!refreshing && !acting) void perform(action); return; }
+        if (action) {
+          if (!refreshing && !acting) {
+            if (action.input) { editing = { action, value: action.input.initial?.() ?? "" }; draw(); }
+            else void perform(action);
+          }
+          return;
+        }
         state = (options.navigate ?? navigate)(state, key, visibleSessions(data.sessions, state).length, maxScroll);
         draw();
       } catch (error) { fail(error); }
