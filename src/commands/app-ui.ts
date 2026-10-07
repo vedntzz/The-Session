@@ -15,6 +15,7 @@ import { weekExportActions } from "./week-export-ui.js";
 import type { WeekOptions } from "./week.js";
 import { prTemplateUi } from "./pr-template-ui.js";
 import { loadScanUi } from "./scan-ui.js";
+import { scanExportActions } from "./scan-export-ui.js";
 import { DEFAULT_SCAN_DAYS, type ScanOptions } from "./scan.js";
 import { navigateScan, renderScanUi, SCAN_WINDOWS, visibleScanned } from "../render/tui/scan.js";
 import { loadPrUi } from "./pr-ui.js";
@@ -143,7 +144,7 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & Sca
       const refresh = (days = scan?.days ?? DEFAULT_SCAN_DAYS): ReturnType<typeof loadScanUi> => loadScanUi(days, options);
       scan = await runUiBrowser(await refresh(), refresh, palette, terminal, { ...scan, returnToHome: true,
         render: renderScanUi, select: visibleScanned, navigate: navigateScan, windows: SCAN_WINDOWS,
-        refreshNotice: "Reading local transcripts…" });
+        refreshNotice: "Reading local transcripts…", actions: scanExportActions(options) });
       if (scan.exitWorkspace) return;
     } else return action;
     view = { ...await loadAppUi(options), ...position };

@@ -3,13 +3,14 @@ import type { RateTable } from "../../pricing.js";
 import { UNKNOWN_REPO, type ScannedSession } from "../../scan.js";
 import { plainPalette, plainUiTheme, type Palette, type UiRole, type UiTheme } from "../palette.js";
 import { day, shortId } from "../terminal/text.js";
+import { scanLandingLine, scanReportLines, scanUsageLines } from "../scan-report.js";
 import { paintUiLine, sessionHeader, type UiLine } from "./chrome.js";
-import { navigate, type UiState } from "./state.js";
+import { navigate, SCROLL_STEP, type UiState } from "./state.js";
 import { fit, fold } from "./text.js";
 
 export interface ScanUiData {
   sessions: ScannedSession[]; rates: RateTable; days: number; repo: string; root: string; present: boolean;
-  currentRepos: readonly string[]; restriction?: string;
+  currentRepos: readonly string[]; restriction?: string; checked?: string;
 }
 export const SCAN_WINDOWS = [7, 14, 30] as const;
 const PROJECTS = ["all", "current", "unknown"];
@@ -17,6 +18,8 @@ const HELP = [
   "KEYBOARD", "w cycles 7 / 14 / 30 days; p cycles all / current / unknown project",
   "Search combines text with repo:all, repo:current or repo:unknown",
   "Enter expands the first prompt; PgUp/PgDn or Ctrl-U/Ctrl-D scroll",
+  "u shows usage; the matching activity report is below the transcript list",
+  "c copies matching sessions as Markdown; h opens a local HTML report",
   "Home/End selects first/last; Home also reveals the reader directory",
   "No diff: changed files, drift and turns that changed no files are not measured",
   "Commit overlap is only a coincidence in time; unknown stays unknown",
@@ -39,6 +42,7 @@ export function visibleScanned(data: ScanUiData, state: UiState): ScannedSession
 export const navigateScan: typeof navigate = (state, key, count, maxScroll) => {
   if (!state.searching && !state.help) {
     const name = key.name ?? key.sequence;
+    if (!key.ctrl && name === "u") return { ...state, usage: !state.usage, scroll: 0 };
     if (name === "e" || (!key.ctrl && ["o", "s", "d"].includes(name ?? ""))) return state;
     if (!key.ctrl && name === "p") {
       const next = PROJECTS[(PROJECTS.indexOf(scanQuery(state.query).project) + 1) % PROJECTS.length]!;
@@ -65,14 +69,16 @@ export function renderScanUi(data: ScanUiData, state: UiState, columns: number, 
   add(header, `${sessions.length} matching tool sessions · last ${data.days} days`, "meta");
   const search = state.searching ? fold(state.query + "▌", width - 2).at(-1)! : state.query || "/ Search prompts, IDs or directories";
   header.push({ text: `> ${fit(search, width - 2)}`, role: "focus" });
-  add(header, `[w] Range: ${data.days} days · [p] Project: ${query.project}`, "focus");
+  add(header, `[w] Range: ${data.days} days · [p] Project: ${query.error ? "invalid" : query.project}`, "focus");
+  add(header, `[u] Usage: ${state.usage ? "hide" : "show"} · [c] Copy Markdown · [h] Open HTML`, "focus");
   add(header, query.error ?? `First prompts · no diff recorded${data.restriction ? " · restricted reader" : ""}`, query.error ? "focus" : "meta");
   const footer: UiLine[] = [{ text: "─".repeat(width), role: "meta" }];
   add(footer, "/ Search · ↑↓ Select · Enter Details · PgUp/PgDn Scroll", "focus");
   add(footer, "r Refresh · ? Help · Esc Clear/Back · q Home · Ctrl-C Exit", "focus");
   const detailed = fold(notice, width).length > 1;
   add(footer, detailed ? "Status details above · PgUp/PgDn scroll" : notice || `Session ${selected ? state.selected + 1 : 0}/${sessions.length}`, "meta");
-  if (header.length + footer.length > rows - 2) header.splice(0, branding.length, { text: `TOOL ACTIVITY / ${data.repo}`, role: "meta" });
+  // Keep a full paging step visible; a shorter body would skip transcript rows.
+  if (header.length + footer.length > rows - 1 - SCROLL_STEP) header.splice(0, branding.length, { text: `TOOL ACTIVITY / ${data.repo}`, role: "meta" });
   const content: UiLine[] = []; let anchor = 0;
   if (detailed) add(content, notice, "focus");
   if (data.restriction) add(content, `Reader limited to directory: ${data.restriction}`, "meta");
@@ -85,10 +91,15 @@ export function renderScanUi(data: ScanUiData, state: UiState, columns: number, 
       session.label.split("\n").forEach(line => add(content, line, "intent", true));
       add(content, `ID ${session.id}`, "meta"); add(content, `Directory ${session.repo || "not recorded"}`, "meta");
       add(content, `First counted call ${session.startedAt} · Last counted call ${session.endedAt}`, "meta");
-      add(content, session.landed === undefined ? "Commit overlap unknown: Git could not be asked" : session.landed ? "Ran while a commit landed on the default branch" : "No commit landed during the counted calls", "meta");
+      add(content, scanLandingLine(session.landed), "meta");
+      if (state.usage) scanUsageLines(session.cost, data.rates, data.checked).forEach(line => add(content, line, "meta"));
     } else content.push({ text: fit(session.label, width), role: "intent", selected: chosen });
     content.push({ text: "" });
   });
+  if (state.usage && sessions.length && !state.help) {
+    add(content, "ACTIVITY REPORT · MATCHING TOOL SESSIONS", "focus");
+    scanReportLines(sessions, data.days, data.rates, [], width, data.checked).forEach(line => add(content, line, "meta"));
+  }
   if (!sessions.length && !state.help) add(content, !data.present ? `No Claude Code transcripts to scan. Looked in ${data.root}` : query.error ?? (data.sessions.length ? "No matches. Esc clears filters." : `No tool sessions in the last ${data.days} days.`));
   const height = Math.max(1, rows - 1 - header.length - footer.length);
   const maxScroll = Math.max(0, content.length - anchor - height);

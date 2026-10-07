@@ -35,19 +35,20 @@ const REPO_HEADINGS = ["repository", "sessions", "turns", "cost"] as const;
  * path is not something that can be cut down without becoming a different
  * path.
  */
-export function formatScan(report: ScanReport, palette: Palette, limit?: number): string[] {
+export function formatScan(report: ScanReport, palette: Palette, limit?: number, details: readonly string[] = []): string[] {
   if (report.sessions === 0) {
     return ["", `${INDENT}No agent sessions in the last ${plural(report.days, "day", "days")}`];
   }
 
   return [
     "",
-    ...landedLines(report, palette, limit),
+    ...scanLandedLines(report, palette, limit),
     palette.meta(`${INDENT}${scanWindow(report)}`),
     ...section(emptyTurnLines(report, palette, limit)),
     ...section(repoTable(report, palette)),
     ...section(dearestLines(report, palette, limit)),
-    ...section(totalLines(report, palette, limit)),
+    ...section(details),
+    ...section(scanTotalLines(report, palette, limit)),
   ];
 }
 
@@ -103,7 +104,8 @@ function emptyTurnLines(report: ScanReport, palette: Palette, limit?: number): s
  * see `unpricedThroughout`. The waste share goes with it: a share of a total
  * that does not exist is not a figure either.
  */
-function totalLines(report: ScanReport, palette: Palette, limit?: number): string[] {
+export function scanTotalLines(report: ScanReport, palette: Palette, limit?: number): string[] {
+  if (report.sessions === 0) return [];
   const { spend } = report;
   if (unpricedThroughout(spend)) {
     return [
@@ -184,7 +186,7 @@ function repoTable(report: ScanReport, palette: Palette): string[] {
  * the same as knowing it went nowhere. A window where none could be asked
  * still leads with how many sessions there were, since that much is known.
  */
-function landedLines(report: ScanReport, palette: Palette, limit?: number): string[] {
+export function scanLandedLines(report: ScanReport, palette: Palette, limit?: number): string[] {
   const sessions = plural(report.sessions, "session", "sessions");
   const asked = report.sessions - report.landingUnknown;
   const unknown = unknownLines(report.landingUnknown, palette, limit);
