@@ -4,7 +4,7 @@ import { knownAgents } from "../capture/index.js";
 import { loadRates } from "../pricing.js";
 import { readSessions, repoIdentity, repoName, storeHome, type StoreOptions } from "../store.js";
 import { withOutcomes } from "../observe.js";
-import { screenControl, plainPalette, plainUiTheme, uiThemeFor, type Palette } from "../render/palette.js";
+import { screenControl, plainPalette, plainUiTheme, uiThemeFor, type Palette, type UiTheme } from "../render/palette.js";
 import { renderUi, type UiData } from "../render/tui/screen.js";
 import { canReturnHome, initialState, navigate, visibleSessions, type UiKey, type UiState } from "../render/tui/state.js";
 import { paintUiLine } from "../render/tui/chrome.js";
@@ -23,17 +23,21 @@ export async function loadUi(days: number | undefined, options: StoreOptions = {
 }
 
 export interface UiTerminal { input: ReadStream; output: WriteStream }
-export interface UiBrowserAction {
+export interface UiBrowserData { sessions: readonly { id: string }[]; days?: number }
+export type UiBrowserRenderer<Data> = (data: Data, state: UiState, columns: number, rows: number,
+  palette?: Palette, notice?: string, theme?: UiTheme, returnToHome?: boolean) => ReturnType<typeof renderUi>;
+export interface UiBrowserAction<Data = UiData> {
   key: string; label: string;
   input?: { label: string; initial?: () => string };
-  run: (data: UiData, state: UiState, value?: string, signal?: AbortSignal) => Promise<string>;
+  run: (data: Data, state: UiState, value?: string, signal?: AbortSignal) => Promise<string>;
 }
-export interface UiBrowserOptions {
+export interface UiBrowserOptions<Data = UiData> {
   returnToHome?: boolean; state?: UiState; selectedSessionId?: string;
-  render?: typeof renderUi;
+  render?: UiBrowserRenderer<Data>;
+  select?: (data: Data, state: UiState) => readonly { id: string }[];
   navigate?: typeof navigate;
   windows?: readonly number[];
-  actions?: readonly UiBrowserAction[];
+  actions?: readonly UiBrowserAction<Data>[];
   canReturnHome?: typeof canReturnHome;
   refreshNotice?: string;
 }
@@ -45,13 +49,17 @@ export function requireTerminal(terminal: UiTerminal): void {
   }
 }
 
-/** Terminal ownership is scoped to this promise, including failure and signals. */
-export async function runUi(
-  initial: UiData,
-  refresh: (days?: number) => Promise<UiData>,
-  palette: Palette,
-  terminal: UiTerminal = { input: process.stdin, output: process.stdout },
-  options: UiBrowserOptions = {},
+/** Recorded history supplies its own renderer and selection to the shared owner. */
+export function runUi(initial: UiData, refresh: (days?: number) => Promise<UiData>, palette: Palette,
+  terminal: UiTerminal = { input: process.stdin, output: process.stdout }, options: UiBrowserOptions = {}): Promise<UiBrowserResult> {
+  return runUiBrowser(initial, refresh, palette, terminal, { ...options, render: options.render ?? renderUi,
+    select: options.select ?? ((data, state) => visibleSessions(data.sessions, state)) });
+}
+
+/** Terminal ownership is independent of whether rows are signed records or transcripts. */
+export async function runUiBrowser<Data extends UiBrowserData>(initial: Data, refresh: (days?: number) => Promise<Data>,
+  palette: Palette, terminal: UiTerminal,
+  options: UiBrowserOptions<Data> & { render: UiBrowserRenderer<Data>; select: NonNullable<UiBrowserOptions<Data>["select"]> },
 ): Promise<UiBrowserResult> {
   requireTerminal(terminal);
   const { input, output } = terminal;
@@ -60,7 +68,7 @@ export async function runUi(
   const wasFlowing = input.readableFlowing === true;
   let data = initial;
   let state = { ...(options.state ?? initialState()) };
-  const rows = visibleSessions(data.sessions, state);
+  const rows = options.select(data, state);
   if (options.selectedSessionId) state.selected = rows.findIndex(session => session.id === options.selectedSessionId);
   state.selected = Math.max(0, Math.min(rows.length - 1, state.selected));
   let maxScroll = 0;
@@ -69,17 +77,17 @@ export async function runUi(
   let acting = false;
   let closed = false;
   let pasting = false;
-  let editing: { action: UiBrowserAction; value: string } | undefined;
+  let editing: { action: UiBrowserAction<Data>; value: string } | undefined;
   const pending = new AbortController();
   const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
   const result = (exitWorkspace: boolean): UiBrowserResult => ({ state: { ...state },
-    selectedSessionId: visibleSessions(data.sessions, state)[state.selected]?.id, days: data.days, exitWorkspace });
+    selectedSessionId: options.select(data, state)[state.selected]?.id, days: data.days, exitWorkspace });
   if (input.readableEnded || input.destroyed || output.destroyed) return result(true);
 
   return new Promise<UiBrowserResult>((resolve, reject) => {
     const draw = (): void => {
       if (closed) return;
-      const frame = (options.render ?? renderUi)(data, state, output.columns || 80, output.rows || 24, palette, notice, theme, options.returnToHome);
+      const frame = options.render(data, state, output.columns || 80, output.rows || 24, palette, notice, theme, options.returnToHome);
       maxScroll = frame.maxScroll;
       if (editing && (output.columns || 80) >= 60 && (output.rows || 24) >= 20) {
         const width = (output.columns || 80) - 5;
@@ -117,7 +125,7 @@ export async function runUi(
     const terminate = (): void => cancel(143);
     const hangup = (): void => cancel(129);
     const repaint = (): void => { try { draw(); } catch (error) { fail(error); } };
-    const perform = async (action: UiBrowserAction, value?: string): Promise<void> => {
+    const perform = async (action: UiBrowserAction<Data>, value?: string): Promise<void> => {
       acting = true;
       notice = `${action.label}…`;
       repaint();
@@ -137,12 +145,12 @@ export async function runUi(
       refreshing = true;
       notice = options.refreshNotice ?? "Refreshing records and Git outcomes…";
       repaint();
-      const id = visibleSessions(data.sessions, state)[state.selected]?.id;
+      const id = options.select(data, state)[state.selected]?.id;
       try {
         const updated = await refresh(days);
         if (closed) return;
         data = updated;
-        state.selected = Math.max(0, visibleSessions(data.sessions, state).findIndex((session) => session.id === id));
+        state.selected = Math.max(0, options.select(data, state).findIndex((session) => session.id === id));
         state.scroll = 0;
         notice = `Refreshed. r refresh · q ${options.returnToHome ? "Home" : "quit"}`;
       } catch (error) {
@@ -195,7 +203,7 @@ export async function runUi(
           }
           return;
         }
-        state = (options.navigate ?? navigate)(state, key, visibleSessions(data.sessions, state).length, maxScroll);
+        state = (options.navigate ?? navigate)(state, key, options.select(data, state).length, maxScroll);
         draw();
       } catch (error) { fail(error); }
     };

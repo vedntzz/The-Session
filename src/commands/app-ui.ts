@@ -9,11 +9,14 @@ import { initialState, type UiKey } from "../render/tui/state.js";
 import { navigateWeek, renderWeekUi, WEEK_WINDOWS } from "../render/tui/week.js";
 import { homeState } from "./home.js";
 import { runStartUi, type StartUiOptions } from "./start-ui.js";
-import { loadUi, requireTerminal, runUi, type UiBrowserResult, type UiTerminal } from "./ui.js";
+import { loadUi, requireTerminal, runUi, runUiBrowser, type UiBrowserResult, type UiTerminal } from "./ui.js";
 import { loadWeekUi } from "./week-ui.js";
 import { weekExportActions } from "./week-export-ui.js";
 import type { WeekOptions } from "./week.js";
 import { prTemplateUi } from "./pr-template-ui.js";
+import { loadScanUi } from "./scan-ui.js";
+import { DEFAULT_SCAN_DAYS, type ScanOptions } from "./scan.js";
+import { navigateScan, renderScanUi, SCAN_WINDOWS, visibleScanned } from "../render/tui/scan.js";
 import { loadPrUi } from "./pr-ui.js";
 import { canReturnPrHome, navigatePr } from "../render/tui/pr.js";
 
@@ -101,13 +104,14 @@ export async function runAppUi(view: HomeView, palette: Palette = plainPalette,
 }
 
 /** Each screen releases the terminal before the next takes ownership. */
-export async function runWorkspaceUi(options: StartUiOptions & WeekOptions = {}, palette: Palette = plainPalette,
+export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & ScanOptions = {}, palette: Palette = plainPalette,
   terminal: UiTerminal = { input: process.stdin, output: process.stdout }): Promise<HomeAction | undefined> {
   let view = await loadAppUi(options);
   let position = { selected: 0, scroll: 0 };
   let history: UiBrowserResult | undefined;
   let week: UiBrowserResult | undefined;
   let pr: UiBrowserResult | undefined;
+  let scan: UiBrowserResult | undefined;
   const prScreen = prTemplateUi(options);
   while (!terminal.input.readableEnded && !terminal.input.destroyed && !terminal.output.destroyed) {
     const action = await runAppUi(view, palette, terminal, state => { position = state; });
@@ -135,6 +139,12 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions = {},
         selectedSessionId: pr?.selectedSessionId ?? data.sessions.find(session => session.endedAt !== null)?.id,
         ...prScreen, navigate: navigatePr, canReturnHome: canReturnPrHome, refreshNotice: "Refreshing recorded sessions…" });
       if (pr.exitWorkspace) return;
+    } else if (action?.screen === "scan") {
+      const refresh = (days = scan?.days ?? DEFAULT_SCAN_DAYS): ReturnType<typeof loadScanUi> => loadScanUi(days, options);
+      scan = await runUiBrowser(await refresh(), refresh, palette, terminal, { ...scan, returnToHome: true,
+        render: renderScanUi, select: visibleScanned, navigate: navigateScan, windows: SCAN_WINDOWS,
+        refreshNotice: "Reading local transcripts…" });
+      if (scan.exitWorkspace) return;
     } else return action;
     view = { ...await loadAppUi(options), ...position };
   }
