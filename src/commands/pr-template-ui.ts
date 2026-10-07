@@ -1,12 +1,13 @@
 import { fillTemplate, prParts } from "../render/pr.js";
 import { renderPrUi, type PrUiTemplate } from "../render/tui/pr.js";
 import { visibleSessions } from "../render/tui/state.js";
-import type { StoreOptions } from "../store.js";
+import type { WeekOptions } from "./week.js";
+import { prExportActions } from "./pr-export-ui.js";
 import { readTemplate } from "./pr.js";
 import type { UiBrowserOptions } from "./ui.js";
 
 /** An accepted, validated file snapshot, kept only for this workspace visit. */
-export function prTemplateUi(options: StoreOptions = {}): Pick<UiBrowserOptions, "render" | "actions"> {
+export function prTemplateUi(options: WeekOptions = {}): Pick<UiBrowserOptions, "render" | "actions"> {
   let template: PrUiTemplate | undefined;
   return {
     render: (data, state, columns, rows, palette, notice, theme) =>
@@ -28,6 +29,6 @@ export function prTemplateUi(options: StoreOptions = {}): Pick<UiBrowserOptions,
         template = { path: file, source };
         return `Template loaded: ${file}. Enter previews; t changes it. Refresh keeps this file snapshot.`;
       },
-    }],
+    }, ...prExportActions(() => template, options)],
   };
 }

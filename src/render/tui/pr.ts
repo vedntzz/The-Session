@@ -2,13 +2,19 @@ import { plainPalette, plainUiTheme, type Palette, type UiRole, type UiTheme } f
 import { fillTemplate, placeholderList, prParts, renderPr } from "../pr.js";
 import { intentOf } from "../terminal/intent.js";
 import { day, shortId } from "../terminal/text.js";
-import { intentSourceOf } from "../../store.js";
+import { intentSourceOf, type Session } from "../../store.js";
+import type { RateTable } from "../../pricing.js";
 import { paintUiLine, sessionHeader, type UiLine } from "./chrome.js";
 import type { UiData } from "./screen.js";
 import { canReturnHome, HISTORY_FILTERS, initialState, navigate, parseQuery, visibleSessions, type UiState } from "./state.js";
 import { fit, fold } from "./text.js";
 
 export interface PrUiTemplate { path: string; source: string }
+
+/** Preview and exports use the same native document, without terminal wrapping. */
+export function prUiDocument(session: Session, rates: RateTable, template?: PrUiTemplate): string {
+  return template ? fillTemplate(template.source, prParts(session, rates), template.path) : renderPr(session, rates);
+}
 
 const HELP = [
   "KEYBOARD",
@@ -19,6 +25,8 @@ const HELP = [
   "Search supports outcome:, source: and outside: filters",
   "Results are recorded; r reloads the record without resolving outcomes",
   "t Choose a local Markdown template; blank restores the default",
+  "c Copy the selected Markdown description; f save it to a new file",
+  "Saving keeps existing files; choose another name if one already exists",
   "Relative paths start in the directory you launched session from",
   `Supported placeholders: ${placeholderList()}`,
   "PgUp/PgDn or Ctrl-U/Ctrl-D scroll through the full preview",
@@ -67,7 +75,8 @@ export function renderPrUi(data: UiData & { template?: PrUiTemplate }, state: Ui
   const details = fold(notice, width);
   const footer: UiLine[] = [{ text: "─".repeat(width), role: "meta" }];
   add(footer, preview ? "↑↓ Select · Enter / Esc Sessions · PgUp/PgDn Scroll" : "/ Search · ↑↓ Select · Enter Preview · Esc Back/Clear", "focus");
-  add(footer, "[t] Template · r Refresh · ? Help · q Home · Ctrl-C Exit", "focus");
+  add(footer, "[c] Copy Markdown · [f] Save file · [t] Template", "focus");
+  add(footer, "r Refresh · ? Help · q Home · Ctrl-C Exit", "focus");
   add(footer, details.length > 1 ? "Status details above · PgUp/PgDn scroll" : notice || `Session ${selected ? state.selected + 1 : 0}/${sessions.length}`, "meta");
   if (rows < 28) for (let i = header.length - 1; i >= 0; i--) if (!header[i]!.text) header.splice(i, 1);
   if (header.length + footer.length > rows - 2) header.splice(0, branding.filter(line => rows >= 28 || line.text).length, { text: `PULL REQUEST / ${data.repo}`, role: "meta" });
@@ -78,7 +87,7 @@ export function renderPrUi(data: UiData & { template?: PrUiTemplate }, state: Ui
   else if (preview) {
     const cost = `_${prParts(selected, data.rates).cost}_`;
     if (template) add(content, `Template file: ${template.path}`, "meta");
-    const document = template ? fillTemplate(template.source, prParts(selected, data.rates), template.path) : renderPr(selected, data.rates);
+    const document = prUiDocument(selected, data.rates, template);
     document.split("\n").forEach((line, index) => {
       add(content, line, template ? "text" : line === cost ? "meta" : index === 0 ? "intent" : "text");
     });
