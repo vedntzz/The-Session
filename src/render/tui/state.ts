@@ -69,6 +69,7 @@ export function visibleSessions(sessions: readonly Session[], state: UiState): S
   });
 }
 export interface UiKey { name?: string; ctrl?: boolean; sequence?: string }
+export const SCROLL_STEP = 5;
 /**
  * Scrolling steps from the offset the screen shows, not the one last stored.
  * A resize changes `maxScroll` without a key press, and the renderer clamps a
@@ -92,7 +93,7 @@ export function navigate(state: UiState, key: UiKey, count: number, maxScroll: n
   if (key.sequence === "?" || name === "?") return { ...next, help: !next.help, scroll: 0 };
   if (state.help) {
     if (name === "escape") return { ...next, help: false, scroll: 0 };
-    const delta = name === "pageup" || name === "up" ? -5 : name === "pagedown" || name === "down" ? 5 : 0;
+    const delta = name === "pageup" || name === "up" ? -SCROLL_STEP : name === "pagedown" || name === "down" ? SCROLL_STEP : 0;
     return { ...next, scroll: scrolled(state, maxScroll, delta) };
   }
   const filter = !key.ctrl && HISTORY_FILTERS.find(choice => choice.shortcut === name);
@@ -103,7 +104,7 @@ export function navigate(state: UiState, key: UiKey, count: number, maxScroll: n
   else if (filter) return { ...next, [filter.key]: (state[filter.key] + 1) % filter.values.length,
     selected: 0, scroll: 0, evidence: false };
   else if (name === "pageup" || name === "pagedown" || (key.ctrl && (name === "u" || name === "d"))) {
-    next.scroll = scrolled(state, maxScroll, name === "pageup" || name === "u" ? -5 : 5);
+    next.scroll = scrolled(state, maxScroll, name === "pageup" || name === "u" ? -SCROLL_STEP : SCROLL_STEP);
   } else {
     const delta = name === "up" || name === "k" ? -1 : name === "down" || name === "j" ? 1 : 0;
     next.selected = Math.max(0, Math.min(count - 1, name === "home" ? 0 : name === "end" ? count - 1 : state.selected + delta));

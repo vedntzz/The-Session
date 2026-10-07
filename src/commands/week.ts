@@ -160,14 +160,15 @@ export async function weekSessions(
 /**
  * Writes the page and returns where it went.
  *
- * One file per repo, rewritten each time rather than a fresh temp file per
- * run: reopening the week should not leave a trail of stale pages behind, and
+ * One file per repo and report, rewritten rather than a fresh temp file per
+ * run: Scan keeps its own page so opening it does not replace Week. Reopening
+ * a report should not leave a trail of stale pages behind, and
  * a stale page is worse than no page. It is written 0600 because it holds the
  * same intents the store does, in a directory the whole machine can read.
  */
-export async function writeWeekPage(html: string, options: WeekOptions = {}): Promise<string> {
+export async function writeWeekPage(html: string, options: WeekOptions = {}, report: "week" | "scan" = "week"): Promise<string> {
   const key = await repoKey(options.cwd ?? process.cwd());
-  const file = path.join(options.tmp ?? tmpdir(), `session-week-${key}.html`);
+  const file = path.join(options.tmp ?? tmpdir(), `session-${report}-${key}.html`);
   await writeFile(file, html, { encoding: "utf8", mode: 0o600 });
   return file;
 }

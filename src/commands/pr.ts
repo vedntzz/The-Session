@@ -1,6 +1,7 @@
 // The I/O half of `render/pr.ts`: which session, what the rates are, and the
 // template file if there is one.
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { loadRates } from "../pricing.js";
 import { fillTemplate, placeholderList, prParts, renderPr } from "../render/pr.js";
 import { pickSession } from "./show.js";
@@ -50,9 +51,9 @@ export async function prBody(
  * Anything else keeps the system's own reason rather than being flattened into
  * a guess: it is rare enough that the errno is more use than a sentence.
  */
-async function readTemplate(file: string): Promise<string> {
+export async function readTemplate(file: string, cwd = process.cwd()): Promise<string> {
   try {
-    return await readFile(file, "utf8");
+    return await readFile(resolve(cwd, file), "utf8");
   } catch (error) {
     throw new Error(templateProblem(file, error as NodeJS.ErrnoException), { cause: error });
   }
