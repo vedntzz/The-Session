@@ -31,6 +31,8 @@ export interface UiBrowserOptions {
   navigate?: typeof navigate;
   windows?: readonly number[];
   actions?: readonly UiBrowserAction[];
+  canReturnHome?: typeof canReturnHome;
+  refreshNotice?: string;
 }
 export interface UiBrowserResult { state: UiState; selectedSessionId?: string; days?: number; exitWorkspace: boolean }
 
@@ -118,7 +120,7 @@ export async function runUi(
     };
     const reload = async (days = data.days): Promise<void> => {
       refreshing = true;
-      notice = "Refreshing records and Git outcomes…";
+      notice = options.refreshNotice ?? "Refreshing records and Git outcomes…";
       repaint();
       const id = visibleSessions(data.sessions, state)[state.selected]?.id;
       try {
@@ -144,7 +146,7 @@ export async function runUi(
         if (key.ctrl && key.name === "c") { interrupt(); return; }
         const tooSmall = (output.columns || 80) < 60 || (output.rows || 24) < 20;
         if (key.name === "q" && (!state.searching || tooSmall)) { finish(); return; }
-        if (options.returnToHome && key.name === "escape" && (tooSmall || canReturnHome(state))) { finish(); return; }
+        if (options.returnToHome && key.name === "escape" && (tooSmall || (options.canReturnHome ?? canReturnHome)(state))) { finish(); return; }
         if (tooSmall) return;
         if (options.windows?.length && !state.searching && !state.help && !key.ctrl && key.name === "w") {
           const next = (options.windows.indexOf(data.days ?? options.windows[0]!) + 1) % options.windows.length;
