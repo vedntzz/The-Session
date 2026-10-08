@@ -15,6 +15,7 @@ const HELP = [
   "KEYBOARD", "w cycles all history / 7 / 14 / 30 days; r rereads records and Git outcomes",
   "/ searches coding tool names; ↑↓ or j/k selects; Home/End selects first/last",
   "Enter expands all goal sources for the selected tool; no source is pooled",
+  "s opens this tool's sessions, editor IDs and recorded write checks",
   "Goal source: declared = typed; primed = scope reviewed; captured = first prompt",
   "PgUp/PgDn or Ctrl-U/Ctrl-D scroll; ? opens or closes help",
   "Mixed sessions appear under each tool, whole; tool rows cannot be added",
@@ -57,7 +58,7 @@ export function renderAgentsUi(data: AgentsUiData, state: UiState, columns: numb
   add(header, `[w] Range: ${data.days === undefined ? "all history" : `${data.days} days`}`, "focus");
   add(header, "Separate tools and goal sources · mixed sessions repeat", "meta");
   const footer: UiLine[] = [{ text: "─".repeat(width), role: "meta" }];
-  add(footer, "/ Search · ↑↓ Select · Enter Details · PgUp/PgDn Scroll", "focus");
+  add(footer, "/ Search · ↑↓ Select · Enter Details · [s] Sessions", "focus");
   add(footer, "r Refresh · ? Help · Esc Clear/Back · q Home · Ctrl-C Exit", "focus");
   const detailed = fold(notice, width).length > 1;
   add(footer, detailed ? "Status details above · PgUp/PgDn scroll" : notice || `Tool ${selected ? state.selected + 1 : 0}/${blocks.length}`, "meta");
