@@ -23,7 +23,7 @@ export async function loadUi(days: number | undefined, options: StoreOptions = {
 }
 
 export interface UiTerminal { input: ReadStream; output: WriteStream }
-export interface UiBrowserData { sessions: readonly { id: string }[]; days?: number }
+export interface UiBrowserData { days?: number }
 export type UiBrowserRenderer<Data> = (data: Data, state: UiState, columns: number, rows: number,
   palette?: Palette, notice?: string, theme?: UiTheme, returnToHome?: boolean) => ReturnType<typeof renderUi>;
 export interface UiBrowserAction<Data = UiData> {
@@ -36,7 +36,7 @@ export interface UiBrowserOptions<Data = UiData> {
   render?: UiBrowserRenderer<Data>;
   select?: (data: Data, state: UiState) => readonly { id: string }[];
   navigate?: typeof navigate;
-  windows?: readonly number[];
+  windows?: readonly (number | undefined)[];
   actions?: readonly UiBrowserAction<Data>[];
   canReturnHome?: typeof canReturnHome;
   refreshNotice?: string;
@@ -141,7 +141,7 @@ export async function runUiBrowser<Data extends UiBrowserData>(initial: Data, re
         repaint();
       }
     };
-    const reload = async (days = data.days): Promise<void> => {
+    const reload = async (days: number | undefined): Promise<void> => {
       refreshing = true;
       notice = options.refreshNotice ?? "Refreshing records and Git outcomes…";
       repaint();
@@ -187,12 +187,12 @@ export async function runUiBrowser<Data extends UiBrowserData>(initial: Data, re
         if (options.returnToHome && key.name === "escape" && (tooSmall || (options.canReturnHome ?? canReturnHome)(state))) { finish(); return; }
         if (tooSmall) return;
         if (options.windows?.length && !state.searching && !state.help && !key.ctrl && key.name === "w") {
-          const next = (options.windows.indexOf(data.days ?? options.windows[0]!) + 1) % options.windows.length;
+          const next = (options.windows.indexOf(data.days) + 1) % options.windows.length;
           if (!refreshing && !acting) void reload(options.windows[next]);
           return;
         }
         if (!state.searching && key.name === "r") {
-          if (!refreshing && !acting) void reload();
+          if (!refreshing && !acting) void reload(data.days);
           return;
         }
         const action = !state.searching && !state.help && !key.ctrl && options.actions?.find(action => action.key === key.name);

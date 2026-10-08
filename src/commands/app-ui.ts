@@ -20,6 +20,8 @@ import { DEFAULT_SCAN_DAYS, type ScanOptions } from "./scan.js";
 import { navigateScan, renderScanUi, SCAN_WINDOWS, visibleScanned } from "../render/tui/scan.js";
 import { loadPrUi } from "./pr-ui.js";
 import { canReturnPrHome, navigatePr } from "../render/tui/pr.js";
+import { loadAgentsUi } from "./agents-ui.js";
+import { AGENTS_WINDOWS, navigateAgents, renderAgentsUi, visibleAgentBlocks } from "../render/tui/agents.js";
 
 export async function loadAppUi(options: StoreOptions = {}): Promise<HomeView> {
   const cwd = options.cwd ?? process.cwd();
@@ -113,6 +115,7 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & Sca
   let week: UiBrowserResult | undefined;
   let pr: UiBrowserResult | undefined;
   let scan: UiBrowserResult | undefined;
+  let agents: UiBrowserResult | undefined;
   const prScreen = prTemplateUi(options);
   while (!terminal.input.readableEnded && !terminal.input.destroyed && !terminal.output.destroyed) {
     const action = await runAppUi(view, palette, terminal, state => { position = state; });
@@ -146,6 +149,12 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & Sca
         render: renderScanUi, select: visibleScanned, navigate: navigateScan, windows: SCAN_WINDOWS,
         refreshNotice: "Reading local transcripts…", actions: scanExportActions(options) });
       if (scan.exitWorkspace) return;
+    } else if (action?.screen === "agents") {
+      const refresh = (days?: number): ReturnType<typeof loadAgentsUi> => loadAgentsUi(days, options);
+      agents = await runUiBrowser(await refresh(agents?.days), refresh, palette, terminal, { ...agents,
+        returnToHome: true, render: renderAgentsUi, select: visibleAgentBlocks,
+        navigate: navigateAgents, windows: AGENTS_WINDOWS });
+      if (agents.exitWorkspace) return;
     } else return action;
     view = { ...await loadAppUi(options), ...position };
   }
