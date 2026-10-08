@@ -50,6 +50,15 @@ function similarIntent(first: string, second: string): boolean {
   return [...a].filter((word) => b.has(word)).length >= 2;
 }
 
+/** The same seed boundaries apply to both the preview and its unsigned editor. */
+export function primeSeeds(entries: readonly string[]): string[] {
+  const seeds = [...new Set(entries.map(normalizeEntry))];
+  if (seeds.some((seed) => !seed || seed === "." || seed.startsWith("/") || seed.split("/").includes(".."))) {
+    throw new Error("Prime seeds must name paths inside the repo, not the whole repository.");
+  }
+  return seeds;
+}
+
 /**
  * Only closed, unaided declarations from before the question can train Prime.
  * Accepted Prime scopes cannot become evidence for their own next suggestion.
@@ -64,10 +73,7 @@ export function proposeScope(
 ): PrimeProposal {
   const intent = request.intent.trim();
   if (!intent) throw new Error('No intent given. Run: session prime "what you are about to do"');
-  const seeds = [...new Set((request.seeds ?? []).map(normalizeEntry))];
-  if (seeds.some((seed) => !seed || seed === "." || seed.startsWith("/") || seed.split("/").includes(".."))) {
-    throw new Error("Prime seeds must name paths inside the repo, not the whole repository.");
-  }
+  const seeds = primeSeeds(request.seeds ?? []);
   const tracked = [...new Set(trackedPaths)].sort();
   const present = new Set(tracked);
   const history = sessions.filter((s) => s.repo === repo && s.endedAt !== null &&

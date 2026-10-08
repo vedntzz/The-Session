@@ -21,6 +21,7 @@ import { navigateScan, renderScanUi, SCAN_WINDOWS, visibleScanned } from "../ren
 import { loadPrUi } from "./pr-ui.js";
 import { canReturnPrHome, navigatePr } from "../render/tui/pr.js";
 import { runAgentsUi, type AgentsUiResult } from "./agents-browser-ui.js";
+import { runPrimeUi, type PrimeUiResult } from "./prime-ui.js";
 
 export async function loadAppUi(options: StoreOptions = {}): Promise<HomeView> {
   const cwd = options.cwd ?? process.cwd();
@@ -115,6 +116,7 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & Sca
   let pr: UiBrowserResult | undefined;
   let scan: UiBrowserResult | undefined;
   let agents: AgentsUiResult | undefined;
+  let prime: PrimeUiResult | undefined;
   const prScreen = prTemplateUi(options);
   while (!terminal.input.readableEnded && !terminal.input.destroyed && !terminal.output.destroyed) {
     const action = await runAppUi(view, palette, terminal, state => { position = state; });
@@ -142,6 +144,9 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & Sca
         selectedSessionId: pr?.selectedSessionId ?? data.sessions.find(session => session.endedAt !== null)?.id,
         ...prScreen, navigate: navigatePr, canReturnHome: canReturnPrHome, refreshNotice: "Refreshing recorded sessions…" });
       if (pr.exitWorkspace) return;
+    } else if (action?.screen === "prime") {
+      prime = await runPrimeUi(options, palette, terminal, prime);
+      if (prime.exitWorkspace) return;
     } else if (action?.screen === "scan") {
       const refresh = (days = scan?.days ?? DEFAULT_SCAN_DAYS): ReturnType<typeof loadScanUi> => loadScanUi(days, options);
       scan = await runUiBrowser(await refresh(), refresh, palette, terminal, { ...scan, returnToHome: true,
