@@ -23,7 +23,7 @@ export async function loadUi(days: number | undefined, options: StoreOptions = {
 }
 
 export interface UiTerminal { input: ReadStream; output: WriteStream }
-export interface UiBrowserData { sessions: readonly { id: string }[]; days?: number }
+export interface UiBrowserData { days?: number }
 export type UiBrowserRenderer<Data> = (data: Data, state: UiState, columns: number, rows: number,
   palette?: Palette, notice?: string, theme?: UiTheme, returnToHome?: boolean) => ReturnType<typeof renderUi>;
 export interface UiBrowserAction<Data = UiData> {
@@ -36,12 +36,14 @@ export interface UiBrowserOptions<Data = UiData> {
   render?: UiBrowserRenderer<Data>;
   select?: (data: Data, state: UiState) => readonly { id: string }[];
   navigate?: typeof navigate;
-  windows?: readonly number[];
+  windows?: readonly (number | undefined)[];
   actions?: readonly UiBrowserAction<Data>[];
   canReturnHome?: typeof canReturnHome;
   refreshNotice?: string;
+  openKey?: string;
+  backLabel?: string;
 }
-export interface UiBrowserResult { state: UiState; selectedSessionId?: string; days?: number; exitWorkspace: boolean }
+export interface UiBrowserResult { state: UiState; selectedSessionId?: string; days?: number; exitWorkspace: boolean; opened?: true }
 
 export function requireTerminal(terminal: UiTerminal): void {
   if (!terminal.input.isTTY || !terminal.output.isTTY || process.env["TERM"] === "dumb") {
@@ -80,8 +82,9 @@ export async function runUiBrowser<Data extends UiBrowserData>(initial: Data, re
   let editing: { action: UiBrowserAction<Data>; value: string } | undefined;
   const pending = new AbortController();
   const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-  const result = (exitWorkspace: boolean): UiBrowserResult => ({ state: { ...state },
-    selectedSessionId: options.select(data, state)[state.selected]?.id, days: data.days, exitWorkspace });
+  const result = (exitWorkspace: boolean, opened = false): UiBrowserResult => ({ state: { ...state },
+    selectedSessionId: options.select(data, state)[state.selected]?.id, days: data.days, exitWorkspace,
+    ...(opened ? { opened: true as const } : {}) });
   if (input.readableEnded || input.destroyed || output.destroyed) return result(true);
 
   return new Promise<UiBrowserResult>((resolve, reject) => {
@@ -117,7 +120,7 @@ export async function runUiBrowser<Data extends UiBrowserData>(initial: Data, re
         if (!output.destroyed) output.write(screenControl.pasteOff + theme.reset + screenControl.leave);
       }
     };
-    const finish = (exitWorkspace = !options.returnToHome): void => { try { cleanup(); resolve(result(exitWorkspace)); } catch (error) { reject(error); } };
+    const finish = (exitWorkspace = !options.returnToHome, opened = false): void => { try { cleanup(); resolve(result(exitWorkspace, opened)); } catch (error) { reject(error); } };
     const end = (): void => finish(true);
     const fail = (error: unknown): void => { try { cleanup(); } catch { /* Preserve the original failure. */ } reject(error); };
     const cancel = (code: number): void => { process.exitCode = code; end(); };
@@ -141,7 +144,7 @@ export async function runUiBrowser<Data extends UiBrowserData>(initial: Data, re
         repaint();
       }
     };
-    const reload = async (days = data.days): Promise<void> => {
+    const reload = async (days: number | undefined): Promise<void> => {
       refreshing = true;
       notice = options.refreshNotice ?? "Refreshing records and Git outcomes…";
       repaint();
@@ -152,7 +155,7 @@ export async function runUiBrowser<Data extends UiBrowserData>(initial: Data, re
         data = updated;
         state.selected = Math.max(0, options.select(data, state).findIndex((session) => session.id === id));
         state.scroll = 0;
-        notice = `Refreshed. r refresh · q ${options.returnToHome ? "Home" : "quit"}`;
+        notice = `Refreshed. r refresh · q ${options.backLabel ?? (options.returnToHome ? "Home" : "quit")}`;
       } catch (error) {
         const retry = days === data.days ? "r retries" : "w retries the range; r refreshes the current range";
         notice = `Refresh failed: ${error instanceof Error ? error.message : String(error)}. ${retry}.`;
@@ -186,13 +189,17 @@ export async function runUiBrowser<Data extends UiBrowserData>(initial: Data, re
         if (key.name === "q" && (!state.searching || tooSmall)) { finish(); return; }
         if (options.returnToHome && key.name === "escape" && (tooSmall || (options.canReturnHome ?? canReturnHome)(state))) { finish(); return; }
         if (tooSmall) return;
+        if (options.openKey && !state.searching && !state.help && !key.ctrl && key.name === options.openKey) {
+          if (!refreshing && !acting && options.select(data, state)[state.selected]) finish(false, true);
+          return;
+        }
         if (options.windows?.length && !state.searching && !state.help && !key.ctrl && key.name === "w") {
-          const next = (options.windows.indexOf(data.days ?? options.windows[0]!) + 1) % options.windows.length;
+          const next = (options.windows.indexOf(data.days) + 1) % options.windows.length;
           if (!refreshing && !acting) void reload(options.windows[next]);
           return;
         }
         if (!state.searching && key.name === "r") {
-          if (!refreshing && !acting) void reload();
+          if (!refreshing && !acting) void reload(data.days);
           return;
         }
         const action = !state.searching && !state.help && !key.ctrl && options.actions?.find(action => action.key === key.name);

@@ -20,6 +20,9 @@ import { DEFAULT_SCAN_DAYS, type ScanOptions } from "./scan.js";
 import { navigateScan, renderScanUi, SCAN_WINDOWS, visibleScanned } from "../render/tui/scan.js";
 import { loadPrUi } from "./pr-ui.js";
 import { canReturnPrHome, navigatePr } from "../render/tui/pr.js";
+import { runAgentsUi, type AgentsUiResult } from "./agents-browser-ui.js";
+import { loadDebtUi } from "./debt-ui.js";
+import { navigateDebt, renderDebtUi, visibleDebtRepos } from "../render/tui/debt.js";
 
 export async function loadAppUi(options: StoreOptions = {}): Promise<HomeView> {
   const cwd = options.cwd ?? process.cwd();
@@ -113,6 +116,8 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & Sca
   let week: UiBrowserResult | undefined;
   let pr: UiBrowserResult | undefined;
   let scan: UiBrowserResult | undefined;
+  let agents: AgentsUiResult | undefined;
+  let debt: UiBrowserResult | undefined;
   const prScreen = prTemplateUi(options);
   while (!terminal.input.readableEnded && !terminal.input.destroyed && !terminal.output.destroyed) {
     const action = await runAppUi(view, palette, terminal, state => { position = state; });
@@ -146,6 +151,15 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & Sca
         render: renderScanUi, select: visibleScanned, navigate: navigateScan, windows: SCAN_WINDOWS,
         refreshNotice: "Reading local transcripts…", actions: scanExportActions(options) });
       if (scan.exitWorkspace) return;
+    } else if (action?.screen === "agents") {
+      agents = await runAgentsUi(options, palette, terminal, agents);
+      if (agents.exitWorkspace) return;
+    } else if (action?.screen === "debt") {
+      const refresh = (): ReturnType<typeof loadDebtUi> => loadDebtUi(options);
+      debt = await runUiBrowser(await refresh(), refresh, palette, terminal, { ...debt, returnToHome: true,
+        render: renderDebtUi, select: visibleDebtRepos, navigate: navigateDebt,
+        refreshNotice: "Reading recurring misses from all local records…" });
+      if (debt.exitWorkspace) return;
     } else return action;
     view = { ...await loadAppUi(options), ...position };
   }

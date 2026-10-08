@@ -1,6 +1,6 @@
 export type UiScreen =
   | "home" | "start" | "sessions" | "week" | "pr" | "scan" | "agents"
-  | "prime" | "debt" | "agreement" | "outcomes" | "survival" | "knowledge"
+  | "debt" | "agreement" | "outcomes" | "survival" | "knowledge"
   | "hooks" | "peers" | "sync" | "verify" | "key" | "attribution" | "help";
 
 export interface UiViewState {
