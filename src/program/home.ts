@@ -18,7 +18,7 @@ import { shortId } from "../render/terminal/text.js";
 
 const SECTION_COMMANDS: Record<UiScreen, string> = {
   home: "session", start: "session start", sessions: "session ui", week: "session week", pr: "session pr",
-  prime: "session prime --help", debt: "session prime --debt", agreement: "session start --help",
+  debt: "session prime --debt", agreement: "session start --help",
   outcomes: "session settle --help", survival: "session survival", knowledge: "session knowledge --help",
   scan: "session scan", agents: "session agents", hooks: "session hook --help", peers: "session peers",
   sync: "session help all", verify: "session verify", key: "session key show", attribution: "session config --help", help: "session help all",

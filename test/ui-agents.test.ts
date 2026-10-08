@@ -16,6 +16,7 @@ import { loadRates } from "../src/pricing.js";
 import { buildProgram } from "../src/program.js";
 import { ansiPalette, plainPalette, screenControl, uiThemeFor } from "../src/render/palette.js";
 import { landed, spent, survived, writes } from "../src/render/terminal/agents.js";
+import { UI_MENU } from "../src/render/tui/menu.js";
 import { AGENTS_WINDOWS, navigateAgents, renderAgentsUi, visibleAgentBlocks, type AgentsUiData } from "../src/render/tui/agents.js";
 import { initialState } from "../src/render/tui/state.js";
 import { cellWidth, safeText } from "../src/render/tui/text.js";
@@ -106,7 +107,7 @@ describe("Coding tool activity workspace", () => {
     term.input.write("w"); await wait(term, "Refresh failed"); expect(term.frame()).toContain("all recorded history"); term.input.write("wq"); expect((await running).days).toBeUndefined(); const home = runAppUi({ repo: "app", branch: "main", home: {} }, plainPalette, term.io); const before = term.frame(); complete(data([], 7)); await new Promise(resolve => setImmediate(resolve)); expect(term.frame()).toBe(before); term.input.write("q"); await home;
   });
   it("remembers the real workspace range, search, tool and scroll through Home, restoring terminal ownership without ledger writes", async () => {
-    const fixture = await signedFixture(); const before = await readFile(fixture.ledger); const signals = process.listeners("SIGTERM"); const term = terminal(60, 20); const open = () => term.input.write("m" + "\u001b[B".repeat(8) + "\r");
+    const fixture = await signedFixture(); const before = await readFile(fixture.ledger); const signals = process.listeners("SIGTERM"); const term = terminal(60, 20); const open = () => term.input.write("m" + "\u001b[B".repeat(UI_MENU.findIndex(item => item.screen === "agents")) + "\r");
     const running = buildProgram({ ...options, appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" }); await wait(term, "OVERVIEW"); open(); await wait(term, "CODING TOOL ACTIVITY"); term.input.write("w"); await wait(term, "Refreshed."); term.input.write("/CODEX\r\u001b[6~"); const frame = term.frame().split("\r\n").slice(0, -1); term.input.write("q"); await wait(term, "OVERVIEW"); open(); await wait(term, "CODING TOOL ACTIVITY"); expect(term.frame().split("\r\n").slice(0, -1)).toEqual(frame);
     term.input.end(); await running; expect(term.input.listenerCount("keypress")).toBe(0); expect(term.output.listenerCount("resize")).toBe(0); expect(term.io.input.setRawMode).toHaveBeenLastCalledWith(false); expect(process.listeners("SIGTERM")).toEqual(signals); expect(await readFile(fixture.ledger)).toEqual(before);
   });

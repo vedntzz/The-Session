@@ -50,7 +50,7 @@ export function formatDebt(report: DebtReport, palette: Palette, view: DebtView 
     "",
     ...repoLines(repo, palette, view),
   ]);
-  return [...lines, ...footnotes(report, palette, view.limit)];
+  return [...lines, ...formatDebtNotes(report, palette, view.limit)];
 }
 
 /** What the view knows beyond the report itself. */
@@ -100,27 +100,14 @@ function repoLines(repo: RepoDebt, palette: Palette, view: DebtView): string[] {
     `${INDENT}${repo.repo === view.here ? `${name}  ${HERE}` : name}`,
   );
 
-  // Absent, not empty: too little history to have found anything. Said as a
-  // shortage of evidence, because that is what it is — a repo with two
-  // sessions has no pattern to have, and printing "no debt" here would be an
-  // all-clear nobody checked.
-  if (!repo.files) {
-    return [
-      heading,
-      ...note(
-        `not enough history to judge — ` +
-          `${plural(repo.history, "session", "sessions")} recorded, ${MIN_HISTORY} needed`,
-        (text) => text,
-        view.limit,
-      ),
-    ];
-  }
+  return [heading, ...note(debtFinding(repo), (text) => text, view.limit),
+    ...(repo.files?.length ? ["", ...table(repo.files, palette)] : [])];
+}
 
-  if (repo.files.length === 0) {
-    return [heading, ...note(nothingOwed(repo), (text) => text, view.limit)];
-  }
-
-  return [heading, ...note(owed(repo), (text) => text, view.limit), "", ...table(repo.files, palette)];
+/** Shared finding: insufficient history is not an empty list of owed files. */
+export function debtFinding(repo: RepoDebt): string {
+  if (!repo.files) return `not enough history to judge — ${plural(repo.history, "session", "sessions")} recorded, ${MIN_HISTORY} needed`;
+  return repo.files.length ? owed(repo) : nothingOwed(repo);
 }
 
 /** The finding: how many files, out of how much history. */
@@ -150,7 +137,7 @@ function table(files: readonly DebtFile[], palette: Palette): string[] {
     file.path,
     figure(file.sessions),
     day(file.lastTouched),
-    costCell(file),
+    debtCost(file),
   ]);
   const widths = columnWidths([[...HEADINGS], ...rows]);
 
@@ -167,7 +154,7 @@ function table(files: readonly DebtFile[], palette: Palette): string[] {
  * totalling to nought — nought is a claim that they were free, and what
  * happened is that nobody knows. See `unpricedThroughout`.
  */
-function costCell(file: DebtFile): string {
+export function debtCost(file: DebtFile): string {
   return unpricedThroughout(file.spend) ? NO_PRICE : formatUsd(file.spend.usd);
 }
 
@@ -207,7 +194,7 @@ function row(
  * legend for an empty report is a line the reader has to check the report
  * against to find out it says nothing.
  */
-function footnotes(report: DebtReport, palette: Palette, limit?: number): string[] {
+export function formatDebtNotes(report: DebtReport, palette: Palette, limit?: number): string[] {
   const files = report.repos.flatMap((repo) => repo.files ?? []);
   if (files.length === 0) {
     return [];

@@ -10,7 +10,6 @@ export const UI_MENU: readonly MenuItem[] = [
   { screen: "sessions", label: "Session history", hint: "Browse goals, changed files and recorded evidence.", group: "WORK" },
   { screen: "week", label: "Week report", hint: "Review what landed and what went outside the plan.", group: "WORK" },
   { screen: "pr", label: "Pull request", hint: "Prepare a description from a session's record.", group: "WORK" },
-  { screen: "prime", label: "Plan with Prime", hint: "Review suggested files before starting work.", group: "WORK" },
   { screen: "agreement", label: "Agreements", hint: "Review file boundaries, actions and accepted terms.", group: "WORK" },
   { screen: "scan", label: "Tool activity", hint: "Review local activity captured from coding tools.", group: "INSIGHTS" },
   { screen: "agents", label: "Coding tool activity", hint: "See which tools contributed to recorded sessions.", group: "INSIGHTS" },
