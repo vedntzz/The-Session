@@ -50,7 +50,7 @@ export async function withOutcomes(
   gathered?: RepoFacts,
 ): Promise<Session[]> {
   const facts = gathered ?? (await factsFor(sessions, cwd));
-  return sessions.map((session) => resolve(session, facts));
+  return sessions.map((session) => resolveOutcome(session, facts));
 }
 
 /**
@@ -61,7 +61,7 @@ export async function withOutcomes(
  * recorded. Doing it here rather than in each view is what keeps the terminal
  * table, the page and the Markdown document from printing three answers.
  */
-function resolve(session: Session, facts?: RepoFacts): Session {
+export function resolveOutcome(session: Session, facts?: RepoFacts): Session {
   const computed = { ...session, outcome: effectiveOutcome(session, facts) };
   return { ...computed, outcome: reportedOutcome(computed) };
 }

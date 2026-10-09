@@ -26,10 +26,12 @@ export interface UiTerminal { input: ReadStream; output: WriteStream }
 export interface UiBrowserData { days?: number }
 export type UiBrowserRenderer<Data> = (data: Data, state: UiState, columns: number, rows: number,
   palette?: Palette, notice?: string, theme?: UiTheme, returnToHome?: boolean) => ReturnType<typeof renderUi>;
+/** An action may hand fresh data back to its owning browser. */
+export type UiBrowserActionResult<Data> = string | { message: string; data: Data };
 export interface UiBrowserAction<Data = UiData> {
   key: string; label: string;
   input?: { label: string; initial?: () => string };
-  run: (data: Data, state: UiState, value?: string, signal?: AbortSignal) => Promise<string>;
+  run: (data: Data, state: UiState, value?: string, signal?: AbortSignal) => Promise<UiBrowserActionResult<Data>>;
 }
 export interface UiBrowserOptions<Data = UiData> {
   returnToHome?: boolean; state?: UiState; selectedSessionId?: string;
@@ -134,8 +136,15 @@ export async function runUiBrowser<Data extends UiBrowserData>(initial: Data, re
       repaint();
       if (closed) { acting = false; return; }
       try {
-        const message = await action.run(data, { ...state }, value, pending.signal);
-        if (!closed) notice = message;
+        const response = await action.run(data, { ...state }, value, pending.signal);
+        if (!closed) {
+          if (typeof response !== "string") {
+            const id = options.select(data, state)[state.selected]?.id;
+            data = response.data;
+            state.selected = Math.max(0, options.select(data, state).findIndex(row => row.id === id));
+          }
+          notice = typeof response === "string" ? response : response.message;
+        }
       } catch (error) {
         notice = `${action.label} failed: ${error instanceof Error ? error.message : String(error)} ${action.key} retries.`;
       } finally {

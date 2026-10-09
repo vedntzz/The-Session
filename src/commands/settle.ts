@@ -103,7 +103,9 @@ function observe(
 export async function settleSessions(
   options: StoreOptions = {},
   gathered?: RepoFacts,
+  signal?: AbortSignal,
 ): Promise<SettleResult> {
+  signal?.throwIfAborted();
   const sessions = await readSessions(options);
   // Gathered by the caller where there is one — the daily sweep asks the
   // repository once and hands the answers to both halves of itself. A `git log`
@@ -120,7 +122,8 @@ export async function settleSessions(
   };
 
   for (const session of sessions) {
-    const settlement = await settleOne(session, facts, options);
+    signal?.throwIfAborted();
+    const settlement = await settleOne(session, facts, options, signal);
     if ("skipped" in settlement) {
       result[settlement.skipped] += 1;
     } else {
@@ -137,6 +140,14 @@ type Skipped = "stillOpen" | "empty" | "undecidable";
 /** Either what was written down about a session, or why nothing could be. */
 type Settlement = { settled: Settled } | { skipped: Skipped };
 
+/** Read-only decision shared by the preview and the signed writer. */
+export type SettlementDecision = { skipped: Skipped; verdict?: OutcomeVerdict } | {
+  outcome: SessionOutcome;
+  verdict: OutcomeVerdict;
+  against: Pick<RepoFacts, "branch" | "tip">;
+  wouldRecord: boolean;
+};
+
 /**
  * Where one session ended up.
  *
@@ -144,11 +155,10 @@ type Settlement = { settled: Settled } | { skipped: Skipped };
  * up anywhere yet, and recording `open` would be recording the absence of an
  * answer.
  */
-async function settleOne(
+export function settlementDecision(
   session: Session,
   facts: RepoFacts | undefined,
-  options: StoreOptions,
-): Promise<Settlement> {
+): SettlementDecision {
   if (session.endedAt === null) {
     return { skipped: "stillOpen" };
   }
@@ -164,9 +174,10 @@ async function settleOne(
 
   const outcome = effectiveOutcome(session, facts);
   if (!isTerminal(outcome)) {
-    return { skipped: "stillOpen" };
+    return { skipped: "stillOpen", verdict: judge(session, facts) };
   }
-  return { settled: await recordOutcome(session, outcome, facts, options) };
+  return { outcome, verdict: judge(session, facts), against: { branch: facts.branch, tip: facts.tip },
+    wouldRecord: !alreadySaid(session, outcome) };
 }
 
 /**
@@ -176,22 +187,25 @@ async function settleOne(
  * left alone — but a session that has since changed gets a second observation
  * rather than an edited first one, so the log shows that it moved and when.
  */
-async function recordOutcome(
+async function settleOne(
   session: Session,
-  outcome: SessionOutcome,
-  facts: RepoFacts,
+  facts: RepoFacts | undefined,
   options: StoreOptions,
-): Promise<Settled> {
+  signal?: AbortSignal,
+): Promise<Settlement> {
+  const decision = settlementDecision(session, facts);
+  if ("skipped" in decision) return decision;
   const settled: Settled = {
     session,
-    outcome,
-    verdict: judge(session, facts),
-    recorded: !alreadySaid(session, outcome),
+    outcome: decision.outcome,
+    verdict: decision.verdict,
+    recorded: decision.wouldRecord,
   };
   if (settled.recorded) {
-    settled.session = await record(session, observe(outcome, facts, "computed"), options);
+    signal?.throwIfAborted();
+    settled.session = await record(session, observe(decision.outcome, decision.against, "computed"), options);
   }
-  return settled;
+  return { settled };
 }
 
 /**
