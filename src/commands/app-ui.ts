@@ -23,6 +23,7 @@ import { canReturnPrHome, navigatePr } from "../render/tui/pr.js";
 import { runAgentsUi, type AgentsUiResult } from "./agents-browser-ui.js";
 import { loadDebtUi } from "./debt-ui.js";
 import { navigateDebt, renderDebtUi, visibleDebtRepos } from "../render/tui/debt.js";
+import { runOutcomesUi } from "./outcomes-ui.js";
 
 export async function loadAppUi(options: StoreOptions = {}): Promise<HomeView> {
   const cwd = options.cwd ?? process.cwd();
@@ -118,6 +119,7 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & Sca
   let scan: UiBrowserResult | undefined;
   let agents: AgentsUiResult | undefined;
   let debt: UiBrowserResult | undefined;
+  let outcomes: UiBrowserResult | undefined;
   const prScreen = prTemplateUi(options);
   while (!terminal.input.readableEnded && !terminal.input.destroyed && !terminal.output.destroyed) {
     const action = await runAppUi(view, palette, terminal, state => { position = state; });
@@ -160,6 +162,9 @@ export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & Sca
         render: renderDebtUi, select: visibleDebtRepos, navigate: navigateDebt,
         refreshNotice: "Reading recurring misses from all local records…" });
       if (debt.exitWorkspace) return;
+    } else if (action?.screen === "outcomes") {
+      outcomes = await runOutcomesUi(options, palette, terminal, outcomes);
+      if (outcomes.exitWorkspace) return;
     } else return action;
     view = { ...await loadAppUi(options), ...position };
   }

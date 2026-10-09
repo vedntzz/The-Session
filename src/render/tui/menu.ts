@@ -14,7 +14,7 @@ export const UI_MENU: readonly MenuItem[] = [
   { screen: "scan", label: "Tool activity", hint: "Review local activity captured from coding tools.", group: "INSIGHTS" },
   { screen: "agents", label: "Coding tool activity", hint: "See which tools contributed to recorded sessions.", group: "INSIGHTS" },
   { screen: "debt", label: "Recurring misses", hint: "Find files repeatedly changed outside the plan.", group: "INSIGHTS" },
-  { screen: "outcomes", label: "Work outcomes", hint: "Refresh evidence or explicitly mark an outcome.", group: "INSIGHTS" },
+  { screen: "outcomes", label: "Work outcomes", hint: "Review Git evidence and record outcomes for finished work.", group: "INSIGHTS" },
   { screen: "survival", label: "Follow-up checks", hint: "Check whether recorded changes are still present.", group: "INSIGHTS" },
   { screen: "knowledge", label: "Project knowledge", hint: "Explore links between recorded sessions and files.", group: "INSIGHTS" },
   { screen: "hooks", label: "Capture setup", hint: "Review capture status and supported tool hooks.", group: "SETUP" },
