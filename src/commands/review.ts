@@ -2,7 +2,6 @@
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { parseAgreement, proposerOf, type Agreement } from "../agreement.js";
-import { currentCommit } from "../git.js";
 import type { PrimeProposal } from "../prime.js";
 import { formatAgreement } from "../render/agreement.js";
 import { plainPalette, type Palette } from "../render/palette.js";
@@ -36,9 +35,6 @@ export async function startReviewed(
   const terminal = options.reviewTerminal ?? { input: process.stdin, output: process.stdout };
   requireReviewTerminal(terminal);
   await assertCanStart(intent.trim(), options);
-  if (!(await currentCommit(options.cwd ?? process.cwd()))) {
-    throw new Error("No commits yet, so there is no base to diff against. Make one commit first.");
-  }
   const initial = parseAgreement({
     paths: options.scope ?? options.proposal?.scope ?? [],
     actions: ["create", "edit"], sensitivePaths: [], policy: "record",
