@@ -109,7 +109,7 @@ export async function runAppUi(view: HomeView, palette: Palette = plainPalette,
 }
 
 /** Each screen releases the terminal before the next takes ownership. */
-export async function runWorkspaceUi(options: StartUiOptions & WeekOptions & ScanOptions = {}, palette: Palette = plainPalette,
+export async function runWorkspaceUi(options: Omit<StartUiOptions, "startTerminal"> & WeekOptions & ScanOptions = {}, palette: Palette = plainPalette,
   terminal: UiTerminal = { input: process.stdin, output: process.stdout }): Promise<HomeAction | undefined> {
   let view = await loadAppUi(options);
   let position = { selected: 0, scroll: 0 };

@@ -7,6 +7,7 @@ import type { WeekOptions } from "../commands/week.js";
 import type { Palette } from "../render/palette.js";
 import type { ReviewOptions } from "../commands/review.js";
 import type { UiTerminal } from "../commands/ui.js";
+import type { PromptTerminal } from "../commands/prompt-terminal.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
 export type ProgramOptions = StopOptions &
@@ -25,7 +26,7 @@ export type ProgramOptions = StopOptions &
      */
     stdin?: AsyncIterable<Buffer | string>;
     /** Injected terminal for the interactive start flow. Hooks never use it. */
-    startTerminal?: UiTerminal;
+    startTerminal?: PromptTerminal;
     /** Injected terminal for the bare Session workspace. */
     appTerminal?: UiTerminal;
   } & ReviewOptions;

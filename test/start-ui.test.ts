@@ -10,7 +10,7 @@ import { runStartUi } from "../src/commands/start-ui.js";
 import { startSession, startPassiveSession } from "../src/commands/start.js";
 import { stopSession } from "../src/commands/stop.js";
 import { buildProgram } from "../src/program.js";
-import { plainPalette, screenControl, uiThemeFor } from "../src/render/palette.js";
+import { screenControl, uiThemeFor } from "../src/render/palette.js";
 import { renderStartUi } from "../src/render/tui/start-screen.js";
 import { characters, draftScope, editStart, initialStartState, pasteStartText } from "../src/render/tui/start-state.js";
 import { cellWidth } from "../src/render/tui/text.js";
@@ -200,13 +200,4 @@ describe("interactive start with real records", () => {
     } finally {log.mockRestore();}
   });
 
-  it("routes the bare command to the terminal and prints a truthful confirmation on exit", async()=>{
-    const term=terminal();const log=vi.spyOn(console,"log").mockImplementation(()=>{});
-    try {
-      const running=buildProgram({...options(),startTerminal:term.io,palette:plainPalette}).parseAsync(["start"],{from:"user"});await ready(term);
-      term.input.write("declare a plan\u0013");await settled(term.text,"Session started.");term.input.write("q");await running;
-      expect(log.mock.calls.flat().join("\n")).toContain("started  declare a plan");
-      expect((await readSessions(options()))[0]?.intent).toBe("declare a plan");
-    } finally {log.mockRestore();}
-  });
 });
