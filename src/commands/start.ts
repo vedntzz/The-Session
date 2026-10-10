@@ -7,6 +7,7 @@ import { describePaths } from "../render/terminal.js";
 import { headOf, intentOf } from "../render/terminal/intent.js";
 import { safeText } from "../render/tui/text.js";
 import { stopSession, type StopOptions } from "./stop.js";
+import { assertStartAvailable } from "./start-conditions.js";
 import {
   appendSession,
   getOpenSession,
@@ -148,19 +149,10 @@ export async function assertCanStart(
   declared: string,
   options: StartOptions,
 ): Promise<void> {
-  const cwd = options.cwd ?? process.cwd();
   if (declared === "") {
     throw new Error('No intent given. Run: session start "what you are about to do"');
   }
-  if (!(await isRepo(cwd))) {
-    throw new Error(`Not a git repository: ${cwd}. Run session start from inside your repo.`);
-  }
-  const open = await getOpenSession(options);
-  if (open && !isCaptured(open)) {
-    throw new Error(
-      `A session is already open: "${describeOpen(open)}". Run session stop to close it.`,
-    );
-  }
+  await assertStartAvailable(options);
 }
 
 /** Opened by the hook and never declared: the one kind `start` may stop. */
@@ -175,11 +167,6 @@ async function stopCaptured(options: StartOptions): Promise<void> {
     return;
   }
   options.onCapturedClosed?.(await stopSession(options));
-}
-
-/** How an open session is named in the message that refuses to open a second. */
-function describeOpen(open: Session): string {
-  return open.intent ?? (open.intentMissing ? "opened by the hook, pasted first prompt not captured" : "opened by the hook, no prompt yet");
 }
 
 /**
