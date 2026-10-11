@@ -13,7 +13,7 @@ export function formatRecordingHome(
   return [
     `${INDENT}${palette.recording("◔ session  recording")}`,
     "",
-    ...recordingIntent(running, palette, width),
+    ...sessionIntentRows(running, palette, width),
     ...(running.scope.length > 0
       ? running.scope.flatMap((path, index) => startRows(index === 0 ? "scope" : "", path, palette.path, palette, width, 2))
       : row("scope", "none declared", palette.meta)),
@@ -26,10 +26,11 @@ export function formatRecordingHome(
 }
 
 /** Captured text keeps its first-line boundary until the shared row sanitizes it. */
-function recordingIntent(session: Session, palette: Palette, width?: number): string[] {
+export function sessionIntentRows(session: Session, palette: Palette, width?: number): string[] {
   const own = inOwnWords(session);
   const value = session.intent === null ? "unknown" : own ? session.intent : capturedPrompt(session.intent);
-  const reason = session.intentMissing === "paste-only" ? "the first prompt was pasted text, not captured" : "no intent recorded yet";
+  const reason = session.intentMissing === "paste-only" ? "the first prompt was pasted text, not captured"
+    : session.endedAt === null ? "no intent recorded yet" : "no intent recorded";
   return [
     ...startRows(own ? "intent" : "prompt", value, palette.intent, palette, width),
     ...(session.intent === null ? startRows("", reason, palette.meta, palette, width) : []),

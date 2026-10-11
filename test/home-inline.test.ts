@@ -106,8 +106,9 @@ const closed = (turns: number): Session => ({
   startedAt: "2026-01-15T14:02:00Z", endedAt: "2026-01-15T14:39:00Z",
 });
 it("omits money for unmeasured known-model cost", () => {
-  expect(formatHome({ last: closed(0) }, plainPalette, { rates }).join("\n")).not.toContain("$");
+  const lines = formatHome({ last: closed(0) }, plainPalette, { rates });
+  expect(lines).toContain("  cost        unknown"); expect(lines.join("\n")).not.toContain("$");
 });
 it("keeps a genuine measured zero cost visible", () => {
-  expect(formatHome({ last: closed(1) }, plainPalette, { rates }).join("\n")).toContain("$0.00");
+  expect(formatHome({ last: closed(1) }, plainPalette, { rates })).toContain("  cost        $0.00");
 });

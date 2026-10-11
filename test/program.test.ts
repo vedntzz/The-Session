@@ -434,12 +434,10 @@ describe("session", () => {
   it("the bare screen names the state and at most two commands", async () => {
     const lines = await run();
 
-    expect(lines[1]).toBe("  No sessions recorded in this repo yet.");
-    // Two suggestions, not a menu. Blank lines aside, that is the whole screen.
-    const said = lines.filter((line) => line.trim() !== "");
-    expect(said).toHaveLength(3);
-    expect(said[1]).toContain('session start "…"');
-    expect(said[2]).toContain("session hook install");
+    expect(lines).toContain("  ◔ session  ready"); expect(lines).toContain("  state       No sessions recorded in this repo yet.");
+    const commands = lines.filter((line) => /^\s+(?:next\s+)?session /.test(line));
+    expect(commands).toHaveLength(2);
+    expect(commands[0]).toBe("  next        session start"); expect(commands[1]).toBe("              session hook install");
   });
 
   it("the bare screen says what is recording, and how to close it", async () => {
@@ -461,11 +459,14 @@ describe("session", () => {
 
     const lines = await run();
 
-    expect(lines[1]).toMatch(/^ {2}Nothing is recording\. The last session ended at \d{2}:\d{2}/);
-    const said = lines.filter((line) => line.trim() !== "");
-    expect(said).toHaveLength(3);
-    expect(said[1]).toContain("session week last");
-    expect(said[2]).toContain('session start "…"');
+    const [session] = await readSessions(store);
+    expect(lines).toContain("  ◔ session  stopped"); expect(lines).toContain("  state       Nothing is recording.");
+    expect(lines).toContain(`  last        ${session?.id.slice(0, 8)}`);
+    expect(lines.find((line) => line.startsWith("  ended       "))).toMatch(/^  ended       \d{2}:\d{2}$/);
+    expect(lines).toContain("  cost        unknown");
+    const commands = lines.filter((line) => /^\s+(?:next\s+)?session /.test(line));
+    expect(commands).toHaveLength(2);
+    expect(commands[0]).toBe("  next        session week last"); expect(commands[1]).toBe("              session start");
   });
 
   it("names a command nobody has, rather than calling it a stray argument", async () => {

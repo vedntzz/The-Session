@@ -1528,24 +1528,22 @@ describe("formatHome", () => {
   it("names the last session and what it cost once nothing is running", () => {
     const last = session({ cost: cost({ turns: 1, inputTokens: 100_000 }) });
 
-    expect(formatHome({ last }, plainPalette, priced)[1]).toBe(
-      "  Nothing is recording. The last session ended at 14:39, costing $1.50.",
-    );
+    const lines = formatHome({ last }, plainPalette, priced);
+    expect(lines).toContain("  state       Nothing is recording.");
+    expect(lines).toContain("  ended       14:39"); expect(lines).toContain("  cost        $1.50");
   });
 
-  it("leaves the money off a session no rate covers", () => {
+  it("names cost as unknown for a session no rate covers", () => {
     const last = session({ cost: cost({ model: "mystery-9", inputTokens: 100_000 }) });
 
-    expect(formatHome({ last }, plainPalette, priced)[1]).toBe(
-      "  Nothing is recording. The last session ended at 14:39.",
-    );
+    expect(formatHome({ last }, plainPalette, priced)).toContain("  cost        unknown");
   });
 
   it("tells an empty repo what to type", () => {
     const lines = formatHome({}, plainPalette, priced);
 
-    expect(lines[1]).toBe("  No sessions recorded in this repo yet.");
-    expect(lines.at(-2)).toContain('session start "…"');
+    expect(lines).toContain("  ◔ session  ready"); expect(lines).toContain("  state       No sessions recorded in this repo yet.");
+    expect(lines.at(-2)).toContain("session start");
     expect(lines.at(-1)).toContain("session hook install");
   });
 
