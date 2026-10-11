@@ -706,14 +706,17 @@ describe("session", () => {
     expect(session?.observations?.[0]?.outcome).toBe("merged");
   });
 
-  it("sweeps from show and from the bare screen", async () => {
+  it("keeps bare home read-only when a sweep is due, then sweeps from show", async () => {
     await landASession();
     await nextDay();
-
-    expect((await run("week", "last"))[0]).toBe("  recorded 1 outcome");
-
-    // Already swept today, so the bare screen says nothing about it.
+    const home = store.home as string;
+    const log = path.join(home, (await readdir(home)).find((name) => name.endsWith(".jsonl")) as string);
+    const before = await readFile(log, "utf8"); const sessions = await readSessions(store);
     expect((await run()).join("\n")).not.toContain("recorded");
+    expect(await readFile(log, "utf8")).toBe(before);
+    expect(await readSessions(store)).toEqual(sessions);
+    await expect(readFile(await sweepStampFile(store))).rejects.toThrow(/ENOENT/);
+    expect((await run("week", "last"))[0]).toBe("  recorded 1 outcome");
   });
 
   it("sweeps from the hook that closes the session", async () => {

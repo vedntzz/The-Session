@@ -5,7 +5,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { promisify, stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runAppUi } from "../src/commands/app-ui.js";
+import { runAppUi, runWorkspaceUi } from "../src/commands/app-ui.js";
 import { debtReport } from "../src/commands/debt.js";
 import { loadDebtUi } from "../src/commands/debt-ui.js";
 import * as sweep from "../src/commands/sweep.js";
@@ -13,7 +13,6 @@ import { runUiBrowser, type UiBrowserData, type UiTerminal } from "../src/comman
 import { debtOf } from "../src/debt.js";
 import * as observe from "../src/observe.js";
 import { loadRates, parseRates, type RateTable } from "../src/pricing.js";
-import { buildProgram } from "../src/program.js";
 import { ansiPalette, plainPalette, screenControl, uiThemeFor } from "../src/render/palette.js";
 import { debtCost, debtFinding, formatDebtNotes, NOTHING_RECORDED } from "../src/render/terminal/debt.js";
 import { navigateDebt, renderDebtUi, visibleDebtRepos, type DebtUiData } from "../src/render/tui/debt.js";
@@ -113,7 +112,7 @@ describe("Recurring misses workspace", () => {
   it("refreshes all history and remembers real Home search/selection/scroll while restoring ownership and bytes", async () => {
     for (const name of [options.cwd, path.join(root, "alpha")]) { await mkdir(name, { recursive: true }); for (let n = 0; n < 3; n++) await record(name); }
     const before = await bytes(); const signals = process.listeners("SIGTERM"); const term = terminal(60, 20); const open = () => term.input.write("m" + "\u001b[B".repeat(UI_MENU.findIndex(item => item.screen === "debt")) + "\r");
-    const running = buildProgram({ ...options, appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" }); await wait(term, "OVERVIEW"); open(); await wait(term, "RECURRING MISSES"); term.input.write("/alpha\rr"); await wait(term, "Refreshed."); expect(term.frame()).toContain("> alpha"); term.input.write("\u001b[6~"); const frame = term.frame().split("\r\n").slice(0, -1); term.input.write("q"); await wait(term, "OVERVIEW"); open(); await wait(term, "RECURRING MISSES"); expect(term.frame().split("\r\n").slice(0, -1)).toEqual(frame);
+    const running = runWorkspaceUi(options, plainPalette, term.io); await wait(term, "OVERVIEW"); open(); await wait(term, "RECURRING MISSES"); term.input.write("/alpha\rr"); await wait(term, "Refreshed."); expect(term.frame()).toContain("> alpha"); term.input.write("\u001b[6~"); const frame = term.frame().split("\r\n").slice(0, -1); term.input.write("q"); await wait(term, "OVERVIEW"); open(); await wait(term, "RECURRING MISSES"); expect(term.frame().split("\r\n").slice(0, -1)).toEqual(frame);
     term.input.end(); await running; expect(term.input.listenerCount("keypress")).toBe(0); expect(term.output.listenerCount("resize")).toBe(0); expect(term.io.input.setRawMode).toHaveBeenLastCalledWith(false); expect(process.listeners("SIGTERM")).toEqual(signals); expect(await bytes()).toEqual(before);
   });
 });

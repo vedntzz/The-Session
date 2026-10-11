@@ -1,9 +1,10 @@
 // `session` with no arguments: a state screen, not a menu.
-import { formatUsd, priceSession, type RateTable } from "../../pricing.js";
+import { sessionFigure, type RateTable } from "../../pricing.js";
 import { inOwnWords, type Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { NO_RATES, type View } from "./cost.js";
 import { headOf } from "./intent.js";
+import { safeText } from "../tui/text.js";
 import { clock, flatten, INDENT, padRight, width, wrapSegments } from "./text.js";
 
 // --- the home screen -----------------------------------------------------
@@ -99,16 +100,16 @@ function whileRecording(running: Session): HomeText {
 /** The running session's intent, at the length a one-sentence screen has room for. */
 function asked(running: Session): string {
   if (inOwnWords(running)) {
-    return flatten(running.intent ?? "");
+    return flatten(safeText(running.intent ?? ""));
   }
   const { head, cut } = headOf(running.intent ?? "");
-  return `${flatten(head)}${cut ? " …" : ""}`;
+  return `${flatten(safeText(head))}${cut ? " …" : ""}`;
 }
 
 /** Nothing is open: when the last one ended and what it cost. */
 function afterLastSession(last: Session, rates: RateTable): HomeText {
-  const price = priceSession(last.cost, rates);
-  const cost = price.priced ? `, costing ${formatUsd(price.usd)}` : "";
+  const figure = sessionFigure(last.cost, rates);
+  const cost = figure === undefined ? "" : `, costing ${figure}`;
   const ended = last.endedAt === null ? "" : ` at ${clock(last.endedAt)}`;
   return {
     sentence: `Nothing is recording. The last session ended${ended}${cost}.`,

@@ -4,12 +4,11 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runAppUi } from "../src/commands/app-ui.js";
+import { runAppUi, runWorkspaceUi } from "../src/commands/app-ui.js";
 import { runUi, type UiTerminal } from "../src/commands/ui.js";
 import { weekExportActions } from "../src/commands/week-export-ui.js";
 import { loadWeekUi } from "../src/commands/week-ui.js";
 import type { WeekOptions } from "../src/commands/week.js";
-import { buildProgram } from "../src/program.js";
 import { renderWeek } from "../src/render/html.js";
 import { renderMarkdownWeek } from "../src/render/markdown.js";
 import { ansiPalette, plainPalette, screenControl, uiThemeFor } from "../src/render/palette.js";
@@ -113,7 +112,7 @@ describe("Week exports use the loaded selection", () => {
   it("exports from the real Week menu with its current range/filters and leaves signed bytes intact", async () => {
     const cwd = path.join(root, "repo"); await mkdir(cwd); const copy = vi.fn(async (_text: string) => {}); const launch = vi.fn(async (_file: string) => {}); const injected = { ...options, cwd, copy, launch, adapters: [] };
     await appendSession({ intent: "recorded work", startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), startCommit: "base", cost }, injected); const file = await resolveStoreFile(injected); const before = await readFile(file); const term = terminal();
-    const running = buildProgram({ ...injected, appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" }); await wait(term, "OVERVIEW"); term.input.write("m\u001b[B\u001b[B\u001b[B\r"); await wait(term, "last 7 days");
+    const running = runWorkspaceUi(injected, plainPalette, term.io); await wait(term, "OVERVIEW"); term.input.write("m\u001b[B\u001b[B\u001b[B\r"); await wait(term, "last 7 days");
     term.input.write("w"); await wait(term, "last 14 days"); term.input.write("suc"); await wait(term, "Copied Markdown"); term.input.write("h"); await wait(term, "Opened HTML"); const loaded = await loadWeekUi(14, injected);
     expect(copy.mock.calls[0]![0]).toBe(renderMarkdownWeek(loaded.sessions, 14, { ...loaded, selection: "source:declared" })); expect(await readFile(launch.mock.calls[0]![0], "utf8")).toBe(renderWeek(loaded.sessions, 14, {}, { ...loaded, tokens: true, selection: "source:declared" }));
     term.input.write("q"); await wait(term, "OVERVIEW"); term.input.write("q"); await running; expect(await readFile(file)).toEqual(before);

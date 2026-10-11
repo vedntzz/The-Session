@@ -4,7 +4,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildProgram } from "../src/program.js";
+import { runWorkspaceUi } from "../src/commands/app-ui.js";
 import { loadChecked, spendOf, type RateTable } from "../src/pricing.js";
 import { loadWeekUi } from "../src/commands/week-ui.js";
 import type { UiTerminal } from "../src/commands/ui.js";
@@ -106,7 +106,7 @@ describe("Week totals preserve measurement boundaries", () => {
       const input = new PassThrough(); const output = new PassThrough(); Object.assign(input, { isTTY: true, isRaw: false, setRawMode: vi.fn() }); Object.assign(output, { isTTY: true, columns: 110, rows: 60 });
       let rendered = ""; output.on("data", chunk => { rendered += String(chunk); }); const frame = () => rendered.split(screenControl.paint).at(-1) ?? "";
       const wait = async (value: string) => { await vi.waitFor(() => expect(frame()).toContain(value)); };
-      const running = buildProgram({ ...options, appTerminal: { input, output } as unknown as UiTerminal, palette: plainPalette }).parseAsync([], { from: "user" });
+      const running = runWorkspaceUi(options, plainPalette, { input, output } as unknown as UiTerminal);
       const openWeek = () => input.write("m\u001b[B\u001b[B\u001b[B\r");
       await wait("OVERVIEW"); openWeek(); await wait("last 7 days"); input.write("uw"); await wait("last 14 days"); input.write("s");
       expect(frame()).toContain("[u] Usage: hide"); expect(frame()).toContain("USAGE TOTALS"); input.write("q"); await wait("OVERVIEW");

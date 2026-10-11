@@ -6,7 +6,7 @@ import { PassThrough } from "node:stream";
 import { promisify, stripVTControlCharacters } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UiTerminal } from "../src/commands/ui.js";
-import { buildProgram } from "../src/program.js";
+import { runWorkspaceUi } from "../src/commands/app-ui.js";
 import { ansiPalette, plainPalette, screenControl, uiThemeFor } from "../src/render/palette.js";
 import { renderUi } from "../src/render/tui/screen.js";
 import { canReturnHome, initialState, navigate, visibleSessions, type UiState } from "../src/render/tui/state.js";
@@ -91,7 +91,7 @@ it("preserves keyboard choices and selected work through Home without writing re
     let text = ""; output.on("data", chunk => { text += String(chunk); }); const frame = () => text.split(screenControl.paint).at(-1) ?? "";
     const wait = async (wanted: string) => { await vi.waitFor(() => expect(frame()).toContain(wanted)); };
     const openHistory = () => input.write("m\u001b[B\u001b[B\r");
-    const running = buildProgram({ ...options, palette: plainPalette, appTerminal: { input, output } as unknown as UiTerminal }).parseAsync([], { from: "user" });
+    const running = runWorkspaceUi(options, plainPalette, { input, output } as unknown as UiTerminal);
     await wait("OVERVIEW"); openHistory(); await wait("all recorded history"); input.write("sdd\u001b[B");
     expect(frame()).toContain("> first work"); const beforeHome = frame(); input.write("q"); await wait("OVERVIEW");
     openHistory(); await wait("all recorded history"); expect(frame()).toBe(beforeHome);

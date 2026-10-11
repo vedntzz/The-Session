@@ -8,7 +8,7 @@ import * as observe from "../src/observe.js";
 import * as sweep from "../src/commands/sweep.js";
 import { loadPrUi } from "../src/commands/pr-ui.js";
 import { runUi, type UiTerminal } from "../src/commands/ui.js";
-import { buildProgram } from "../src/program.js";
+import { runWorkspaceUi } from "../src/commands/app-ui.js";
 import { renderPr } from "../src/render/pr.js";
 import { ansiPalette, plainPalette, plainUiTheme, screenControl, uiThemeFor } from "../src/render/palette.js";
 import { canReturnPrHome, navigatePr, renderPrUi } from "../src/render/tui/pr.js";
@@ -94,7 +94,7 @@ describe("Pull request preview inside the workspace", () => {
   });
   it.each([false, true])("opens PR from Home with correct default selection (only running: %s), persists it and releases EOF", async onlyRunning => {
     if (!onlyRunning) await record(); await record({ id: "running", intent: "running goal", endedAt: null, startedAt: "2026-10-03T12:00:00Z" });
-    const file = await resolveStoreFile(options); const before = await readFile(file); const term = terminal(); const running = buildProgram({ ...options, appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" });
+    const file = await resolveStoreFile(options); const before = await readFile(file); const term = terminal(); const running = runWorkspaceUi(options, plainPalette, term.io);
     const open = () => term.input.write("m\u001b[B\u001b[B\u001b[B\u001b[B\r"); await wait(term, "OVERVIEW"); const walk = vi.spyOn(observe, "withOutcomes"); open(); await wait(term, "Recorded result"); term.input.write("\r");
     expect(term.frame()).toContain(onlyRunning ? "Running; stop to record changed files" : "Finished session"); expect(walk).not.toHaveBeenCalled();
     term.input.write("q"); await wait(term, "OVERVIEW"); open(); await wait(term, "MARKDOWN PREVIEW"); term.input.end(); await running;

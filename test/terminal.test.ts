@@ -1525,7 +1525,7 @@ describe("formatHome", () => {
   });
 
   it("names the last session and what it cost once nothing is running", () => {
-    const last = session({ cost: cost({ inputTokens: 100_000 }) });
+    const last = session({ cost: cost({ turns: 1, inputTokens: 100_000 }) });
 
     expect(formatHome({ last }, plainPalette, priced)[1]).toBe(
       "  Nothing is recording. The last session ended at 14:39, costing $1.50.",

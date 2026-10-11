@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as prCommand from "../src/commands/pr.js";
 import { prTemplateUi } from "../src/commands/pr-template-ui.js";
 import { runUi, type UiBrowserAction, type UiTerminal } from "../src/commands/ui.js";
-import { buildProgram } from "../src/program.js";
+import { runWorkspaceUi } from "../src/commands/app-ui.js";
 import { fillTemplate, prParts } from "../src/render/pr.js";
 import { ansiPalette, plainPalette, screenControl } from "../src/render/palette.js";
 import { canReturnPrHome, navigatePr } from "../src/render/tui/pr.js";
@@ -87,7 +87,7 @@ describe("Local PR template selection", () => {
   });
   it("remembers the accepted template across Home and refresh without rewriting the signed ledger", async () => {
     await writeFile(path.join(options.cwd, "good.md"), "ORIGINAL {{intent}}"); await appendSession({ intent: "recorded goal", startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), startCommit: "base" }, options);
-    const file = await resolveStoreFile(options); const before = await readFile(file); const term = terminal(); const running = buildProgram({ ...options, appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" }); const open = () => term.input.write("m\u001b[B\u001b[B\u001b[B\u001b[B\r");
+    const file = await resolveStoreFile(options); const before = await readFile(file); const term = terminal(); const running = runWorkspaceUi(options, plainPalette, term.io); const open = () => term.input.write("m\u001b[B\u001b[B\u001b[B\u001b[B\r");
     await wait(term, "OVERVIEW"); open(); await wait(term, "Recorded result"); term.input.write("tgood.md\r"); await wait(term, "Template loaded:"); term.input.write("\rq"); await wait(term, "OVERVIEW"); await writeFile(path.join(options.cwd, "good.md"), "CHANGED {{intent}}");
     open(); await wait(term, "MARKDOWN PREVIEW"); expect(term.frame()).toContain("ORIGINAL recorded goal"); term.input.write("r"); await wait(term, "Refreshed."); expect(term.frame()).toContain("ORIGINAL recorded goal"); term.input.write("q"); await wait(term, "OVERVIEW"); term.input.write("q"); await running; expect(await readFile(file)).toEqual(before);
   });

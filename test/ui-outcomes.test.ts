@@ -5,7 +5,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { promisify, stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runAppUi } from "../src/commands/app-ui.js";
+import { runAppUi, runWorkspaceUi } from "../src/commands/app-ui.js";
 import { loadOutcomesUi, outcomesUiActions } from "../src/commands/outcomes-ui.js";
 import * as settle from "../src/commands/settle.js";
 import * as sweep from "../src/commands/sweep.js";
@@ -13,7 +13,6 @@ import { runUiBrowser, type UiTerminal } from "../src/commands/ui.js";
 import { verifyLog } from "../src/commands/verify.js";
 import * as observe from "../src/observe.js";
 import { effectiveOutcome, judge, preexistingKey, type Observation, type RepoFacts } from "../src/outcome.js";
-import { buildProgram } from "../src/program.js";
 import { ansiPalette, plainPalette, screenControl, uiThemeFor } from "../src/render/palette.js";
 import { UI_MENU } from "../src/render/tui/menu.js";
 import { renderOutcomesUi, type OutcomesUiData } from "../src/render/tui/outcomes.js";
@@ -119,7 +118,7 @@ describe("Work outcomes workspace", () => {
     term.input.write("w\u001b[200~record\r\u001b[201~"); expect(run).not.toHaveBeenCalled(); term.input.write("\r"); expect(run).toHaveBeenCalledWith(input, expect.any(Object), "record", expect.any(AbortSignal)); term.input.write("q"); expect(await running).toMatchObject({ selectedSessionId: "one" }); expect(run.mock.calls[0]![3]!.aborted).toBe(true); const home = runAppUi({ repo: "local", branch: "main", home: {} }, plainPalette, term.io); const frame = term.frame(); complete(); await new Promise(resolve => setImmediate(resolve)); expect(term.frame()).toBe(frame); expect(input).toEqual(original); term.input.write("q"); await home;
   });
   it("retains real Home search, selection and scroll after read-only refresh with clean terminal ownership", async () => {
-    const source = await fixture(); const before = await readFile(source.ledger); const signals = process.listeners("SIGTERM"); const term = terminal(60, 20); const open = () => term.input.write("m" + "\u001b[B".repeat(UI_MENU.findIndex(item => item.screen === "outcomes")) + "\r"); const running = buildProgram({ ...options, appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" });
+    const source = await fixture(); const before = await readFile(source.ledger); const signals = process.listeners("SIGTERM"); const term = terminal(60, 20); const open = () => term.input.write("m" + "\u001b[B".repeat(UI_MENU.findIndex(item => item.screen === "outcomes")) + "\r"); const running = runWorkspaceUi(options, plainPalette, term.io);
     await wait(term, "OVERVIEW"); open(); await wait(term, "WORK OUTCOMES"); term.input.write("/one\rr"); await wait(term, "Refreshed."); term.input.write("\u001b[6~"); const frame = term.frame().split("\r\n").slice(0, -1); term.input.write("q"); await wait(term, "OVERVIEW"); open(); await wait(term, "WORK OUTCOMES"); expect(term.frame().split("\r\n").slice(0, -1)).toEqual(frame); term.input.end(); await running;
     expect(term.input.listenerCount("keypress")).toBe(0); expect(term.output.listenerCount("resize")).toBe(0); expect(term.io.input.setRawMode).toHaveBeenLastCalledWith(false); expect(process.listeners("SIGTERM")).toEqual(signals); expect(await readFile(source.ledger)).toEqual(before);
   });
