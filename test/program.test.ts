@@ -447,11 +447,12 @@ describe("session", () => {
 
     const lines = await run();
 
-    expect(lines[1]).toMatch(/^ {2}Recording since \d{2}:\d{2}: rate limit the \/orders endpoint\.$/);
-    const said = lines.filter((line) => line.trim() !== "");
-    expect(said).toHaveLength(3);
-    expect(said[1]).toContain("session stop");
-    expect(said[2]).toContain("session week");
+    expect(lines).toContain("  ◔ session  recording");
+    expect(lines).toContain("  intent      rate limit the /orders endpoint");
+    expect(lines.find((line) => line.startsWith("  since       "))).toMatch(/^  since       \d{2}:\d{2}$/);
+    const commands = lines.filter((line) => /^\s+(?:next\s+)?session /.test(line));
+    expect(commands).toHaveLength(2); expect(commands[0]).toContain("session stop");
+    expect(commands[1]).toContain("session week");
   });
 
   it("the bare screen points at the last session once nothing is running", async () => {

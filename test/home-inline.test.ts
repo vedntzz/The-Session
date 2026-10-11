@@ -61,7 +61,7 @@ it.each(["xterm", "dumb", "pipe"])("returns inline without owning %s input or cr
   const on = vi.spyOn(io.input, "on"); const resume = vi.spyOn(io.input, "resume"); const pause = vi.spyOn(io.input, "pause");
   await bare(io);
   expect(printed.join("\n")).toContain("No sessions recorded in this repo yet.");
-  expect(printed.filter((line) => /^  session /.test(line))).toHaveLength(2);
+  expect(printed.filter((line) => /^\s+(?:next\s+)?session /.test(line))).toHaveLength(2);
   expect(io.raw).not.toHaveBeenCalled(); expect(io.text()).toBe("");
   expect(on).not.toHaveBeenCalled(); expect(resume).not.toHaveBeenCalled(); expect(pause).not.toHaveBeenCalled();
   expect(io.input.readableLength).toBe(length); expect(io.input.readableFlowing).toBe(flowing);
@@ -79,16 +79,22 @@ it.each(["declared", "captured"] as const)("prints safe %s intent without changi
   const text = printed.join("\n"); expect(text).not.toContain("\u001b");
   expect(text).toContain(source === "declared" ? "First line. Second line." : "First line …");
   if (source === "captured") expect(text).not.toContain("Second line.");
-  expect(printed.filter((line) => /^  session /.test(line))).toHaveLength(2);
+  expect(printed.filter((line) => /^\s+(?:next\s+)?session /.test(line))).toHaveLength(2);
   expect(await getOpenSession(options())).toEqual(open); expect(await snapshot()).toEqual(before);
   expect(io.raw).not.toHaveBeenCalled(); expect(io.text()).toBe("");
 });
 
 it.each([[60, true], [80, true], [60, false]] as const)("uses %i-column TTY=%s geometry and preserves the full declaration", async (columns, tty) => {
   const intent = "Keep all declared words in the home output. ".repeat(5).trim();
-  await startSession(intent, options()); const io = terminal(columns, tty); await bare(io);
-  const prose = printed.filter((line) => line.trim() && !/^  session /.test(line));
-  expect(prose.map((line) => line.trim()).join(" ").replace(/^Recording since \d{2}:\d{2}: /, "")).toBe(`${intent}.`);
+  const literal = `src/${"a".repeat(90)}.ts`;
+  await startSession(intent, { ...options(), scope: [literal] }); const io = terminal(columns, tty); await bare(io);
+  const first = printed.findIndex((line) => line.startsWith("  intent      "));
+  const scope = printed.findIndex((line) => line.startsWith("  scope       "));
+  const id = printed.findIndex((line) => line.startsWith("  id          "));
+  const prose = printed.slice(first, scope);
+  expect(prose.map((line) => line.slice(14)).join(" ")).toBe(intent);
+  expect(printed.slice(scope, id).map((line, index) => line.slice(index ? 16 : 14)).join("")).toBe(literal);
+  expect((await getOpenSession(options()))?.scope).toEqual([literal]);
   if (tty) expect(printed.every((line) => cellWidth(line) <= columns)).toBe(true);
   else { expect(prose).toHaveLength(1); expect(cellWidth(prose[0]!)).toBeGreaterThan(columns); }
 });
