@@ -9,6 +9,7 @@ import { buildProgram } from "../src/program.js";
 import type { UiTerminal } from "../src/commands/ui.js";
 import { startSession } from "../src/commands/start.js";
 import { stopSession } from "../src/commands/stop.js";
+import { verifyLog } from "../src/commands/verify.js";
 import { readSessions } from "../src/store.js";
 import { plainPalette } from "../src/render/palette.js";
 import { cellWidth } from "../src/render/tui/text.js";
@@ -48,10 +49,10 @@ it.each([[60, true], [80, true], [60, false]] as const)("wraps safe confirmation
   const intent = "Keep every declared word in the completion. ".repeat(4).trim(); const literal = `資料/${"é界".repeat(30)}.ts`;
   await startSession(intent, { ...options(), scope: [literal] }); await mkdir(path.dirname(path.join(cwd, literal)));
   await writeFile(path.join(cwd, literal), "changed"); const lines = await run(columns, tty);
-  const first = lines.findIndex((line) => line.startsWith("  intent      ")); const changed = lines.findIndex((line) => line.startsWith("  changed     "));
-  const id = lines.findIndex((line) => line.startsWith("  id          "));
-  expect(lines.slice(first, changed).map((line) => line.slice(14)).join(" ")).toBe(intent);
-  expect(lines.slice(changed + 1, id).map((line, index) => line.slice(index ? 16 : 14)).join("")).toBe(literal);
+  const first = lines.findIndex((line) => line.startsWith("  intent      ")); const scope = lines.findIndex((line) => line.startsWith("  scope       "));
+  const changed = lines.findIndex((line) => line.startsWith("  changed     ")); const outside = lines.findIndex((line) => line.startsWith("  outside     "));
+  expect(lines.slice(first, scope).map((line) => line.slice(14)).join(" ")).toBe(intent);
+  expect(lines.slice(changed + 1, outside).map((line, index) => line.slice(index ? 16 : 14)).join("")).toBe(literal);
   expect((await readSessions(options()))[0]?.reality).toEqual([literal]);
   if (tty) expect(lines.every((line) => cellWidth(line) <= columns)).toBe(true);
   else expect(lines[first]).toBe(`  intent      ${intent}`);
@@ -72,4 +73,18 @@ it("sanitizes completion text while preserving literal signed intent and paths",
   expect(saved?.intent).toBe(intent); expect(saved?.reality).toEqual([literal]);
   expect(lines).toContain("  intent      Work safely"); expect(lines).toContain("              notes.txt");
   expect(printed.join("\n")).not.toContain("\u001b");
+});
+it.each([true, false])("records the actual diff with an accepted scope=%s", async (scoped) => {
+  const scope = scoped ? ["base.txt"] : []; const open = await startSession("Change inside and outside", { ...options(), ...(scoped ? { scope } : {}) });
+  await writeFile(path.join(cwd, "base.txt"), "inside"); await writeFile(path.join(cwd, "outside file.ts"), "outside");
+  const lines = await run(); const [saved] = await readSessions(options());
+  expect(saved?.intent).toBe(open.intent); expect(saved?.scope).toEqual(scope); expect(saved?.id).toBe(open.id);
+  expect(saved?.reality).toEqual(["base.txt", "outside file.ts"]);
+  expect(saved?.drift).toEqual(scoped ? ["outside file.ts"] : ["base.txt", "outside file.ts"]);
+  expect(lines).toContain(`  scope       ${scoped ? "base.txt" : "none declared"}`); expect(lines).toContain("  changed     2 files");
+  expect(lines).toContain(`  outside     ${scoped ? "1 file" : "unknown"}`);
+  if (scoped) expect(lines).toContain("              ! outside file.ts");
+  else { expect(lines).toContain("              no scope declared to compare against"); expect(lines.join("\n")).not.toContain("! "); }
+  expect(await readSessions(options())).toHaveLength(1);
+  expect((await verifyLog(options())).check).toMatchObject({ signaturesChecked: true, total: 2, verified: 2 });
 });

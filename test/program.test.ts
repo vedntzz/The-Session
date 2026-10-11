@@ -392,7 +392,7 @@ describe("session", () => {
     // the action throws, so a clean resolve here is an exit 0.
     const lines = await run("stop");
 
-    expect(lines).toContain("  outside  undeclared.txt");
+    expect(lines).toContain("  outside     1 file"); expect(lines).toContain("              ! undeclared.txt");
     expect(process.exitCode).toBeUndefined();
   });
 

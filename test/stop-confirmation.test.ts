@@ -23,10 +23,11 @@ it.each([60, 80, undefined])("retains full intent and literal Unicode paths at w
   const literal = `資料/${"e\u0301界".repeat(40)}.ts`; const record = stopped({ intent, reality: [literal, "notes/a  file*[x],.ts"] });
   const before = JSON.stringify(record); const plain = formatStopConfirmation(record, plainPalette, [], width);
   const first = plain.findIndex((line) => line.startsWith("  intent      "));
+  const scope = plain.findIndex((line) => line.startsWith("  scope       "));
   const changed = plain.findIndex((line) => line.startsWith("  changed     "));
-  const id = plain.findIndex((line) => line.startsWith("  id          "));
-  expect(plain.slice(first, changed).map((line) => line.slice(14)).join(" ")).toBe(intent);
-  const paths = plain.slice(changed + 1, id);
+  const outside = plain.findIndex((line) => line.startsWith("  outside     "));
+  expect(plain.slice(first, scope).map((line) => line.slice(14)).join(" ")).toBe(intent);
+  const paths = plain.slice(changed + 1, outside);
   expect(paths.slice(0, -1).map((line, index) => line.slice(index ? 16 : 14)).join("")).toBe(literal);
   expect(paths.at(-1)).toBe("              notes/a  file*[x],.ts");
   expect(formatStopConfirmation(record, ansiPalette, [], width).map(stripVTControlCharacters)).toEqual(plain);
@@ -55,7 +56,7 @@ it.each([0, 1])("keeps cost evidence honest with %i measured turns", (turns) => 
   expect(lines.join("\n")).not.toContain("$");
 });
 it("keeps safe full metadata in a separated wrapped block", () => {
-  const detail = `  outside  ${"Keep all metadata visible. ".repeat(6).trim()}\u001b[2J`;
+  const detail = `  note     ${"Keep all metadata visible. ".repeat(6).trim()}\u001b[2J`;
   const lines = formatStopConfirmation(stopped(), plainPalette, [detail], 60);
   const id = lines.findIndex((line) => line.startsWith("  id          ")); const cost = lines.findIndex((line) => line.startsWith("  cost        "));
   const start = id + 2; const details = lines.slice(start, cost);
