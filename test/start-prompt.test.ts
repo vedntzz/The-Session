@@ -10,6 +10,7 @@ import { buildProgram } from "../src/program.js";
 import { startPassiveSession, startSession } from "../src/commands/start.js";
 import { getOpenSession, readSessions } from "../src/store.js";
 import { ansiPalette, plainPalette, type Palette } from "../src/render/palette.js";
+import { cellWidth } from "../src/render/tui/text.js";
 
 const exec = promisify(execFile);
 let root: string; let cwd: string; let home: string; let printed: string[];
@@ -121,4 +122,19 @@ it("takes HEAD and the dirty baseline at acceptance", async () => {
   io.input.write("Use current facts\n\n"); await running;
   const [session] = await readSessions(options());
   expect(session?.startCommit).toBe(head); expect(session?.baseline).toEqual(["dirty.txt"]);
+});
+it("wraps the saved declaration at the width captured before prompting", async () => {
+  const intent = "Keep every word of this declaration visible. ".repeat(3).trim();
+  const literal = `src/${"a".repeat(90)}.ts`;
+  const io = terminal(); io.output.columns = 60; const running = run(io); await ready(io);
+  io.output.columns = 80; io.input.write(`${intent}\n${literal}\n\n`); await running;
+  const [session] = await readSessions(options());
+  expect(session?.intent).toBe(intent); expect(session?.scope).toEqual([literal]);
+  const lines = printed.map(stripVTControlCharacters);
+  expect(lines.every((line) => cellWidth(line) <= 60)).toBe(true);
+  const first = lines.findIndex((line) => line.startsWith("  intent      "));
+  const scope = lines.findIndex((line) => line.startsWith("  scope       "));
+  const id = lines.findIndex((line) => line.startsWith("  id          "));
+  expect(lines.slice(first, scope).map((line) => line.slice(14)).join(" ")).toBe(intent);
+  expect(lines.slice(scope, id).map((line, index) => line.slice(index === 0 ? 14 : 16)).join("")).toBe(literal);
 });
