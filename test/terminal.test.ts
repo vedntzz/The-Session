@@ -1510,41 +1510,40 @@ describe("formatHome", () => {
   it("says what is recording, and offers two commands", () => {
     const lines = formatHome({ running: session({ endedAt: null }) }, plainPalette, priced);
 
-    expect(lines[1]).toBe("  Recording since 14:02: add rate limiting to /orders.");
-    expect(lines.filter((line) => line.trim() !== "")).toHaveLength(3);
+    expect(lines).toContain("  ◔ session  recording");
+    expect(lines).toContain("  intent      add rate limiting to /orders");
+    expect(lines).toContain("  since       14:02");
+    expect(lines.filter((line) => /^\s+(?:next\s+)?session /.test(line))).toHaveLength(2);
     expect(lines.at(-2)).toContain("session stop");
     expect(lines.at(-1)).toContain("session week");
   });
 
-  it("says a passive session has not been given a prompt yet", () => {
+  it("shows that a passive session has no intent recorded yet", () => {
     const running = session({ endedAt: null, intent: null, intentSource: "captured" });
 
-    expect(formatHome({ running }, plainPalette, priced)[1]).toBe(
-      "  Recording since 14:02: nothing asked yet.",
-    );
+    const lines = formatHome({ running }, plainPalette, priced);
+    expect(lines).toContain("  prompt      unknown"); expect(lines).toContain("              no intent recorded yet");
   });
 
   it("names the last session and what it cost once nothing is running", () => {
-    const last = session({ cost: cost({ inputTokens: 100_000 }) });
+    const last = session({ cost: cost({ turns: 1, inputTokens: 100_000 }) });
 
-    expect(formatHome({ last }, plainPalette, priced)[1]).toBe(
-      "  Nothing is recording. The last session ended at 14:39, costing $1.50.",
-    );
+    const lines = formatHome({ last }, plainPalette, priced);
+    expect(lines).toContain("  state       Nothing is recording.");
+    expect(lines).toContain("  ended       14:39"); expect(lines).toContain("  cost        $1.50");
   });
 
-  it("leaves the money off a session no rate covers", () => {
+  it("names cost as unknown for a session no rate covers", () => {
     const last = session({ cost: cost({ model: "mystery-9", inputTokens: 100_000 }) });
 
-    expect(formatHome({ last }, plainPalette, priced)[1]).toBe(
-      "  Nothing is recording. The last session ended at 14:39.",
-    );
+    expect(formatHome({ last }, plainPalette, priced)).toContain("  cost        unknown");
   });
 
   it("tells an empty repo what to type", () => {
     const lines = formatHome({}, plainPalette, priced);
 
-    expect(lines[1]).toBe("  No sessions recorded in this repo yet.");
-    expect(lines.at(-2)).toContain('session start "…"');
+    expect(lines).toContain("  ◔ session  ready"); expect(lines).toContain("  state       No sessions recorded in this repo yet.");
+    expect(lines.at(-2)).toContain("session start");
     expect(lines.at(-1)).toContain("session hook install");
   });
 
@@ -1552,8 +1551,8 @@ describe("formatHome", () => {
     const states = [{ running: session({ endedAt: null }) }, { last: session() }, {}];
 
     for (const state of states) {
-      const said = formatHome(state, plainPalette, priced).filter((line) => line.trim() !== "");
-      expect(said).toHaveLength(3);
+      const commands = formatHome(state, plainPalette, priced).filter((line) => /^\s+(?:next\s+)?session /.test(line));
+      expect(commands).toHaveLength(2);
     }
   });
 });

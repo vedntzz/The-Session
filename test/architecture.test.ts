@@ -32,8 +32,6 @@ const KNOWN_EXCEPTIONS: Record<string, string> = {
   "commands/scan.ts": "scan reads transcripts directly, before any adapter is set up",
   "program/scan.ts": "scan's message naming where it looked",
   "program/hook.ts": "help text naming the PreToolUse event",
-  "program/stop.ts": "comment on the SessionEnd hook's budget",
-  "program/start.ts": "comment on why the SessionStart handler prints nothing",
   "program/intent.ts": "comment on the UserPromptSubmit hook",
 };
 

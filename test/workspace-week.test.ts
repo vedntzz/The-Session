@@ -4,10 +4,9 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runAppUi } from "../src/commands/app-ui.js";
+import { runAppUi, runWorkspaceUi } from "../src/commands/app-ui.js";
 import { runUi, type UiTerminal } from "../src/commands/ui.js";
 import { loadWeekUi } from "../src/commands/week-ui.js";
-import { buildProgram } from "../src/program.js";
 import { ansiPalette, plainPalette, screenControl, uiThemeFor } from "../src/render/palette.js";
 import { initialState } from "../src/render/tui/state.js";
 import { cellWidth } from "../src/render/tui/text.js";
@@ -97,7 +96,7 @@ describe("Week inside the workspace", () => {
   it("remembers Week range, filters, selection and scroll through Home without writing", async () => {
     await record("older declared goal ".repeat(50), 10); await record("recent declared goal", 1);
     const file = await resolveStoreFile(options()); const beforeStore = await readFile(file); const term = terminal();
-    const running = buildProgram({ ...options(), appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" });
+    const running = runWorkspaceUi(options(), plainPalette, term.io);
     const menuWeek = () => term.input.write("m\u001b[B\u001b[B\u001b[B\r");
     const stableFrame = () => term.frame().split("\r\n").filter(line => !/Refreshed\.|Session \d+\//u.test(line)).join("\r\n");
     await wait(term, "OVERVIEW"); menuWeek(); await wait(term, "last 7 days"); term.input.write("w"); await wait(term, "last 14 days");

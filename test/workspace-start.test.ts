@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startPassiveSession, startSession } from "../src/commands/start.js";
 import { stopSession } from "../src/commands/stop.js";
-import { buildProgram } from "../src/program.js";
+import { runWorkspaceUi } from "../src/commands/app-ui.js";
 import { plainPalette, screenControl } from "../src/render/palette.js";
 import { getOpenSession, resolveStoreFile, readSessions } from "../src/store.js";
 import type { UiTerminal } from "../src/commands/ui.js";
@@ -28,7 +28,7 @@ describe("Start inside the Session workspace", () => {
   const frame = async (term: ReturnType<typeof terminal>, text: string) => {
     await vi.waitFor(() => expect(term.frame()).toContain(text));
   };
-  const open = (term: ReturnType<typeof terminal>) => buildProgram({ ...options(), appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" });
+  const open = (term: ReturnType<typeof terminal>) => runWorkspaceUi(options(), plainPalette, term.io);
   beforeEach(async () => {
     vi.stubEnv("TERM", "xterm"); root = await mkdtemp(path.join(tmpdir(), "session-workspace-start-"));
     cwd = path.join(root, "repo"); home = path.join(root, "store"); await mkdir(cwd);

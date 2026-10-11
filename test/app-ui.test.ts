@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -23,16 +23,6 @@ beforeEach(async () => { vi.stubEnv("TERM", "xterm"); root = await mkdtemp(path.
 afterEach(async () => { vi.unstubAllEnvs(); vi.restoreAllMocks(); await rm(root, { recursive: true, force: true }); });
 
 describe("Session app entry and terminal ownership", () => {
-  it("opens Home from the bare command and hands back a command without creating files", async () => {
-    const term = terminal();
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const running = buildProgram({ cwd: root, home: path.join(root, "store"), palette: plainPalette, appTerminal: term.io }).parseAsync([], { from: "user" });
-    await vi.waitFor(() => expect(term.text()).toContain("OVERVIEW")); term.input.write("\u001b[B\r"); await running;
-    expect(term.raw.mock.calls).toEqual([[true], [false]]); expect(term.text()).toContain(screenControl.leave);
-    expect(log.mock.calls.flat().join("\n")).toContain("Open Capture setup with: session hook --help");
-    expect(await readdir(root)).toEqual([]);
-  });
-
   it("preserves Home selection when returning from the menu and restores all listeners", async () => {
     const term = terminal(); const signals = process.listenerCount("SIGINT");
     const running = runAppUi(view, plainPalette, term.io);

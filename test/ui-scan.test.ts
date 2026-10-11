@@ -8,11 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as observe from "../src/observe.js";
 import * as sweep from "../src/commands/sweep.js";
 import * as store from "../src/store.js";
-import { runAppUi } from "../src/commands/app-ui.js";
+import { runAppUi, runWorkspaceUi } from "../src/commands/app-ui.js";
 import { scanSessions } from "../src/commands/scan.js";
 import { loadScanUi } from "../src/commands/scan-ui.js";
 import { runUiBrowser, type UiTerminal } from "../src/commands/ui.js";
-import { buildProgram } from "../src/program.js";
 import { ansiPalette, plainPalette, screenControl, uiThemeFor } from "../src/render/palette.js";
 import { UI_MENU } from "../src/render/tui/menu.js";
 import { navigateScan, renderScanUi, SCAN_WINDOWS, scanQuery, visibleScanned, type ScanUiData } from "../src/render/tui/scan.js";
@@ -88,6 +87,6 @@ describe("Native scanned-session workspace", () => {
   });
   it("remembers the real Tool activity range/project/selection/scroll through Home without modifying transcripts or signed records", async () => {
     const label = "First local prompt " + "details ".repeat(100); const source = await transcript("newest-row", options.cwd, label); await transcript("older-row", options.cwd, label, "2026-10-04T12:00:00Z"); const sourceBytes = await readFile(source); await store.appendSession({ intent: "signed goal", startCommit: "base", startedAt: "2026-10-01T12:00:00Z", endedAt: "2026-10-01T13:00:00Z" }, options); const ledger = await store.resolveStoreFile(options); const signedBytes = await readFile(ledger); const term = terminal(60, 20); const open = () => term.input.write("m" + "\u001b[B".repeat(UI_MENU.findIndex(item => item.screen === "scan")) + "\r");
-    const running = buildProgram({ ...options, appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" }); await wait(term, "OVERVIEW"); open(); await wait(term, "TOOL ACTIVITY"); term.input.write("w"); await wait(term, "Refreshed."); expect(term.frame()).toContain("last 7 days"); term.input.write("p\u001b[B\u001b[6~"); const frame = term.frame().split("\r\n").slice(0, -1); term.input.write("q"); await wait(term, "OVERVIEW"); open(); await wait(term, "TOOL ACTIVITY"); expect(term.frame().split("\r\n").slice(0, -1)).toEqual(frame); term.input.end(); await running; expect(term.input.listenerCount("keypress")).toBe(0); expect(await readFile(source)).toEqual(sourceBytes); expect(await readFile(ledger)).toEqual(signedBytes);
+    const running = runWorkspaceUi(options, plainPalette, term.io); await wait(term, "OVERVIEW"); open(); await wait(term, "TOOL ACTIVITY"); term.input.write("w"); await wait(term, "Refreshed."); expect(term.frame()).toContain("last 7 days"); term.input.write("p\u001b[B\u001b[6~"); const frame = term.frame().split("\r\n").slice(0, -1); term.input.write("q"); await wait(term, "OVERVIEW"); open(); await wait(term, "TOOL ACTIVITY"); expect(term.frame().split("\r\n").slice(0, -1)).toEqual(frame); term.input.end(); await running; expect(term.input.listenerCount("keypress")).toBe(0); expect(await readFile(source)).toEqual(sourceBytes); expect(await readFile(ledger)).toEqual(signedBytes);
   });
 });

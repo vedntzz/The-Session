@@ -4,12 +4,11 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runAppUi } from "../src/commands/app-ui.js";
+import { runAppUi, runWorkspaceUi } from "../src/commands/app-ui.js";
 import { prExportActions } from "../src/commands/pr-export-ui.js";
 import { loadPrUi } from "../src/commands/pr-ui.js";
 import { prTemplateUi } from "../src/commands/pr-template-ui.js";
 import { runUi, type UiBrowserAction, type UiTerminal } from "../src/commands/ui.js";
-import { buildProgram } from "../src/program.js";
 import { fillTemplate, prParts, renderPr } from "../src/render/pr.js";
 import { ansiPalette, plainPalette, screenControl, uiThemeFor } from "../src/render/palette.js";
 import { canReturnPrHome, navigatePr, prUiDocument, renderPrUi } from "../src/render/tui/pr.js";
@@ -90,6 +89,6 @@ describe("PR copy and create-only save", () => {
   });
   it("copies and saves through the real PR workspace with its accepted snapshot and unchanged signed bytes", async () => {
     const copy = vi.fn(async (_text: string) => {}); const injected = { ...options, copy }; const source = "CUSTOM {{intent}}\n{{changed}}\n{{cost}}"; await writeFile(path.join(options.cwd, "template.md"), source); await appendSession({ intent: "recorded goal", startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), startCommit: "base" }, options); const ledger = await resolveStoreFile(options); const before = await readFile(ledger); const term = terminal();
-    const running = buildProgram({ ...injected, appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" }); await wait(term, "OVERVIEW"); term.input.write("m\u001b[B\u001b[B\u001b[B\u001b[B\r"); await wait(term, "Recorded result"); term.input.write("t\u0015template.md\r"); await wait(term, "Template loaded:"); await writeFile(path.join(options.cwd, "template.md"), "CHANGED {{intent}}"); term.input.write("\rsc"); await wait(term, "Copied PR description"); term.input.write("f\r"); await wait(term, "Saved PR description"); const loaded = await loadPrUi(options); const body = fillTemplate(source, prParts(loaded.sessions[0]!, loaded.rates), "template.md"); expect(copy).toHaveBeenCalledWith(body); expect(await readFile(path.join(options.cwd, "session-pr.md"), "utf8")).toBe(body + "\n"); term.input.write("q"); await wait(term, "OVERVIEW"); term.input.write("q"); await running; expect(await readFile(ledger)).toEqual(before);
+    const running = runWorkspaceUi(injected, plainPalette, term.io); await wait(term, "OVERVIEW"); term.input.write("m\u001b[B\u001b[B\u001b[B\u001b[B\r"); await wait(term, "Recorded result"); term.input.write("t\u0015template.md\r"); await wait(term, "Template loaded:"); await writeFile(path.join(options.cwd, "template.md"), "CHANGED {{intent}}"); term.input.write("\rsc"); await wait(term, "Copied PR description"); term.input.write("f\r"); await wait(term, "Saved PR description"); const loaded = await loadPrUi(options); const body = fillTemplate(source, prParts(loaded.sessions[0]!, loaded.rates), "template.md"); expect(copy).toHaveBeenCalledWith(body); expect(await readFile(path.join(options.cwd, "session-pr.md"), "utf8")).toBe(body + "\n"); term.input.write("q"); await wait(term, "OVERVIEW"); term.input.write("q"); await running; expect(await readFile(ledger)).toEqual(before);
   });
 });

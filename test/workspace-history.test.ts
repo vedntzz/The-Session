@@ -5,9 +5,8 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runAppUi } from "../src/commands/app-ui.js";
+import { runAppUi, runWorkspaceUi } from "../src/commands/app-ui.js";
 import { runUi, type UiTerminal } from "../src/commands/ui.js";
-import { buildProgram } from "../src/program.js";
 import { plainPalette, screenControl } from "../src/render/palette.js";
 import { appendSession } from "../src/store.js";
 
@@ -36,7 +35,7 @@ describe("History inside the Session workspace", () => {
   const frame = async (term: ReturnType<typeof terminal>, text: string) => {
     await vi.waitFor(() => expect(term.frame()).toContain(text));
   };
-  const open = (term: ReturnType<typeof terminal>) => buildProgram({ ...options(), appTerminal: term.io, palette: plainPalette }).parseAsync([], { from: "user" });
+  const open = (term: ReturnType<typeof terminal>) => runWorkspaceUi(options(), plainPalette, term.io);
   const record = (intent: string, daysAgo = 0) => appendSession({ intent, startCommit,
     startedAt: new Date(Date.now() - daysAgo * 86_400_000).toISOString(),
     endedAt: new Date(Date.now() - daysAgo * 86_400_000 + 1000).toISOString() }, options());
