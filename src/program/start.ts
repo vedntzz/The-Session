@@ -9,10 +9,12 @@ import { printLines } from "./print.js";
 import { startReviewed } from "../commands/review.js";
 import { readStartPrompt } from "../commands/start-prompt.js";
 import { plainPalette, type Palette } from "../render/palette.js";
+import { formatStartConfirmation } from "../render/terminal/start.js";
+import { safeText } from "../render/tui/text.js";
 
 interface StartFlags { scope?: string[]; passive?: boolean; review?: boolean; agent?: string }
 
-export function registerStart(program: Command, options: ProgramOptions, _palette: Palette = plainPalette): void {
+export function registerStart(program: Command, options: ProgramOptions, palette: Palette = plainPalette): void {
   program
     .command("start")
     .description("Begin a new session")
@@ -21,10 +23,10 @@ export function registerStart(program: Command, options: ProgramOptions, _palett
     .option("--review", "review and edit an agreement before accepting and starting (interactive)")
     .option("--passive", "for the editor hook: open an undeclared session, or do nothing")
     .option("--agent <name>", "for the editor hook: which coding tool's hook this is")
-    .action((intent: string | undefined, flags: StartFlags) => routeStart(intent, flags, options));
+    .action((intent: string | undefined, flags: StartFlags) => routeStart(intent, flags, options, palette));
 }
 
-async function routeStart(intent: string | undefined, flags: StartFlags, options: ProgramOptions): Promise<void> {
+async function routeStart(intent: string | undefined, flags: StartFlags, options: ProgramOptions, palette: Palette): Promise<void> {
   if (flags.passive) return startPassive(flags, options);
   if (intent !== undefined) return startDeclared(intent, flags, options);
   if (flags.review) throw new Error('No intent given. Run: session start "what you are about to do"');
@@ -34,7 +36,8 @@ async function routeStart(intent: string | undefined, flags: StartFlags, options
     printLines(["  Cancelled. No session started."]);
     return;
   }
-  return startDeclared(declaration.intent, { ...flags, scope: declaration.scope }, options);
+  return startDeclared(declaration.intent, { ...flags, scope: declaration.scope }, options,
+    session => formatStartConfirmation(session, palette, formatStarted(session).slice(2)));
 }
 
 /** Hook stdout becomes editor context, so the passive route stays silent. */
@@ -44,12 +47,13 @@ async function startPassive(flags: StartFlags, options: ProgramOptions): Promise
   await startFromHook(options, await hookPayloadFrom(options.stdin), agent);
 }
 
-async function startDeclared(intent: string, flags: StartFlags, options: ProgramOptions): Promise<void> {
+async function startDeclared(intent: string, flags: StartFlags, options: ProgramOptions,
+  formatter: (session: Session) => string[] = formatStarted): Promise<void> {
   const closed: string[] = [];
   const startOptions = {
     ...options, scope: flags.scope,
     onCapturedClosed: (stopped: Session) => closed.push(formatClosedCaptured(stopped)),
   };
   const session = flags.review ? await startReviewed(intent, startOptions) : await startSession(intent, startOptions);
-  printLines([...closed, ...(session ? formatStarted(session) : ["  Cancelled. No session started."])]);
+  printLines([...closed.map(safeText), ...(session ? formatter(session) : ["  Cancelled. No session started."])]);
 }

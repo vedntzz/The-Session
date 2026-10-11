@@ -36,6 +36,8 @@ export const screenControl = {
  * by more colours, for the same reason: they compose with any theme.
  */
 export interface Palette {
+  /** A session whose declaration is recorded and whose work is underway. */
+  recording(text: string): string;
   /** What the session set out to do, in the developer's own words. */
   intent(text: string): string;
   /** A path that went somewhere it was never declared to go. */
@@ -66,6 +68,7 @@ type Ink = ReturnType<typeof pc.createColors>;
  */
 function paletteFrom(ink: Ink): Palette {
   return {
+    recording: (text) => ink.cyan(text),
     // Bold, not a colour: the intent is the line you look for first, and it
     // should stand out in every theme rather than in the ones where some
     // chosen hue happens to be loud.

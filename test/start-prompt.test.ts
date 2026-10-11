@@ -4,11 +4,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { promisify } from "node:util";
+import { promisify, stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
 import { startPassiveSession, startSession } from "../src/commands/start.js";
 import { getOpenSession, readSessions } from "../src/store.js";
+import { ansiPalette, plainPalette, type Palette } from "../src/render/palette.js";
 
 const exec = promisify(execFile);
 let root: string; let cwd: string; let home: string; let printed: string[];
@@ -29,8 +30,8 @@ function terminal() {
   return { input, output, text: () => text, raw: () => raw };
 }
 const ready = (io: ReturnType<typeof terminal>) => vi.waitFor(() => expect(io.text()).toContain("  What are you working on?\n  › "));
-const run = (io: ReturnType<typeof terminal>, args = ["start"]) =>
-  buildProgram({ ...options(), startTerminal: io }).parseAsync(args, { from: "user" });
+const run = (io: ReturnType<typeof terminal>, args = ["start"], palette: Palette = plainPalette) =>
+  buildProgram({ ...options(), startTerminal: io, palette }).parseAsync(args, { from: "user" });
 beforeEach(async () => {
   vi.stubEnv("TERM", "xterm-256color"); printed = [];
   vi.spyOn(console, "log").mockImplementation((...lines) => { printed.push(lines.join(" ")); });
@@ -44,13 +45,20 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-it("bare start asks intent and paths, then records literals and prints confirmation", async () => {
-  const io = terminal(); const running = run(io);
+it.each([["plain", plainPalette], ["ANSI", ansiPalette]] as const)("bare start prints %s saved confirmation", async (_name, palette) => {
+  const io = terminal(); const running = run(io, ["start"], palette);
   try {
     await ready(io); io.input.write("Build the UI\nsrc/a file.ts\nnotes/a,b*[draft].md\n\n"); await running;
     const [session] = await readSessions(options());
     expect(session?.intent).toBe("Build the UI"); expect(session?.scope).toEqual(["src/a file.ts", "notes/a,b*[draft].md"]);
-    expect(printed[0]).toBe(""); expect(printed.join("\n")).toContain("started  Build the UI");
+    const displayed = printed.map(stripVTControlCharacters);
+    expect(displayed[0]).toBe(""); expect(displayed).toContain("  ◔ session  recording");
+    expect(displayed).toContain(`  intent      ${session?.intent}`);
+    expect(displayed).toContain(`  scope       ${session?.scope[0]}`);
+    expect(displayed).toContain(`              ${session?.scope[1]}`);
+    expect(displayed).toContain(`  id          ${session?.id.slice(0, 8)}`);
+    expect(displayed).toContain(`  head        ${session?.startCommit.slice(0, 7)}`);
+    if (palette === ansiPalette) expect(printed.join("\n")).toContain("\u001b[36m");
     expect(io.raw()).toBe(0); expect(io.text()).not.toContain("\u001b");
   } finally { io.input.end(); await running; }
 });
@@ -90,6 +98,15 @@ it("keeps captured work open on cancellation and closes it only after accepting"
   const sessions = await readSessions(options()); expect(sessions).toHaveLength(2);
   expect(sessions[0]?.endedAt).not.toBeNull(); expect(sessions[1]?.intent).toBe("Declared next");
   expect(printed.join("\n")).toContain("closed   the hook's session");
+});
+it("sanitizes a captured changed-path notice while keeping its literal record", async () => {
+  const literal = "notes\u001b[2J.txt";
+  await startPassiveSession(options()); await writeFile(path.join(cwd, literal), "captured change");
+  const io = terminal(); const running = run(io); await ready(io);
+  io.input.write("Declare safely\n\n"); await running;
+  expect((await readSessions(options()))[0]?.reality).toEqual([literal]);
+  expect(printed.find((line) => line.includes("closed   the hook's session"))).toContain("notes.txt");
+  expect(printed.join("\n")).not.toContain("\u001b");
 });
 it("revalidates an open session created while the prompt was waiting", async () => {
   const io = terminal(); const running = run(io); await ready(io);

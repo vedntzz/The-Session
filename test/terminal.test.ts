@@ -70,6 +70,7 @@ function render(overrides: Partial<Session> = {}, view: View = priced): string[]
  * role gets is `palette.test.ts`'s business.
  */
 const tagged: Palette = {
+  recording: (text) => `<recording>${text}</recording>`,
   intent: (text) => `<intent>${text}</intent>`,
   drift: (text) => `<drift>${text}</drift>`,
   waste: (text) => `<waste>${text}</waste>`,
