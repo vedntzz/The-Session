@@ -5,7 +5,7 @@ import { WHERE_IT_WENT } from "../terminal/brief-sentences.js";
 import { intentSourceOf } from "../../store.js";
 import { shortId } from "../terminal/text.js";
 import { characters, type StartState } from "./start-state.js";
-import { cellWidth, fit, fold } from "./text.js";
+import { cellWidth, fold } from "./text.js";
 import { paintUiLine, sessionHeader } from "./chrome.js";
 
 export { SESSION_MARK } from "./chrome.js";

@@ -378,7 +378,9 @@ describe("session", () => {
     await run("start", "touch a.txt", "--scope", "a.txt");
     await writeFile(path.join(store.cwd as string, "a.txt"), "edited", "utf8");
 
-    await expect(run("stop")).resolves.toEqual(["  stopped  touch a.txt", "  changed  a.txt"]);
+    const lines = await run("stop");
+    expect(lines).toContain("  ◔ session  stopped"); expect(lines).toContain("  intent      touch a.txt");
+    expect(lines).toContain("  changed     1 file"); expect(lines).toContain("              a.txt");
   });
 
   it("stop exits 0 when the session drifted: drift is recorded, never blocked", async () => {
