@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
 import { startPassiveSession, startSession } from "../src/commands/start.js";
 import { captureIntent, getOpenSession, zeroCost, type Session } from "../src/store.js";
-import type { UiTerminal } from "../src/commands/ui.js";
+import type { PromptTerminal } from "../src/commands/prompt-terminal.js";
 import { plainPalette } from "../src/render/palette.js";
 import { formatHome } from "../src/render/terminal.js";
 import { cellWidth } from "../src/render/tui/text.js";
@@ -28,7 +28,7 @@ function terminal(columns = 80, isTTY = true) {
 }
 async function bare(io: ReturnType<typeof terminal>) {
   let done = false;
-  const running = buildProgram({ ...options(), palette: plainPalette, appTerminal: io as unknown as UiTerminal }).parseAsync([], { from: "user" });
+  const running = buildProgram({ ...options(), palette: plainPalette, appTerminal: io as PromptTerminal }).parseAsync([], { from: "user" });
   const watched = running.finally(() => { done = true; });
   try { await vi.waitFor(() => expect(done).toBe(true), { timeout: 1000, interval: 10 }); await watched; }
   finally { if (!done) { io.input.end(); await watched; } }

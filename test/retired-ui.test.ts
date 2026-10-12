@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
 import { startSession } from "../src/commands/start.js";
-import type { UiTerminal } from "../src/commands/ui.js";
+import type { PromptTerminal } from "../src/commands/prompt-terminal.js";
 import { plainPalette } from "../src/render/palette.js";
 
 const exec = promisify(execFile);
@@ -22,7 +22,7 @@ function terminal() {
   return { input, output, text: () => text };
 }
 function dispatch(args: string[], io: ReturnType<typeof terminal>) {
-  const program = buildProgram({ ...options(), palette: plainPalette, appTerminal: io as unknown as UiTerminal });
+  const program = buildProgram({ ...options(), palette: plainPalette, appTerminal: io as PromptTerminal });
   const output = { writeOut: (text: string) => { printed.push(text); }, writeErr: (text: string) => { printed.push(text); } };
   [program, ...program.commands].forEach((command) => command.exitOverride().configureOutput(output));
   return program.parseAsync(args, { from: "user" });

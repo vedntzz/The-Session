@@ -92,15 +92,19 @@ from the record.
 
 ## Declaring before the agent runs
 
-Run `session start` with no arguments to open a full-screen setup inside your
-terminal. Write your goal, press Tab to add expected files or folders (one per
-line), then Ctrl-S to start. Your plan stays fixed after starting. Keep building
-in your coding tool; `q` returns to the shell with the session still open.
-Run `session start` again to return to it, `r` to refresh, and `f` to finish and
-review what changed. Esc cancels an unsaved draft without creating a record.
-The screen needs at least 60 columns and 20 rows; `NO_COLOR` keeps it readable
-without color. Explicit intents, scripts, passive hooks, and `--review` retain
-their existing behavior.
+Run `session start` with no arguments to answer two prompts in your terminal:
+what you are working on, then expected files or folders, one per line. An empty
+line finishes the scope; Enter at the first scope prompt skips it. Ctrl-C or
+Ctrl-D cancels the draft before a session starts. The confirmation stays in
+your terminal's scrollback, and your recorded intent stays fixed.
+
+Keep building in your coding tool. Run `session` to see what is recording and
+`session stop` to end it. The completion shows the outcome, changed files,
+outside-scope paths, turns, four token counters, and cost. Missing measurements
+read `unknown`; a measured zero cost reads `$0.00`. Use
+`session week last --full` for the full record. Output adapts to terminal width
+and inherits your terminal's background; `NO_COLOR=1` removes color.
+Explicit intents, scripts, passive hooks, and `--review` keep their behavior.
 
 `session start "<intent>" --scope <paths...>` records your intent and the files
 you expect to change. The intent can never be edited afterwards. Without
@@ -147,7 +151,6 @@ otherwise. It never grants a permission. `--repo --uninstall` removes it.
 |---|---|
 | `session week` | The last 7 days, one block per intent source. `--md` for Slack or Notion. |
 | `session week <id>` | One session: where it landed, what was asked, what drifted. `last` for the latest; `--full` for every path and counter. |
-| `session ui` | The same sessions in an interactive terminal browser. |
 | `session pr [id]` | A pull request body from the record; pipe into `gh pr create --body-file -`. |
 | `session prime --debt` | Files that keep drifting outside the plan, per repo. |
 | `session survival` | How much merged work is still there at 14 and 30 days. |

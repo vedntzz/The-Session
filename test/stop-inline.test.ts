@@ -6,7 +6,7 @@ import { PassThrough } from "node:stream";
 import { promisify, stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
-import type { UiTerminal } from "../src/commands/ui.js";
+import type { PromptTerminal } from "../src/commands/prompt-terminal.js";
 import { startSession } from "../src/commands/start.js";
 import { stopSession } from "../src/commands/stop.js";
 import { verifyLog } from "../src/commands/verify.js";
@@ -24,7 +24,7 @@ async function git(args: string[]) { await exec("git", ["-C", cwd, ...args]); }
 async function run(columns = 80, tty = true, args = ["stop"], adapters: Adapter[] = []) {
   const input = Object.assign(new PassThrough(), { isTTY: tty, isRaw: false, setRawMode: vi.fn() });
   const output = Object.assign(new PassThrough(), { isTTY: tty, columns, rows: 24 }); streams.push(input, output);
-  await buildProgram({ ...options(), adapters, palette: plainPalette, appTerminal: { input, output } as unknown as UiTerminal }).parseAsync(args, { from: "user" });
+  await buildProgram({ ...options(), adapters, palette: plainPalette, appTerminal: { input, output } as PromptTerminal }).parseAsync(args, { from: "user" });
   expect(input.setRawMode).not.toHaveBeenCalled(); return printed.map(stripVTControlCharacters);
 }
 beforeEach(async () => {

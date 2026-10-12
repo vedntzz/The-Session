@@ -154,20 +154,12 @@ Colour goes to a terminal and nowhere else — redirect the output and you get
 exactly the bytes above with no escape codes in them. `NO_COLOR=1` turns it
 off in a terminal too, and `FORCE_COLOR=1` turns it on anywhere.
 
-The full-screen `session ui` has a deliberately separate, user-selected theme:
-midnight indigo behind the timeline, a lighter indigo behind the selected entry,
-and periwinkle for focus. This is the exception to the basic-colour rule above,
-scoped to a screen whose background the tool paints itself. Exact RGB colours
-are used only when the terminal advertises true colour; otherwise selection
-uses inverse video and focus uses basic blue. `NO_COLOR` and `FORCE_COLOR`
-retain their precedence. The ordinary CLI palette is unchanged, and exiting
-the UI resets its colours and restores the previous terminal screen.
-
-The timeline reads existing records without writing them. Search combines
-literal text with `outside:yes|no`, `outcome:...`, and `source:...` filters.
-Running sessions and captured sessions cannot match `outside:no`: pending or
-unmeasured drift is not a measured zero. File trees mark drift inline; usage,
-the immutable Prime proposal and recorded observations are disclosed with `e`.
+The start prompts and the state and stop views are line-oriented. Their output
+stays in scrollback and uses the basic-colour palette above. The terminal owns
+its background. No alternate screen, cursor controls or raw input are needed;
+`NO_COLOR` and `FORCE_COLOR` retain their precedence. The former full-screen
+`session ui` is retired; `session week` and `session week <id> --full` provide
+the recorded history and details.
 
 ## What it cost
 
