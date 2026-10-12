@@ -16,7 +16,7 @@ it.each([0, 3, 4])("counts %i changed files and caps named rows", (count) => {
   expect(lines).toContain(`  changed     ${count} files`); expect(lines).toContain("  id          abcdef01");
   if (count <= 3) reality.forEach((file) => expect(lines).toContain(`              ${file}`));
   else { expect(lines.join("\n")).toContain("all in src/"); expect(lines.join("\n")).not.toContain("src/0.ts"); }
-  expect(lines.at(-1)).toBe("  next        session week last");
+  expect(lines.at(-1)).toBe("  next        session week last --full");
 });
 it.each([60, 80, undefined])("retains full intent and literal Unicode paths at width %s", (width) => {
   const intent = "Keep every word visible without adding punctuation. ".repeat(4).trim();
@@ -47,19 +47,20 @@ it("keeps captured and null intent facts with no appended period", () => {
   const absent = formatStopConfirmation(stopped({ intent: null, intentSource: "captured" }));
   expect(absent).toContain("  prompt      unknown"); expect(absent).toContain("              no intent recorded");
 });
-it.each([0, 1])("keeps cost evidence honest with %i measured turns", (turns) => {
+it.each([0, 1])("replaces legacy cost details with measured evidence for %i turns", (turns) => {
   const record = stopped({ cost: { ...zeroCost(), turns, apiCalls: 2 } });
   const detail = "  cost     0 tokens  1 turn  (2 api calls)";
   const lines = formatStopConfirmation(record, plainPalette, [detail]);
-  if (turns) expect(lines).toContain(detail);
-  else { expect(lines).toContain("  cost        unknown"); expect(lines.join("\n")).not.toContain("tokens"); }
+  expect(lines).not.toContain(detail); expect(lines).toContain(`  turns       ${turns || "unknown"}`);
+  expect(lines).toContain(`  tokens      ${turns ? "0 in · 0 cache read · 0 cache write · 0 out" : "unknown"}`);
+  expect(lines).toContain("  cost        unknown");
   expect(lines.join("\n")).not.toContain("$");
 });
 it("keeps safe full metadata in a separated wrapped block", () => {
   const detail = `  note     ${"Keep all metadata visible. ".repeat(6).trim()}\u001b[2J`;
   const lines = formatStopConfirmation(stopped(), plainPalette, [detail], 60);
-  const id = lines.findIndex((line) => line.startsWith("  id          ")); const cost = lines.findIndex((line) => line.startsWith("  cost        "));
-  const start = id + 2; const details = lines.slice(start, cost);
+  const id = lines.findIndex((line) => line.startsWith("  id          ")); const turns = lines.findIndex((line) => line.startsWith("  turns       "));
+  const start = id + 2; const details = lines.slice(start, turns - 1);
   expect(lines[start - 1]).toBe(""); expect(details.map((line) => line.slice(2)).join(" ")).toBe(stripVTControlCharacters(detail).slice(2));
   expect(lines.every((line) => cellWidth(line) <= 60)).toBe(true);
 });
