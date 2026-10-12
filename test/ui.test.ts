@@ -103,9 +103,9 @@ describe("terminal UI", () => {
     expect(renderUi(data([]), initialState(), 120, 24).lines.join()).toContain("No sessions");
   });
 
-  it("registers ui without growing the short help list", () => {
+  it("retires ui from the tree and short help list", () => {
     const program = buildProgram();
-    expect(program.commands.find((command) => command.name() === "ui")?.helpInformation()).toContain("--days");
+    expect(program.commands.find((command) => command.name() === "ui")).toBeUndefined();
     expect(program.helpInformation()).not.toMatch(/^\s+ui\s/m);
   });
 

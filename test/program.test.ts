@@ -745,25 +745,9 @@ describe("session", () => {
       .sort();
     expect(names).toEqual([
       "agents", "config",
-      "help",
-      "hook",
-      "intent",
-      "key",
-      "knowledge",
-      "mark",
-      "peers",
-      "pr",
-      "prime",
-      "pull",
-      "push",
-      "scan",
-      "settle",
-      "start",
-      "stop",
-      "survival",
-      "ui",
-      "verify",
-      "week",
+      "help", "hook", "intent", "key", "knowledge", "mark",
+      "peers", "pr", "prime", "pull", "push", "scan",
+      "settle", "start", "stop", "survival", "verify", "week",
     ]);
   });
 

@@ -102,6 +102,7 @@ describe("Session app entry and terminal ownership", () => {
   it("points every section at a registered command without running one", () => {
     const names = buildProgram().commands.map(command => command.name());
     UI_MENU.filter(item => item.screen !== "home").forEach(item => expect(names).toContain(sectionCommand(item).split(" ")[1]));
+    expect(sectionCommand({ label: "Browse", screen: "sessions" })).toBe("session week");
     expect(sectionCommand({ label: "Review", screen: "sessions", selectedSessionId: "12345678-example" })).toBe("session week '12345678' --full");
   });
 });

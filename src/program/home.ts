@@ -13,7 +13,7 @@ import type { UiScreen } from "../render/tui/navigation.js";
 import { shortId } from "../render/terminal/text.js";
 
 const SECTION_COMMANDS: Record<UiScreen, string> = {
-  home: "session", start: "session start", sessions: "session ui", week: "session week", pr: "session pr",
+  home: "session", start: "session start", sessions: "session week", week: "session week", pr: "session pr",
   debt: "session prime --debt", agreement: "session start --help",
   outcomes: "session settle --help", survival: "session survival", knowledge: "session knowledge --help",
   scan: "session scan", agents: "session agents", hooks: "session hook --help", peers: "session peers",
