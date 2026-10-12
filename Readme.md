@@ -106,6 +106,9 @@ read `unknown`; a measured zero cost reads `$0.00`. Use
 and inherits your terminal's background; `NO_COLOR=1` removes color.
 Explicit intents, scripts, passive hooks, and `--review` keep their behavior.
 
+For a soft lavender background, [import the optional Session Lavender
+theme](docs/themes/Readme.md) for Apple Terminal or iTerm2.
+
 `session start "<intent>" --scope <paths...>` records your intent and the files
 you expect to change. The intent can never be edited afterwards. Without
 `start`, the hook records the first prompt as the intent and no scope.
