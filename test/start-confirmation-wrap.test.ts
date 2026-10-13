@@ -3,11 +3,14 @@ import { expect, it } from "vitest";
 import { ansiPalette, paletteFor, plainPalette } from "../src/render/palette.js";
 import { formatStartConfirmation } from "../src/render/terminal/start.js";
 import { cellWidth } from "../src/render/tui/text.js";
+import { startScopeRows } from "../src/render/terminal/start-rows.js";
+import { withoutStartFrame } from "./fixtures/start.js";
 
 const intent = "Keep every word from the recorded declaration visible. ".repeat(5).trim();
 const session = { intent, scope: ["src/a file.ts"], id: "abcdef01-2345", startCommit: "123456789abc" };
 function section(lines: string[], first: string, next: string) {
-  return lines.slice(lines.findIndex((line) => line.startsWith(first)), lines.findIndex((line) => line.startsWith(next)));
+  const content = withoutStartFrame(lines);
+  return content.slice(content.findIndex((line) => line.startsWith(first)), content.findIndex((line) => line.startsWith(next)));
 }
 
 it.each([60, 80])("wraps full intent at %i columns under the value column", (width) => {
@@ -33,7 +36,8 @@ it.each([60, 80].flatMap((width) => [
   [width, `src/${"folder  ".repeat(15)}file.ts`, " "],
 ] as const))("preserves literal graphemes and spaces at %i columns: %s", (width, literal, separator) => {
   const lines = formatStartConfirmation({ ...session, scope: [literal, "notes/[draft]*, a.ts"] }, plainPalette, [], width);
-  const paths = section(lines, "  scope       ", "  id          ");
+  // Literal spaces are checked before frame padding makes them visually indistinguishable.
+  const paths = startScopeRows([literal, "notes/[draft]*, a.ts"], plainPalette, width, 4);
   const values = paths.slice(0, -1).map((line, index) => line.slice(index === 0 ? 14 : 16));
   expect(values.length).toBeGreaterThan(1);
   expect(values.join(separator)).toBe(literal);

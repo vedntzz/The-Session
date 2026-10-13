@@ -14,10 +14,15 @@ function frameLine(line: string, width: number, palette: Palette): string {
   return INDENT + palette.meta("│ ") + content + padding + palette.meta(" │");
 }
 
+/** Share the exact frame budget with its wrapped contents. */
+export function startFrameWidth(width?: number): number | undefined {
+  return width === undefined || !Number.isFinite(width) ? undefined : Math.max(MIN_WIDTH, Math.min(80, Math.trunc(width)));
+}
+
 /** Draw a terminal frame while leaving unknown-width output undecorated. */
 export function startFrame(lines: readonly string[], palette: Palette = plainPalette, width?: number): string[] {
-  if (width === undefined || !Number.isFinite(width)) return [...lines];
-  const columns = Math.max(MIN_WIDTH, Math.min(80, Math.trunc(width)));
+  const columns = startFrameWidth(width);
+  if (columns === undefined) return [...lines];
   return [
     frameBorder("╭", "╮", columns, palette),
     ...lines.map(line => frameLine(line, columns, palette)),

@@ -11,6 +11,7 @@ import { startPassiveSession, startSession } from "../src/commands/start.js";
 import { getOpenSession, readSessions } from "../src/store.js";
 import { ansiPalette, plainPalette, type Palette } from "../src/render/palette.js";
 import { cellWidth } from "../src/render/tui/text.js";
+import { withoutStartFrame } from "./fixtures/start.js";
 
 const exec = promisify(execFile);
 let root: string; let cwd: string; let home: string; let printed: string[];
@@ -52,9 +53,9 @@ it.each([["plain", plainPalette], ["ANSI", ansiPalette]] as const)("bare start p
     await ready(io); io.input.write("Build the UI\nsrc/a file.ts\nnotes/a,b*[draft].md\n\n"); await running;
     const [session] = await readSessions(options());
     expect(session?.intent).toBe("Build the UI"); expect(session?.scope).toEqual(["src/a file.ts", "notes/a,b*[draft].md"]);
-    const displayed = printed.map(stripVTControlCharacters);
-    expect(displayed[0]).toBe(""); expect(displayed[1]).toMatch(/^  ╭─+╮$/u);
-    expect(displayed[2]).toMatch(/^  │ ◔ session  RECORDING +│$/u);
+    const actual = printed.map(stripVTControlCharacters); const displayed = withoutStartFrame(actual);
+    expect(actual[0]).toBe(""); expect(actual[1]).toMatch(/^  ╭─+╮$/u);
+    expect(actual[2]).toMatch(/^  │ ◔ session  RECORDING +│$/u);
     expect(displayed).toContain(`  intent      ${session?.intent}`);
     expect(displayed).toContain(`  scope       ${session?.scope[0]}`);
     expect(displayed).toContain(`              ${session?.scope[1]}`);
@@ -131,8 +132,8 @@ it("wraps the saved declaration at the width captured before prompting", async (
   io.output.columns = 80; io.input.write(`${intent}\n${literal}\n\n`); await running;
   const [session] = await readSessions(options());
   expect(session?.intent).toBe(intent); expect(session?.scope).toEqual([literal]);
-  const lines = printed.map(stripVTControlCharacters);
-  expect(lines.every((line) => cellWidth(line) <= 60)).toBe(true);
+  const actual = printed.map(stripVTControlCharacters); const lines = withoutStartFrame(actual);
+  expect(actual.every((line) => cellWidth(line) <= 60)).toBe(true);
   const first = lines.findIndex((line) => line.startsWith("  intent      "));
   const scope = lines.findIndex((line) => line.startsWith("  scope       "));
   const id = lines.findIndex((line) => line.startsWith("  id          "));
