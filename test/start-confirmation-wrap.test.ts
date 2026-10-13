@@ -31,16 +31,16 @@ it("indents wrapped path fragments further than the next declared path", () => {
   expect(paths.at(-1)).toBe("              notes/second.ts");
 });
 
-it.each([60, 80].flatMap((width) => [
-  [width, `資料/${"e\u0301界".repeat(40)}.ts`, ""],
-  [width, `src/${"folder  ".repeat(15)}file.ts`, " "],
-] as const))("preserves literal graphemes and spaces at %i columns: %s", (width, literal, separator) => {
+it.each([40, 60, 80].flatMap((width) => [
+  [width, `資料/${"e\u0301界".repeat(40)}.ts`],
+  [width, `src/${"folder  ".repeat(15)}file.ts`],
+] as const))("preserves literal graphemes and spaces at %i columns: %s", (width, literal) => {
   const lines = formatStartConfirmation({ ...session, scope: [literal, "notes/[draft]*, a.ts"] }, plainPalette, [], width);
   // Literal spaces are checked before frame padding makes them visually indistinguishable.
   const paths = startScopeRows([literal, "notes/[draft]*, a.ts"], plainPalette, width, 4);
   const values = paths.slice(0, -1).map((line, index) => line.slice(index === 0 ? 14 : 16));
   expect(values.length).toBeGreaterThan(1);
-  expect(values.join(separator)).toBe(literal);
+  expect(values.join("")).toBe(literal);
   expect(values.every((value) => !/^\p{Mark}/u.test(value))).toBe(true);
   expect(paths.at(-1)).toBe("              notes/[draft]*, a.ts");
   expect(lines.every((line) => cellWidth(line) <= width)).toBe(true);

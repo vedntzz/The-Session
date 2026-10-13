@@ -34,7 +34,7 @@ it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY])("omits frame decorati
   expect(formatStartConfirmation(session, plainPalette, [], width)[0]).toBe("  ◔ session  RECORDING");
 });
 
-it.each([60, 80, 120])("fits long declarations, literal paths and Unicode inside a %i-column terminal", width => {
+it.each([40, 60, 80, 120])("fits long declarations, literal paths and Unicode inside a %i-column terminal", width => {
   const long = { ...session, intent: "Keep every word visible. ".repeat(8).trim(), scope: ["資料/" + "e\u0301界".repeat(40) + ".ts", "src/" + "folder  ".repeat(15) + "file.ts"] };
   const lines = formatStartConfirmation(long, plainPalette, [], width);
   const end = lines.findIndex(line => /^  ╰─+╯$/u.test(line));
