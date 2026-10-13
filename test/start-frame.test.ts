@@ -26,8 +26,8 @@ it.each([60, 80])("keeps ANSI and NO_COLOR frame geometry identical at %i column
   expect(formatStartConfirmation(session, paletteFor({ env: { NO_COLOR: "1" }, isTTY: true }), [], width)).toEqual(plain);
 });
 
-it.each([20, 0, -1])("uses the existing width floor for a %i-column frame", width => {
-  expect(formatStartConfirmation(session, plainPalette, [], width)).toEqual(formatStartConfirmation(session, plainPalette, [], 60));
+it.each([20, 0, -1])("uses the start width floor for a %i-column frame", width => {
+  expect(formatStartConfirmation(session, plainPalette, [], width)).toEqual(formatStartConfirmation(session, plainPalette, [], 40));
 });
 
 it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY])("omits frame decoration when width is unavailable: %s", width => {

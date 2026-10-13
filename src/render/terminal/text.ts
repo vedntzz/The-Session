@@ -120,18 +120,18 @@ export interface WidthSignals {
  * than about the tool, which is the thing the pinned colourless render exists
  * to prevent.
  *
- * Clamped at `MIN_WIDTH` rather than honoured all the way down. A terminal
- * forty columns wide cannot hold this tool's tables whatever is done to them,
- * and the arithmetic that fits a column into what is left goes strange when
- * what is left is negative.
+ * Clamped at `MIN_WIDTH` by default: table columns need that room. A caller
+ * with a simpler layout can supply its own minimum; start uses forty.
+ * The floor belongs to the view, while detecting a TTY and leaving pipes
+ * unconstrained remain the same for every view.
  */
-export function terminalWidth(signals: WidthSignals = {}): number | undefined {
+export function terminalWidth(signals: WidthSignals = {}, minimum = MIN_WIDTH): number | undefined {
   const isTTY = signals.isTTY ?? process.stdout.isTTY === true;
   const columns = signals.columns ?? process.stdout.columns;
   if (!isTTY || columns === undefined || !Number.isFinite(columns)) {
     return undefined;
   }
-  return Math.max(MIN_WIDTH, Math.trunc(columns));
+  return Math.max(minimum, Math.trunc(columns));
 }
 
 /**

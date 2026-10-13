@@ -81,7 +81,7 @@ it("preserves unlimited legacy rows when width is absent", () => {
 });
 
 it("clamps narrow terminals to the floor and keeps the footer command whole", () => {
-  const lines = formatStartConfirmation(session, plainPalette, [], 60);
+  const lines = formatStartConfirmation(session, plainPalette, [], 40);
   expect(formatStartConfirmation(session, plainPalette, [], 20)).toEqual(lines);
   expect(lines.at(-1)).toBe("  finish      session stop");
 });

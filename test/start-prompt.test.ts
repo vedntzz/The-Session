@@ -140,3 +140,14 @@ it("wraps the saved declaration at the width captured before prompting", async (
   expect(lines.slice(first, scope).map((line) => line.slice(14)).join(" ")).toBe(intent);
   expect(lines.slice(scope, id).map((line, index) => line.slice(index === 0 ? 14 : 16)).join("")).toBe(literal);
 });
+
+it("honors the actual 40-column terminal when bare start records a declaration", async () => {
+  const io = terminal(); io.output.columns = 40; const running = run(io); await ready(io);
+  io.input.write("Add retries to the webhook sender\nsrc/webhooks/\n\n"); await running;
+  const [session] = await readSessions(options());
+  expect(session?.intent).toBe("Add retries to the webhook sender");
+  expect(session?.scope).toEqual(["src/webhooks/"]);
+  const lines = printed.map(stripVTControlCharacters);
+  expect(lines.every(line => cellWidth(line) <= 40)).toBe(true);
+  expect(withoutStartFrame(lines)).toContain(`  id          ${session?.id.slice(0, 8)}`);
+});
