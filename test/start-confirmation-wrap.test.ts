@@ -3,11 +3,14 @@ import { expect, it } from "vitest";
 import { ansiPalette, paletteFor, plainPalette } from "../src/render/palette.js";
 import { formatStartConfirmation } from "../src/render/terminal/start.js";
 import { cellWidth } from "../src/render/tui/text.js";
+import { startScopeRows } from "../src/render/terminal/start-rows.js";
+import { withoutStartFrame } from "./fixtures/start.js";
 
 const intent = "Keep every word from the recorded declaration visible. ".repeat(5).trim();
 const session = { intent, scope: ["src/a file.ts"], id: "abcdef01-2345", startCommit: "123456789abc" };
 function section(lines: string[], first: string, next: string) {
-  return lines.slice(lines.findIndex((line) => line.startsWith(first)), lines.findIndex((line) => line.startsWith(next)));
+  const content = withoutStartFrame(lines);
+  return content.slice(content.findIndex((line) => line.startsWith(first)), content.findIndex((line) => line.startsWith(next)));
 }
 
 it.each([60, 80])("wraps full intent at %i columns under the value column", (width) => {
@@ -33,7 +36,8 @@ it.each([60, 80].flatMap((width) => [
   [width, `src/${"folder  ".repeat(15)}file.ts`, " "],
 ] as const))("preserves literal graphemes and spaces at %i columns: %s", (width, literal, separator) => {
   const lines = formatStartConfirmation({ ...session, scope: [literal, "notes/[draft]*, a.ts"] }, plainPalette, [], width);
-  const paths = section(lines, "  scope       ", "  id          ");
+  // Literal spaces are checked before frame padding makes them visually indistinguishable.
+  const paths = startScopeRows([literal, "notes/[draft]*, a.ts"], plainPalette, width, 4);
   const values = paths.slice(0, -1).map((line, index) => line.slice(index === 0 ? 14 : 16));
   expect(values.length).toBeGreaterThan(1);
   expect(values.join(separator)).toBe(literal);
@@ -45,7 +49,9 @@ it.each([60, 80].flatMap((width) => [
 it.each([60, 80])("retains full safe metadata at %i columns", (width) => {
   const detail = `  attribution  ${"Read all accepted metadata safely. ".repeat(7).trim()}\u001b[2J`;
   const lines = formatStartConfirmation(session, plainPalette, [detail], width);
-  const details = lines.slice(lines.findIndex((line) => line.startsWith("  head        ")) + 1, -2);
+  const content = withoutStartFrame(lines);
+  const guide = content.findIndex(line => line === "  Your intent is recorded and stays fixed.");
+  const details = content.slice(content.findIndex((line) => line.startsWith("  head        ")) + 1, guide).filter(line => line !== "");
   expect(details.length).toBeGreaterThan(1);
   expect(details.every((line) => line.startsWith("  "))).toBe(true);
   expect(details.map((line) => line.slice(2)).join(" ")).toBe(stripVTControlCharacters(detail).slice(2));
@@ -77,5 +83,5 @@ it("preserves unlimited legacy rows when width is absent", () => {
 it("clamps narrow terminals to the floor and keeps the footer command whole", () => {
   const lines = formatStartConfirmation(session, plainPalette, [], 60);
   expect(formatStartConfirmation(session, plainPalette, [], 20)).toEqual(lines);
-  expect(lines.at(-1)).toBe("  next        Work in your editor, then run session stop.");
+  expect(lines.at(-1)).toBe("  finish      session stop");
 });
