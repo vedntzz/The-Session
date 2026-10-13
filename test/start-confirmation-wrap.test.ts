@@ -49,7 +49,8 @@ it.each([60, 80].flatMap((width) => [
 it.each([60, 80])("retains full safe metadata at %i columns", (width) => {
   const detail = `  attribution  ${"Read all accepted metadata safely. ".repeat(7).trim()}\u001b[2J`;
   const lines = formatStartConfirmation(session, plainPalette, [detail], width);
-  const details = lines.slice(lines.findIndex((line) => line.startsWith("  head        ")) + 1, -2);
+  const content = withoutStartFrame(lines);
+  const details = content.slice(content.findIndex((line) => line.startsWith("  head        ")) + 1, -2);
   expect(details.length).toBeGreaterThan(1);
   expect(details.every((line) => line.startsWith("  "))).toBe(true);
   expect(details.map((line) => line.slice(2)).join(" ")).toBe(stripVTControlCharacters(detail).slice(2));

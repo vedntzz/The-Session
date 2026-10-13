@@ -1,7 +1,7 @@
 import type { Session } from "../../store.js";
 import type { Palette } from "../palette.js";
 import { fold, safeText } from "../tui/text.js";
-import { INDENT, label, MIN_WIDTH } from "./text.js";
+import { INDENT, label, MIN_WIDTH, shortId } from "./text.js";
 
 /** Measure plain values before applying the terminal's ink. */
 export function startRows(
@@ -30,6 +30,16 @@ export function startDeclarationRows(
     `${INDENT}${palette.recording("◔ session  RECORDING")}`, "",
     ...startRows("intent", session.intent ?? "unknown", palette.intent, palette, width, 0, inset),
     ...startScopeRows(session.scope, palette, width, inset),
+  ];
+}
+
+/** Identify the already-saved record without reading the current checkout. */
+export function startRecordRows(
+  session: Pick<Session, "id" | "startCommit">, palette: Palette, width?: number, inset = 0,
+): string[] {
+  return [
+    ...startRows("id", shortId(session.id), palette.meta, palette, width, 0, inset),
+    ...startRows("head", session.startCommit.slice(0, 7), palette.meta, palette, width, 0, inset),
   ];
 }
 

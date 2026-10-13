@@ -20,12 +20,15 @@ export function startFrameWidth(width?: number): number | undefined {
 }
 
 /** Draw a terminal frame while leaving unknown-width output undecorated. */
-export function startFrame(lines: readonly string[], palette: Palette = plainPalette, width?: number): string[] {
+export function startFrame(
+  lines: readonly string[], palette: Palette = plainPalette, width?: number, below: readonly string[] = [],
+): string[] {
   const columns = startFrameWidth(width);
-  if (columns === undefined) return [...lines];
+  if (columns === undefined) return [...lines, ...below];
   return [
     frameBorder("╭", "╮", columns, palette),
     ...lines.map(line => frameLine(line, columns, palette)),
+    ...(below.length ? [frameBorder("├", "┤", columns, palette), ...below.map(line => frameLine(line, columns, palette))] : []),
     frameBorder("╰", "╯", columns, palette),
   ];
 }

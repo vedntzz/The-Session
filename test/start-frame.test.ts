@@ -41,7 +41,7 @@ it.each([60, 80, 120])("fits long declarations, literal paths and Unicode inside
   const framed = lines.slice(0, end + 1);
   expect(framed.length).toBeGreaterThan(6);
   expect(framed.every(line => cellWidth(line) === Math.min(width, 80))).toBe(true);
-  expect(framed.slice(1, -1).every(line => line.startsWith("  │ ") && line.endsWith(" │"))).toBe(true);
+  expect(framed.slice(1, -1).every(line => /^  ├─+┤$/u.test(line) || (line.startsWith("  │ ") && line.endsWith(" │")))).toBe(true);
 });
 
 it("keeps unknown intent and an undeclared scope explicit inside the frame", () => {
@@ -49,4 +49,20 @@ it("keeps unknown intent and an undeclared scope explicit inside the frame", () 
   const end = lines.findIndex(line => /^  ╰─+╯$/u.test(line));
   expect(lines.slice(2, end).some(line => line.startsWith("  │ intent      unknown"))).toBe(true);
   expect(lines.slice(2, end).some(line => line.startsWith("  │ scope       none declared"))).toBe(true);
+});
+
+it.each([60, 80])("places the recorded ID and commit below a divider at %i columns", width => {
+  const saved = { ...session, id: "fedcba98-7654", startCommit: "d3adc0ffeebabbe" };
+  const lines = formatStartConfirmation(saved, plainPalette, [], width);
+  const scope = lines.findIndex(line => line.startsWith("  │ scope"));
+  const divider = lines.findIndex(line => /^  ├─+┤$/u.test(line));
+  const id = lines.findIndex(line => line.startsWith("  │ id          fedcba98"));
+  const head = lines.findIndex(line => line.startsWith("  │ head        d3adc0f"));
+  const end = lines.findIndex(line => /^  ╰─+╯$/u.test(line));
+  expect(divider).toBeGreaterThan(scope);
+  expect(id).toBeGreaterThan(divider);
+  expect(head).toBeGreaterThan(id);
+  expect(head).toBeLessThan(end);
+  expect(lines.slice(0, end + 1).every(line => cellWidth(line) === width)).toBe(true);
+  expect(withoutStartFrame(lines)).toEqual(formatStartConfirmation(saved));
 });
