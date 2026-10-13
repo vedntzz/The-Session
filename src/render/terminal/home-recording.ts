@@ -1,4 +1,4 @@
-import { inOwnWords, type Session } from "../../store.js";
+import { hasDeclaredScope, inOwnWords, type Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { headOf } from "./intent.js";
 import { startRows } from "./start-rows.js";
@@ -10,12 +10,13 @@ export function formatRecordingHome(
 ): string[] {
   const row = (name: string, value: string, ink: (text: string) => string): string[] =>
     startRows(name, value, ink, palette, width);
+  const scope = hasDeclaredScope(running) ? running.scope : [];
   return [
     `${INDENT}${palette.recording("◔ session  recording")}`,
     "",
     ...sessionIntentRows(running, palette, width),
-    ...(running.scope.length > 0
-      ? running.scope.flatMap((path, index) => startRows(index === 0 ? "scope" : "", path, palette.path, palette, width, 2))
+    ...(scope.length > 0
+      ? scope.flatMap((path, index) => startRows(index === 0 ? "scope" : "", path, palette.path, palette, width, 2))
       : row("scope", "none declared", palette.meta)),
     ...row("id", shortId(running.id), palette.meta),
     ...row("since", clock(running.startedAt), palette.meta),

@@ -1,7 +1,7 @@
 import { sessionFigure } from "../../pricing.js";
 import type { Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
-import { NO_RATES, type View } from "./cost.js";
+import { hasCompleteTokens, NO_RATES, type View } from "./cost.js";
 import { sessionIntentRows } from "./home-recording.js";
 import { startRows } from "./start-rows.js";
 import { clock, INDENT, shortId } from "./text.js";
@@ -25,6 +25,7 @@ function readyHome(palette: Palette, width?: number): string[] {
 
 function stoppedHome(last: Session, palette: Palette, view: View): string[] {
   const row = (name: string, value: string): string[] => startRows(name, value, palette.meta, palette, view.width);
+  const price = hasCompleteTokens(last.cost) ? sessionFigure(last.cost, view.rates ?? NO_RATES) : undefined;
   return [
     `${INDENT}${palette.meta("◔ session  stopped")}`,
     "",
@@ -32,7 +33,7 @@ function stoppedHome(last: Session, palette: Palette, view: View): string[] {
     ...sessionIntentRows(last, palette, view.width),
     ...row("last", shortId(last.id)),
     ...row("ended", last.endedAt === null ? "unknown" : clock(last.endedAt)),
-    ...row("cost", sessionFigure(last.cost, view.rates ?? NO_RATES) ?? "unknown"),
+    ...row("cost", price ?? "unknown"),
     "",
     ...row("next", "session week last"),
     ...row("", "session start"),

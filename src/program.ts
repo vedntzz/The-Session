@@ -22,7 +22,6 @@ import { registerSync } from "./program/sync.js";
 import { registerVerify } from "./program/verify.js";
 import { registerWeek } from "./program/week.js";
 import { registerKnowledge } from "./program/knowledge.js";
-import { registerUi } from "./program/ui.js";
 import type { ProgramOptions } from "./program/options.js";
 
 export { parseFlag, type ProgramOptions } from "./program/options.js";
@@ -93,18 +92,21 @@ function registerCommands(program: Command, options: ProgramOptions, palette: Pa
   registerStop(program, options);
   registerWeek(program, options, palette);
   registerAgents(program, options, palette);
-  registerUi(program, options, palette);
   registerKnowledge(program, options);
   registerPr(program, options);
   registerScan(program, options, palette);
   registerVerify(program, options);
   registerSettle(program, options);
   registerSurvival(program, options, palette);
+  registerInfrastructure(program, options);
+  // Registered last, so it comes last in the short list: it is where a reader
+  // goes when the two commands above are not the ones they wanted.
+  registerHelp(program, palette);
+}
+
+function registerInfrastructure(program: Command, options: ProgramOptions): void {
   registerSync(program, options);
   registerConfig(program, options);
   registerKey(program, options);
   registerHook(program, options);
-  // Registered last, so it comes last in the short list: it is where a reader
-  // goes when the two commands above are not the ones they wanted.
-  registerHelp(program, palette);
 }

@@ -4,7 +4,8 @@ import { formatStopped, stopSession } from "../commands/stop.js";
 import { stopFromHook } from "../commands/agent-session.js";
 import { hookPayloadFrom } from "../capture/adapters/hook-payload.js";
 import { sweepFirst } from "../commands/sweep.js";
-import { loadRates } from "../pricing.js";
+import { loadChecked, loadRates } from "../pricing.js";
+import { withOutcomes } from "../observe.js";
 import { storeHome, type Session } from "../store.js";
 import { paletteFor, type Palette } from "../render/palette.js";
 import { formatStopConfirmation } from "../render/terminal/stop.js";
@@ -29,6 +30,19 @@ async function stopAndPrint(ifOpen: boolean, options: ProgramOptions, palette: P
 }
 
 async function printStopped(session: Session, options: ProgramOptions, palette: Palette, ifOpen: boolean): Promise<void> {
-  const legacy = formatStopped(session, await loadRates(storeHome(options)));
-  printLines(ifOpen ? legacy : formatStopConfirmation(session, palette, legacy.slice(2), terminalWidth(options.appTerminal?.output)));
+  const rates = await loadRates(storeHome(options));
+  const legacy = formatStopped(session, rates);
+  if (ifOpen) return printLines(legacy);
+  const outcome = await stoppedOutcome(session, options);
+  const checked = await loadChecked();
+  printLines(formatStopConfirmation(session, palette, legacy.slice(2), terminalWidth(options.appTerminal?.output), { rates, checked, outcome }));
+}
+
+async function stoppedOutcome(session: Session, options: ProgramOptions): Promise<Session["outcome"] | "unknown"> {
+  try {
+    const [resolved] = await withOutcomes([session], options.cwd ?? process.cwd());
+    return resolved!.outcome;
+  } catch {
+    return "unknown";
+  }
 }

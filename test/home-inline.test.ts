@@ -8,8 +8,9 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
 import { startPassiveSession, startSession } from "../src/commands/start.js";
-import { captureIntent, getOpenSession, zeroCost, type Session } from "../src/store.js";
-import type { UiTerminal } from "../src/commands/ui.js";
+import { appendSession, captureIntent, getOpenSession, zeroCost, type Session } from "../src/store.js";
+import { verifyLog } from "../src/commands/verify.js";
+import type { PromptTerminal } from "../src/commands/prompt-terminal.js";
 import { plainPalette } from "../src/render/palette.js";
 import { formatHome } from "../src/render/terminal.js";
 import { cellWidth } from "../src/render/tui/text.js";
@@ -28,7 +29,7 @@ function terminal(columns = 80, isTTY = true) {
 }
 async function bare(io: ReturnType<typeof terminal>) {
   let done = false;
-  const running = buildProgram({ ...options(), palette: plainPalette, appTerminal: io as unknown as UiTerminal }).parseAsync([], { from: "user" });
+  const running = buildProgram({ ...options(), palette: plainPalette, appTerminal: io as PromptTerminal }).parseAsync([], { from: "user" });
   const watched = running.finally(() => { done = true; });
   try { await vi.waitFor(() => expect(done).toBe(true), { timeout: 1000, interval: 10 }); await watched; }
   finally { if (!done) { io.input.end(); await watched; } }
@@ -111,4 +112,17 @@ it("omits money for unmeasured known-model cost", () => {
 });
 it("keeps a genuine measured zero cost visible", () => {
   expect(formatHome({ last: closed(1) }, plainPalette, { rates })).toContain("  cost        $0.00");
+});
+it.each(["partial-cost", "captured-scope"] as const)("renders historical signed %s evidence without changing store bytes", async (kind) => {
+  const captured = kind === "captured-scope"; const tokens = { inputTokens: 100_000, cacheReadTokens: 0, cacheCreationTokens: 0, outputTokens: 0 };
+  const cost = captured ? zeroCost() : { ...zeroCost(), ...tokens, model: "priced", turns: 2, untokenedTurns: 1, turnModels: ["priced"], turnTokens: [tokens] };
+  const { stdout: commit } = await exec("git", ["-C", cwd, "rev-parse", "HEAD"]);
+  const saved = await appendSession({ intent: "Historical record", intentSource: captured ? "captured" : "declared", scope: captured ? ["legacy/stale.ts"] : [],
+    startCommit: commit.trim(), startedAt: new Date(Date.now() - 60_000).toISOString(), endedAt: captured ? null : new Date().toISOString(), cost }, options());
+  await writeFile(path.join(home, "rates.json"), JSON.stringify({ models: { priced: { input: 15, cacheRead: 1.5, cacheCreation: 18.75, output: 75 } } }));
+  const before = await snapshot(); await bare(terminal());
+  expect(printed).toContain(captured ? "  scope       none declared" : "  cost        unknown");
+  expect(printed.join("\n")).not.toContain(captured ? "legacy/stale.ts" : "$"); expect(await snapshot()).toEqual(before);
+  if (captured) expect((await getOpenSession(options()))?.scope).toEqual(saved.scope);
+  expect((await verifyLog(options())).check).toMatchObject({ signaturesChecked: true, total: 1, verified: 1 });
 });

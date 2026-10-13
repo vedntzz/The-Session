@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Optional Session Lavender color profiles for Apple Terminal and iTerm2, with import instructions.
+
+### Changed
+- `session start` uses line prompts for intent and scope; the bare state view and stop confirmation stay in terminal scrollback.
+- The full-screen `session ui` launcher and screens are removed. Use `session week` for history and `session week <id> --full` for details.
+
 ### Fixed
 - A hook never closes a declared session, and `/clear` closes nothing; a passive session closes when the agents in it have ended, so the agreement's write check no longer goes silent after `/clear`.
 - Cost is read from the session's own agent transcripts, so two agents in one repo are no longer each billed for both. `week <id> --full` says how a cost was captured.
