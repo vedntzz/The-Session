@@ -1,7 +1,7 @@
 import type { Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { INDENT, shortId } from "./text.js";
-import { startDetails, startRows } from "./start-rows.js";
+import { startDetails, startRows, startScopeRows } from "./start-rows.js";
 
 /** A confirmation of the declaration the backend has already recorded. */
 export function formatStartConfirmation(
@@ -11,12 +11,10 @@ export function formatStartConfirmation(
   const row = (name: string, value: string, ink: (text: string) => string): string[] =>
     startRows(name, value, ink, palette, width);
   return [
-    `${INDENT}${palette.recording("◔ session  recording")}`,
+    `${INDENT}${palette.recording("◔ session  RECORDING")}`,
     "",
     ...row("intent", session.intent ?? "unknown", palette.intent),
-    ...(session.scope.length > 0
-      ? session.scope.flatMap((path, index) => startRows(index === 0 ? "scope" : "", path, palette.path, palette, width, 2))
-      : row("scope", "none declared", palette.meta)),
+    ...startScopeRows(session.scope, palette, width),
     ...row("id", shortId(session.id), palette.meta),
     ...row("head", session.startCommit.slice(0, 7), palette.meta),
     ...startDetails(details, width),

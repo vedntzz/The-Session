@@ -10,7 +10,7 @@ const session = {
 
 it("prints the exact recording confirmation and one next action", () => {
   expect(formatStartConfirmation(session)).toEqual([
-    "  ◔ session  recording", "",
+    "  ◔ session  RECORDING", "",
     "  intent      Build the UI", "  scope       src/a file.ts",
     "              notes/a,b.md", "  id          abcdef01", "  head        1234567", "",
     "  next        Work in your editor, then run session stop.",

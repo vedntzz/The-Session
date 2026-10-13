@@ -14,6 +14,13 @@ export function startRows(
     `${INDENT}${palette.meta(label(index === 0 ? name : ""))}${index > 0 ? " ".repeat(continuation) : ""}${ink(part)}`);
 }
 
+/** Keep the complete declared scope in the existing labelled layout. */
+export function startScopeRows(scope: readonly string[], palette: Palette, width?: number): string[] {
+  return scope.length > 0
+    ? scope.flatMap((path, index) => startRows(index === 0 ? "scope" : "", path, palette.path, palette, width, 2))
+    : startRows("scope", "none declared", palette.meta, palette, width);
+}
+
 /** Legacy metadata keeps its own indentation and all of its text. */
 export function startDetails(details: readonly string[], width?: number): string[] {
   if (width === undefined) return details.map(safeText);
