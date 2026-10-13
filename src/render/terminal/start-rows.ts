@@ -1,7 +1,7 @@
 import type { Session } from "../../store.js";
 import type { Palette } from "../palette.js";
-import { fold, safeText } from "../tui/text.js";
-import { INDENT, label, MIN_WIDTH, shortId } from "./text.js";
+import { cellWidth, fold, safeText } from "../tui/text.js";
+import { INDENT, label, MIN_WIDTH, note, shortId } from "./text.js";
 
 /** Measure plain values before applying the terminal's ink. */
 export function startRows(
@@ -22,12 +22,19 @@ export function startScopeRows(scope: readonly string[], palette: Palette, width
     : startRows("scope", "none declared", palette.meta, palette, width, 0, inset);
 }
 
+/** Separate the wordmark and state across the available frame width. */
+function startHeader(palette: Palette, width?: number, inset = 0): string {
+  const title = "◔ session"; const status = "RECORDING";
+  const gap = width === undefined ? 2 : Math.max(2, width - inset - INDENT.length - cellWidth(title) - cellWidth(status));
+  return INDENT + palette.recording(title + " ".repeat(gap) + status);
+}
+
 /** Reuse safe declaration rows, reserving the space the frame adds. */
 export function startDeclarationRows(
   session: Pick<Session, "intent" | "scope">, palette: Palette, width?: number, inset = 0,
 ): string[] {
   return [
-    `${INDENT}${palette.recording("◔ session  RECORDING")}`, "",
+    startHeader(palette, width, inset), "",
     ...startRows("intent", session.intent ?? "unknown", palette.intent, palette, width, 0, inset),
     ...startScopeRows(session.scope, palette, width, inset),
   ];
@@ -40,6 +47,17 @@ export function startRecordRows(
   return [
     ...startRows("id", shortId(session.id), palette.meta, palette, width, 0, inset),
     ...startRows("head", session.startCommit.slice(0, 7), palette.meta, palette, width, 0, inset),
+  ];
+}
+
+/** Explain the saved declaration and the next explicit command. */
+export function startNextSteps(intent: string | null, palette: Palette, width?: number): string[] {
+  const plain = (text: string): string => text;
+  const message = intent === null ? "Intent is unknown on this record." : "Your intent is recorded and stays fixed.";
+  return [
+    "", ...note(message, palette.meta, width), "",
+    ...startRows("next", "Work in your coding tool.", plain, palette, width),
+    ...startRows("finish", "session stop", plain, palette, width),
   ];
 }
 

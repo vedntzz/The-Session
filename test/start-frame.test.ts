@@ -11,11 +11,11 @@ it.each([60, 80])("frames recorded intent and scope at %i columns", width => {
   const lines = formatStartConfirmation(session, plainPalette, [], width);
   const end = lines.findIndex(line => /^  ╰─+╯$/u.test(line));
   expect(lines[0]).toMatch(/^  ╭─+╮$/u);
-  expect(lines[1]).toMatch(/^  │ ◔ session  RECORDING +│$/u);
+  expect(lines[1]).toMatch(/^  │ ◔ session +RECORDING │$/u);
   expect(lines.slice(2, end).some(line => line.startsWith("  │ intent      Add retries"))).toBe(true);
   expect(lines.slice(2, end).some(line => line.startsWith("  │ scope       src/webhooks/"))).toBe(true);
   expect(lines.slice(0, end + 1).every(line => cellWidth(line) === width)).toBe(true);
-  expect(withoutStartFrame(lines)).toEqual(formatStartConfirmation(session));
+  expect(withoutStartFrame(lines).slice(1)).toEqual(formatStartConfirmation(session).slice(1));
 });
 
 it.each([60, 80])("keeps ANSI and NO_COLOR frame geometry identical at %i columns", width => {
@@ -64,5 +64,25 @@ it.each([60, 80])("places the recorded ID and commit below a divider at %i colum
   expect(head).toBeGreaterThan(id);
   expect(head).toBeLessThan(end);
   expect(lines.slice(0, end + 1).every(line => cellWidth(line) === width)).toBe(true);
-  expect(withoutStartFrame(lines)).toEqual(formatStartConfirmation(saved));
+  expect(withoutStartFrame(lines).slice(1)).toEqual(formatStartConfirmation(saved).slice(1));
+});
+
+it.each([60, 80])("places readable work and finish guidance after the saved record at %i columns", width => {
+  const lines = formatStartConfirmation(session, plainPalette, [], width);
+  const end = lines.findIndex(line => /^  ╰─+╯$/u.test(line));
+  const next = lines.indexOf("  next        Work in your coding tool.");
+  const finish = lines.indexOf("  finish      session stop");
+  expect(next).toBeGreaterThan(end);
+  expect(finish).toBeGreaterThan(next);
+  expect(lines.filter(line => line.includes("session stop"))).toHaveLength(1);
+  expect(lines.every(line => cellWidth(line) <= width)).toBe(true);
+});
+
+it.each([60, 80])("uses readable foreground text while keeping frame edges quiet at %i columns", width => {
+  const lines = formatStartConfirmation(session, ansiPalette, [], width);
+  const prefix = "  " + ansiPalette.meta("│ "); const suffix = ansiPalette.meta(" │");
+  const fields = lines.filter(line => line.startsWith(prefix) && /intent|scope|src\/webhooks|abcdef01|1234567/u.test(line));
+  expect(fields).toHaveLength(4);
+  expect(fields.every(line => !line.slice(prefix.length, -suffix.length).includes("\u001b[2m"))).toBe(true);
+  expect(lines.find(line => line.includes("Your intent is recorded"))).not.toContain("\u001b[2m");
 });

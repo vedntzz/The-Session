@@ -55,7 +55,7 @@ it.each([["plain", plainPalette], ["ANSI", ansiPalette]] as const)("bare start p
     expect(session?.intent).toBe("Build the UI"); expect(session?.scope).toEqual(["src/a file.ts", "notes/a,b*[draft].md"]);
     const actual = printed.map(stripVTControlCharacters); const displayed = withoutStartFrame(actual);
     expect(actual[0]).toBe(""); expect(actual[1]).toMatch(/^  ╭─+╮$/u);
-    expect(actual[2]).toMatch(/^  │ ◔ session  RECORDING +│$/u);
+    expect(actual[2]).toMatch(/^  │ ◔ session +RECORDING │$/u);
     expect(displayed).toContain(`  intent      ${session?.intent}`);
     expect(displayed).toContain(`  scope       ${session?.scope[0]}`);
     expect(displayed).toContain(`              ${session?.scope[1]}`);

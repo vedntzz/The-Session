@@ -128,3 +128,9 @@ export function colorEnabled(signals: ColorSignals = {}): boolean {
 export function paletteFor(signals: ColorSignals = {}): Palette {
   return colorEnabled(signals) ? ansiPalette : plainPalette;
 }
+
+/** Start text uses the terminal foreground; the frame keeps its own quiet ink. */
+export function startTextPalette(palette: Palette): Palette {
+  const plain = (text: string): string => text;
+  return { ...palette, meta: plain, path: plain };
+}

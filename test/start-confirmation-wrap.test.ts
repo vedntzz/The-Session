@@ -50,7 +50,8 @@ it.each([60, 80])("retains full safe metadata at %i columns", (width) => {
   const detail = `  attribution  ${"Read all accepted metadata safely. ".repeat(7).trim()}\u001b[2J`;
   const lines = formatStartConfirmation(session, plainPalette, [detail], width);
   const content = withoutStartFrame(lines);
-  const details = content.slice(content.findIndex((line) => line.startsWith("  head        ")) + 1, -2);
+  const guide = content.findIndex(line => line === "  Your intent is recorded and stays fixed.");
+  const details = content.slice(content.findIndex((line) => line.startsWith("  head        ")) + 1, guide).filter(line => line !== "");
   expect(details.length).toBeGreaterThan(1);
   expect(details.every((line) => line.startsWith("  "))).toBe(true);
   expect(details.map((line) => line.slice(2)).join(" ")).toBe(stripVTControlCharacters(detail).slice(2));
@@ -82,5 +83,5 @@ it("preserves unlimited legacy rows when width is absent", () => {
 it("clamps narrow terminals to the floor and keeps the footer command whole", () => {
   const lines = formatStartConfirmation(session, plainPalette, [], 60);
   expect(formatStartConfirmation(session, plainPalette, [], 20)).toEqual(lines);
-  expect(lines.at(-1)).toBe("  next        Work in your editor, then run session stop.");
+  expect(lines.at(-1)).toBe("  finish      session stop");
 });

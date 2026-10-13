@@ -8,12 +8,13 @@ const session = {
   id: "abcdef01-2345-6789-abcd-0123456789ab", startCommit: "123456789abcdef",
 };
 
-it("prints the exact recording confirmation and one next action", () => {
+it("prints the exact recording confirmation with work and finish guidance", () => {
   expect(formatStartConfirmation(session)).toEqual([
     "  ◔ session  RECORDING", "",
     "  intent      Build the UI", "  scope       src/a file.ts",
     "              notes/a,b.md", "  id          abcdef01", "  head        1234567", "",
-    "  next        Work in your editor, then run session stop.",
+    "  Your intent is recorded and stays fixed.", "",
+    "  next        Work in your coding tool.", "  finish      session stop",
   ]);
 });
 
@@ -22,6 +23,8 @@ it("names an empty scope and unknown intent without inventing a value", () => {
   expect(lines).toContain("  intent      unknown");
   expect(lines).toContain("  scope       none declared");
   expect(lines.filter((line) => line.includes("session stop"))).toHaveLength(1);
+  expect(lines).toContain("  Intent is unknown on this record.");
+  expect(lines.join("\n")).not.toContain("Your intent is recorded");
 });
 
 it("preserves a full long intent and literal Unicode, brackets, commas and stars", () => {
@@ -37,7 +40,8 @@ it("keeps existing metadata details between the commit and next action", () => {
   const lines = formatStartConfirmation(session, plainPalette, details);
   const head = lines.indexOf("  head        1234567");
   expect(lines.slice(head + 1, head + 3)).toEqual(details);
-  expect(lines.slice(head + 3)).toEqual(["", "  next        Work in your editor, then run session stop."]);
+  expect(lines.slice(head + 3)).toEqual(["", "  Your intent is recorded and stays fixed.", "",
+    "  next        Work in your coding tool.", "  finish      session stop"]);
 });
 
 it("neutralizes terminal controls in values and details before applying ink", () => {
