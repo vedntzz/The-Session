@@ -1,6 +1,6 @@
 // The cost cells and the ink every view puts them in.
 import { callsOf, type AgentInfo } from "../../agents.js";
-import { formatUsd, rateStub, USER_RATES_FILE, type Price, type RateTable } from "../../pricing.js";
+import { formatUsd, rateStub, USER_RATES_FILE, wasMeasured, type Price, type RateTable } from "../../pricing.js";
 import { emptyTokensOf } from "../../empty.js";
 import { totalTokens, type Session, type SessionCost, type SessionOutcome } from "../../store.js";
 import type { Palette } from "../palette.js";
@@ -36,6 +36,11 @@ export interface View {
 }
 
 export const NO_RATES: RateTable = new Map();
+
+/** Partial capture cannot supply a complete token or money figure. */
+export function hasCompleteTokens(cost: SessionCost): boolean {
+  return wasMeasured(cost) && (cost.untokenedTurns ?? 0) === 0 && !cost.turnTokens?.some(turn => turn === null);
+}
 
 /** Where to send a reader whose model has no price on it. */
 export const RATES_HINT = USER_RATES_FILE;

@@ -45,6 +45,11 @@ it("labels a captured first line as prompt and preserves its newline boundary", 
   expect(lines).toContain("  prompt      First line …");
   expect(lines.join("\n")).not.toContain("Second line"); expect(lines.join("\n")).not.toContain("\u001b");
 });
+it("keeps a captured record's stale scope off the accepted declaration rows", () => {
+  const record = running({ intentSource: "captured", scope: ["legacy/stale.ts"] }); const before = JSON.stringify(record);
+  const lines = formatHome({ running: record }); expect(lines).toContain("  scope       none declared");
+  expect(lines.join("\n")).not.toContain("legacy/stale.ts"); expect(JSON.stringify(record)).toBe(before);
+});
 it.each([undefined, "paste-only"] as const)("shows unknown with the correct reason %s", (intentMissing) => {
   const lines = formatHome({ running: running({ intent: null, intentSource: "captured", intentMissing, scope: [] }) });
   expect(lines).toContain("  prompt      unknown"); expect(lines).toContain("  scope       none declared");

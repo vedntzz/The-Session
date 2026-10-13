@@ -47,7 +47,7 @@ edited afterwards.
 
 ```
 $ session start "add a farewell function next to greet" --scope src
-  started  add a farewell function next to greet  (head 8905d07)
+  started  add a farewell function next to greet  (head 124515a)
   scope    src
 ```
 
@@ -60,14 +60,28 @@ $ claude
 With Codex, `session hook install` writes the same hooks to `~/.codex/hooks.json` if Codex is installed. Approve them with `/hooks` in the Codex CLI. Until you do, a session's intent is captured only at `session stop`.
 
 **5. Close the record.** It shows what changed, what fell outside the declared
-scope, and the cost read from the transcript.
+scope, and the cost read from the transcript. This example has no captured
+transcript, so its turns, tokens, and cost stay `unknown`.
 
 ```
 $ session stop
-  stopped  add a farewell function next to greet
-  changed  src/greet.js  test/greet.test.js
-  outside  test/greet.test.js
-  cost     206,175 tokens  1 turn  (7 api calls)
+  ◔ session  stopped
+
+  outcome     open
+  intent      add a farewell function next to greet
+  scope       src
+  changed     2 files
+              src/greet.js
+              test/greet.test.js
+  outside     1 file
+              ! test/greet.test.js
+  id          3f479143
+
+  turns       unknown
+  tokens      unknown
+  cost        unknown
+
+  next        session week last --full
 ```
 
 **6. Read it back.**
@@ -79,7 +93,7 @@ $ session week last
   You asked for "add a farewell function next to greet".
   1 file changed outside what you declared: test/greet.test.js.
 
-  89720f7a · $0.12 · 1 turn
+  3f479143
 ```
 
 Next: `session hook install` (without `--repo`) registers user-level hooks so
@@ -104,7 +118,8 @@ outside-scope paths, turns, four token counters, and cost. Missing measurements
 read `unknown`; a measured zero cost reads `$0.00`. Use
 `session week last --full` for the full record. Output adapts to terminal width
 and inherits your terminal's background; `NO_COLOR=1` removes color.
-Explicit intents, scripts, passive hooks, and `--review` keep their behavior.
+Explicit `session start` arguments, passive hooks, and `start --review` keep
+their existing behavior. Normal `session stop` uses the completion shown above.
 
 For a soft lavender background, [import the optional Session Lavender
 theme](docs/themes/Readme.md) for Apple Terminal or iTerm2.

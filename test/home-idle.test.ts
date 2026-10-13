@@ -33,6 +33,13 @@ it("shows stopped facts, dim unknown cost and only the two next commands", () =>
   expect(tagged).toContain("<meta>◔ session  stopped</meta>"); expect(tagged).toContain("<meta>unknown</meta>");
 });
 const rates = new Map([["priced", { input: 15, cacheRead: 1.5, cacheCreation: 18.75, output: 75 }]]);
+it.each([false, true])("keeps partly tokenized money unknown with a null turn=%s without rewriting its cost", (missing) => {
+  const tokens = { inputTokens: 100_000, cacheReadTokens: 0, cacheCreationTokens: 0, outputTokens: 0 };
+  const record = last({ cost: { ...zeroCost(), ...tokens, model: "priced", turns: 2, untokenedTurns: missing ? 0 : 1,
+    turnModels: ["priced", "priced"], turnTokens: missing ? [tokens, null] : [tokens] } });
+  const before = JSON.stringify(record); const lines = formatHome({ last: record }, plainPalette, { rates });
+  expect(lines).toContain("  cost        unknown"); expect(lines.join("\n")).not.toContain("$"); expect(JSON.stringify(record)).toBe(before);
+});
 it.each([["priced", 0, 100_000, "unknown"], ["missing", 1, 100_000, "unknown"],
   ["priced", 1, 0, "$0.00"], ["priced", 1, 100_000, "$1.50"]] as const)("prices model %s with %i measured turns", (model, turns, inputTokens, figure) => {
   const cost = { ...zeroCost(), model, turns, inputTokens };

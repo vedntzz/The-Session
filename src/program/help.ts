@@ -3,6 +3,9 @@ import { Command, Help } from "commander";
 import { formatCommands, type CommandEntry } from "../render/terminal.js";
 import type { Palette } from "../render/palette.js";
 import { printLines } from "./print.js";
+import { RETIRED } from "./retired.js";
+
+export { RETIRED } from "./retired.js";
 
 /**
  * The commands `session --help` lists, beside the bare screen itself.
@@ -241,18 +244,6 @@ export function didYouMean(typed: string, names: readonly string[]): string | un
     .sort((a, b) => a.gap - b.gap || a.name.localeCompare(b.name));
   return near[0]?.name;
 }
-
-/**
- * Commands cut at the v1 boundary, and where their work went. Answered before
- * any guess: `show` is two edits from `stop`, and a reader with the old habit
- * offered `session stop` would end a session they meant to look at.
- */
-export const RETIRED: Readonly<Record<string, string>> = {
-  ui: "use session week, or session week <id> --full for full evidence.",
-  show: "use week <id>. session week last is the most recent closed session.",
-  debt: "use prime --debt.",
-  estimate: "removed; see week.",
-};
 
 /**
  * What `session wek` says.

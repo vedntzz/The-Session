@@ -1,7 +1,7 @@
 import { sessionFigure, wasMeasured } from "../../pricing.js";
 import type { Session } from "../../store.js";
 import type { Palette } from "../palette.js";
-import { breakdown, NO_RATES, pricesChecked, type View } from "./cost.js";
+import { breakdown, hasCompleteTokens, NO_RATES, pricesChecked, type View } from "./cost.js";
 import { startRows } from "./start-rows.js";
 
 export type StopView = Pick<View, "rates" | "checked"> & {
@@ -14,7 +14,7 @@ export function stopEvidenceRows(
 ): string[] {
   const { cost } = session;
   const measured = wasMeasured(cost);
-  const complete = measured && (cost.untokenedTurns ?? 0) === 0 && !cost.turnTokens?.some(turn => turn === null);
+  const complete = hasCompleteTokens(cost);
   const tokens = complete ? breakdown(cost) : "unknown";
   const figure = complete ? sessionFigure(cost, view.rates ?? NO_RATES) : undefined;
   return [

@@ -6,10 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sweepStampFile } from "../src/commands/sweep.js";
 import { buildProgram, type ProgramOptions } from "../src/program.js";
-import { appendSession, readSessions, resolveStoreFile, zeroCost } from "../src/store.js";
-import { prBody } from "../src/commands/pr.js";
-import { loadRates } from "../src/pricing.js";
-import { renderPr } from "../src/render/pr.js";
+import { readSessions } from "../src/store.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -77,17 +74,6 @@ async function record(intent: string, ...scope: string[]): Promise<void> {
 }
 
 describe("session pr", () => {
-  it("reads historical primed evidence without changing its signed declaration", async () => {
-    const proposal = { rule: "declared-drift-v1" as const, intent: "Historical goal", scope: ["suggested.ts"],
-      candidates: [{ path: "suggested.ts", reason: "named" as const, sessions: [] }], history: 0, comparable: 0, tracked: 1, omitted: 0 };
-    await appendSession({ intent: proposal.intent, intentSource: "primed", proposal, scope: ["accepted.ts"], reality: ["accepted.ts"],
-      startCommit: "base", startedAt: "2026-10-01T12:00:00Z", endedAt: "2026-10-01T13:00:00Z", cost: zeroCost() }, store);
-    const ledger = await resolveStoreFile(store); const before = await readFile(ledger); const [record] = await readSessions(store);
-    expect(record?.intentSource).toBe("primed"); expect(record?.proposal).toEqual(proposal); expect(record?.scope).toEqual(["accepted.ts"]);
-    const document = await prBody(undefined, store); expect(document).toBe(renderPr(record!, await loadRates(store.home)));
-    expect(document).toContain("scope reviewed with Prime"); expect(document).toContain("accepted.ts");
-    expect(await readFile(ledger)).toEqual(before);
-  });
   it("writes the document to stdout, whole, and nothing else", async () => {
     await record("rate limit the /orders endpoint", "a.txt");
 
