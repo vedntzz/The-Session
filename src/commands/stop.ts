@@ -7,16 +7,16 @@ import {
   captureIntent,
   getOpenSession,
   hasDeclaredScope,
-  totalTokens,
   updateSession,
   type Session,
   type SessionCost,
   type SessionPatch,
   type StoreOptions,
 } from "../store.js";
-import { isPriced, priceSession, type RateTable } from "../pricing.js";
+import type { RateTable } from "../pricing.js";
 import { inScope } from "../scope.js";
-import { callsCell, describePaths, intentOf, unpricedTokens } from "../render/terminal.js";
+import { callsCell, describePaths, intentOf } from "../render/terminal.js";
+import { tokensSpent } from "../render/terminal/stop-cost.js";
 import { plural } from "../render/terminal/text.js";
 import { NO_SCOPE } from "../render/terminal/intent.js";
 import { emptyTurnsOf, reconcileEmpty } from "../empty.js";
@@ -200,26 +200,6 @@ export async function stopIfOpen(options: StopOptions = {}): Promise<Session | u
     return undefined;
   }
   return stopSession(options);
-}
-
-/**
- * The tokens, and the model where no rate covers it.
- *
- * `stop` reports tokens rather than money — it is the line printed the moment
- * an agent finishes, and the money is what `week` and `week <id>` are for. What it
- * owes the reader is the model, in the same words `week` and `scan` use, so a
- * session that turns up unpriced in the week is recognisable here.
- *
- * Without a rate table nothing is claimed either way. `stop` is called in
- * places that have no rates to hand, and "unpriced" would then mean "nobody
- * asked" rather than "no rate covers this".
- */
-function tokensSpent(cost: SessionCost, rates?: RateTable): string {
-  const tokens = `${totalTokens(cost).toLocaleString("en-US")} tokens`;
-  if (rates === undefined || isPriced(priceSession(cost, rates))) {
-    return tokens;
-  }
-  return unpricedTokens(cost);
 }
 
 /** The lines `session stop` prints; `outside` only where a declared scope drifted, else why it cannot be said. */
