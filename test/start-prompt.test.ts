@@ -31,7 +31,7 @@ function terminal() {
   output.on("data", (chunk: Buffer) => { text += chunk.toString(); }); streams.push(input, output);
   return { input, output, text: () => text, raw: () => raw };
 }
-const ready = (io: ReturnType<typeof terminal>) => vi.waitFor(() => expect(io.text()).toContain("  Enter to continue · Ctrl-C to cancel\n\n  › "));
+const ready = (io: ReturnType<typeof terminal>) => vi.waitFor(() => expect(stripVTControlCharacters(io.text())).toContain("  Enter to continue · Ctrl-C to cancel\n\n  › "));
 const run = (io: ReturnType<typeof terminal>, args = ["start"], palette: Palette = plainPalette) =>
   buildProgram({ ...options(), startTerminal: io, palette }).parseAsync(args, { from: "user" });
 beforeEach(async () => {
@@ -62,7 +62,9 @@ it.each([["plain", plainPalette], ["ANSI", ansiPalette]] as const)("bare start p
     expect(displayed).toContain(`  id          ${session?.id.slice(0, 8)}`);
     expect(displayed).toContain(`  head        ${session?.startCommit.slice(0, 7)}`);
     if (palette === ansiPalette) expect(printed.join("\n")).toContain("\u001b[36m");
-    expect(io.raw()).toBe(0); expect(io.text()).not.toContain("\u001b");
+    expect(io.raw()).toBe(0);
+    if (palette === ansiPalette) expect(io.text()).toContain(ansiPalette.intent("Intent"));
+    else expect(io.text()).not.toContain("\u001b");
   } finally { io.input.end(); await running; }
 });
 it("skips scope with a blank answer on a dumb terminal", async () => {
@@ -175,4 +177,17 @@ it("explains the intent step in 40 columns before recording anything", async () 
   expect(printed).toEqual([]); expect(await readSessions(options())).toEqual([]);
   io.input.end(); await running;
   expect(existsSync(home)).toBe(false);
+});
+
+it.each([["NO_COLOR", undefined, "1", plainPalette], ["forced off", "0", "", plainPalette], ["forced on", "1", "1", ansiPalette]] as const)("uses the process palette for the intent prompt: %s", async (_name, forced, off, palette) => {
+  vi.stubEnv("FORCE_COLOR", forced); vi.stubEnv("NO_COLOR", off);
+  const io = terminal(); const running = buildProgram({ ...options(), startTerminal: io }).parseAsync(["start"], { from: "user" });
+  try {
+    await ready(io);
+    expect(io.text()).toContain("  " + palette.intent("Intent") + "\n");
+    expect(stripVTControlCharacters(io.text())).toContain("Enter to continue · Ctrl-C to cancel");
+    if (palette === plainPalette) expect(io.text()).not.toContain("\u001b");
+    io.input.write("Preserve  café intent\nsrc/a file.ts\n\n"); await running;
+    expect((await readSessions(options()))[0]?.intent).toBe("Preserve  café intent");
+  } finally { io.input.end(); await running; }
 });

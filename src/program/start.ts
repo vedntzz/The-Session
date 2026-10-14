@@ -32,7 +32,7 @@ async function routeStart(intent: string | undefined, flags: StartFlags, options
   if (flags.passive) return startPassive(flags, options);
   if (intent !== undefined) return startDeclared(intent, flags, options);
   if (flags.review) throw new Error('No intent given. Run: session start "what you are about to do"');
-  const declaration = await readStartPrompt({ ...options, scope: flags.scope });
+  const declaration = await readStartPrompt({ ...options, scope: flags.scope }, palette);
   printLines([""]);
   if (declaration === undefined) {
     printLines(["  Cancelled. No session started."]);
