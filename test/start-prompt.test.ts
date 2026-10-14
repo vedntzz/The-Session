@@ -125,15 +125,18 @@ it("takes HEAD and the dirty baseline at acceptance", async () => {
   const [session] = await readSessions(options());
   expect(session?.startCommit).toBe(head); expect(session?.baseline).toEqual(["dirty.txt"]);
 });
-it("wraps the saved declaration at the width captured before prompting", async () => {
+it.each([[40, 80, 80], [80, 40, 40], [60, 80, 80], [80, 60, 60], [80, 20, 40]])("adapts a start resized from %i to %i columns to a %i-column confirmation", async (before, after, width) => {
   const intent = "Keep every word of this declaration visible. ".repeat(3).trim();
   const literal = `src/${"a".repeat(90)}.ts`;
-  const io = terminal(); io.output.columns = 60; const running = run(io); await ready(io);
-  io.output.columns = 80; io.input.write(`${intent}\n${literal}\n\n`); await running;
+  const io = terminal(); io.output.columns = before; const running = run(io); await ready(io);
+  io.input.write(`${intent}\n`);
+  await vi.waitFor(() => expect(io.text()).toContain("Which files?"));
+  io.output.columns = after; io.input.write(`${literal}\n\n`); await running;
   const [session] = await readSessions(options());
   expect(session?.intent).toBe(intent); expect(session?.scope).toEqual([literal]);
   const actual = printed.map(stripVTControlCharacters); const lines = withoutStartFrame(actual);
-  expect(actual.every((line) => cellWidth(line) <= 60)).toBe(true);
+  expect(actual.every((line) => cellWidth(line) <= width)).toBe(true);
+  expect(actual.some(line => /^  ╭─+╮$/u.test(line) && cellWidth(line) === width)).toBe(true);
   const first = lines.findIndex((line) => line.startsWith("  intent      "));
   const scope = lines.findIndex((line) => line.startsWith("  scope       "));
   const id = lines.findIndex((line) => line.startsWith("  id          "));
@@ -150,4 +153,14 @@ it("honors the actual 40-column terminal when bare start records a declaration",
   const lines = printed.map(stripVTControlCharacters);
   expect(lines.every(line => cellWidth(line) <= 40)).toBe(true);
   expect(withoutStartFrame(lines)).toContain(`  id          ${session?.id.slice(0, 8)}`);
+});
+
+it("uses the current width when provided scope skips the scope prompt", async () => {
+  const io = terminal(); const running = run(io, ["start", "--scope", "src/webhooks/"]); await ready(io);
+  io.output.columns = 40; io.input.write("Add retries to the webhook sender\n"); await running;
+  const [session] = await readSessions(options());
+  expect(session?.intent).toBe("Add retries to the webhook sender");
+  expect(session?.scope).toEqual(["src/webhooks/"]);
+  expect(printed.map(stripVTControlCharacters).every(line => cellWidth(line) <= 40)).toBe(true);
+  expect(io.text()).not.toContain("Which files?");
 });
