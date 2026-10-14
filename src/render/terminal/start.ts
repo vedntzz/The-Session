@@ -15,7 +15,7 @@ export function formatStartConfirmation(
   const record = startRecordRows(session, textPalette, columns, inset);
   return [
     ...startFrame(declaration, palette, columns, record),
-    ...startDetails(details, width),
-    ...startNextSteps(session.intent, textPalette, width),
+    ...startDetails(details, columns),
+    ...startNextSteps(session.intent, textPalette, columns),
   ];
 }
