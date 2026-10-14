@@ -75,6 +75,7 @@ it("uses --scope without asking for paths", async () => {
   await ready(io); io.input.write("Use provided scope\n"); await running;
   expect((await readSessions(options()))[0]?.scope).toEqual(["given/a file.ts", "notes/a,b.md"]);
   expect(io.text()).not.toContain("Which files?");
+  expect(io.text()).toMatch(/  › $/u);
 });
 it.each(["", "\n", "Intent\n", "Intent\nsrc/\n"])("creates no store for unfinished input %j", async (input) => {
   const io = terminal(); const running = run(io); await ready(io);

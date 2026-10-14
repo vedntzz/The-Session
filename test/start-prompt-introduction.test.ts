@@ -52,3 +52,16 @@ it.each([["input pipe", false, true], ["output pipe", true, false]] as const)("r
   await expect(run(io)).rejects.toThrow(/No intent given/);
   expect(io.text()).toBe(""); expect(printed).toEqual([]); expect(existsSync(fixture.home)).toBe(false);
 });
+
+it.each([["plain", plainPalette], ["ANSI", ansiPalette]] as const)("separates the accepted intent from the scope prompt: %s", async (_name, palette) => {
+  const io = terminal(); const running = run(io, ["start"], palette);
+  try {
+    await ready(io); io.input.write("Keep  café intent literal\n");
+    await vi.waitFor(() => expect(io.text()).toContain("Which files?"));
+    expect(stripVTControlCharacters(io.text())).toContain("  › \n  Which files?");
+    expect(await readSessions(options())).toEqual([]);
+    io.input.write("src/a file.ts\n\n"); await running;
+    const [session] = await readSessions(options());
+    expect(session?.intent).toBe("Keep  café intent literal"); expect(session?.scope).toEqual(["src/a file.ts"]);
+  } finally { io.input.end(); await running; }
+});
