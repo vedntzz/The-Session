@@ -1,7 +1,7 @@
+import { createStartRepo } from "./fixtures/start-repo.js";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { promisify, stripVTControlCharacters } from "node:util";
@@ -37,10 +37,7 @@ const run = (io: ReturnType<typeof terminal>, args = ["start"], palette: Palette
 beforeEach(async () => {
   vi.stubEnv("TERM", "xterm-256color"); printed = [];
   vi.spyOn(console, "log").mockImplementation((...lines) => { printed.push(lines.join(" ")); });
-  root = await mkdtemp(path.join(tmpdir(), "session-start-prompt-")); cwd = path.join(root, "repo"); home = path.join(root, "store");
-  await mkdir(cwd); await git(["init", "-q"]); await git(["config", "user.name", "Test"]);
-  await git(["config", "user.email", "test@example.com"]); await git(["config", "commit.gpgsign", "false"]);
-  await commit("base.txt");
+  ({ root, cwd, home } = await createStartRepo());
 });
 afterEach(async () => {
   streams.splice(0).forEach((stream) => stream.destroy()); vi.restoreAllMocks(); vi.unstubAllEnvs();
@@ -174,6 +171,7 @@ it("explains the intent step in 40 columns before recording anything", async () 
   expect(io.text()).toContain("  Intent\n  What are you working on?");
   expect(io.text()).toContain("  Describe the change you want to make.");
   expect(io.text()).not.toContain("RECORDING");
+  expect(io.text()).toMatch(/^  ◔ session  start a session\n  ─+\n\n  Intent\n/u);
   expect(printed).toEqual([]); expect(await readSessions(options())).toEqual([]);
   io.input.end(); await running;
   expect(existsSync(home)).toBe(false);

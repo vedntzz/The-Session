@@ -1,3 +1,6 @@
+import { formatStartPromptHeader } from "../render/terminal/start-prompt-header.js";
+import { START_MIN_WIDTH } from "../render/terminal/start-frame.js";
+import { terminalWidth } from "../render/terminal/text.js";
 import { plainPalette, type Palette } from "../render/palette.js";
 import type { StoreOptions } from "../store.js";
 import { assertStartAvailable } from "./start-conditions.js";
@@ -27,6 +30,8 @@ async function collectStartPrompt(
   palette: Palette,
   provided?: string[],
 ): Promise<Declaration | undefined> {
+  const width = terminalWidth(output, START_MIN_WIDTH);
+  output.write(formatStartPromptHeader(palette, width).join("\n") + "\n");
   const intent = await promptIntent(answers, output, palette);
   if (intent === undefined) return undefined;
   if (provided !== undefined) return { intent, scope: provided };
