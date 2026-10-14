@@ -58,7 +58,9 @@ it.each([["plain", plainPalette], ["ANSI", ansiPalette]] as const)("separates th
   try {
     await ready(io); io.input.write("Keep  café intent literal\n");
     await vi.waitFor(() => expect(io.text()).toContain("Which files?"));
-    expect(stripVTControlCharacters(io.text())).toContain("  › \n  Which files?");
+    expect(stripVTControlCharacters(io.text())).toContain("  › \n  Scope (optional)\n  Which files?");
+    expect(io.text()).toContain(palette.intent("Scope (optional)"));
+    expect(io.text()).toContain(palette.meta("Empty line to finish or skip."));
     expect(await readSessions(options())).toEqual([]);
     io.input.write("src/a file.ts\n\n"); await running;
     const [session] = await readSessions(options());

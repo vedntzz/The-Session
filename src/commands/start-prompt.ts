@@ -30,8 +30,7 @@ async function collectStartPrompt(
   const intent = await promptIntent(answers, output, palette);
   if (intent === undefined) return undefined;
   if (provided !== undefined) return { intent, scope: provided };
-  output.write("\n");
-  const scope = await promptScope(answers, output);
+  const scope = await promptScope(answers, output, palette);
   if (scope === undefined) return undefined;
   return scope.length > 0 ? { intent, scope } : { intent };
 }

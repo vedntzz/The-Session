@@ -68,7 +68,7 @@ it("skips scope with a blank answer on a dumb terminal", async () => {
   vi.stubEnv("TERM", "dumb"); const io = terminal(); const running = run(io);
   await ready(io); io.input.write("Work with no scope\n\n"); await running;
   expect((await readSessions(options()))[0]?.scope).toEqual([]);
-  expect(io.text()).toContain("Which files? Enter to skip."); expect(io.raw()).toBe(0);
+  expect(io.text()).toContain("Empty line to finish or skip."); expect(io.raw()).toBe(0);
 });
 it("uses --scope without asking for paths", async () => {
   const io = terminal(); const running = run(io, ["start", "--scope", "given/a file.ts", "notes/a,b.md"]);

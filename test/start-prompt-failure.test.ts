@@ -15,21 +15,29 @@ afterEach(async () => {
   await rm(fixture.root, { recursive: true, force: true });
 });
 
-it("stops writing after the introduction's output fails and creates no record", async () => {
-  const failure = new Error("terminal output failed"); let writes = 0;
+function failingTerminal(failure: Error, failedWrite: number) {
+  let writes = 0;
   const input = Object.assign(new PassThrough(), { isTTY: true });
   const output = Object.assign(new class extends PassThrough {
-    override write(): boolean { writes += 1; this.emit("error", failure); return false; }
+    override write(chunk: string | Uint8Array): boolean {
+      if (++writes === failedWrite) { this.emit("error", failure); return false; }
+      return super.write(chunk);
+    }
   }(), { isTTY: true, columns: 40 });
   streams.push(input, output);
+  return { input, output, writes: () => writes };
+}
+
+it.each([["intent", 1], ["scope", 2]] as const)("stops writing when the %s prompt fails and creates no record", async (_step, failedWrite) => {
+  const failure = new Error("terminal output failed"); const io = failingTerminal(failure, failedWrite);
   const print = vi.spyOn(console, "log").mockImplementation(() => {});
   const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
   const before = signals.map(signal => process.listenerCount(signal));
-  input.write("Already queued\nsrc/\n\n");
-  const program = buildProgram({ ...fixture, adapters: [], palette: plainPalette, startTerminal: { input, output } });
+  io.input.write("Already queued\nsrc/\n\n");
+  const program = buildProgram({ ...fixture, adapters: [], palette: plainPalette, startTerminal: io });
   await expect(program.parseAsync(["start"], { from: "user" })).rejects.toBe(failure);
-  expect(writes).toBe(1); expect(print).not.toHaveBeenCalled();
+  expect(io.writes()).toBe(failedWrite); expect(print).not.toHaveBeenCalled();
   expect(signals.map(signal => process.listenerCount(signal))).toEqual(before);
-  expect(output.listenerCount("error")).toBe(0);
+  expect(io.output.listenerCount("error")).toBe(0);
   expect(existsSync(fixture.home)).toBe(false); expect(await readSessions(fixture)).toEqual([]);
 });
