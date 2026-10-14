@@ -1,16 +1,17 @@
 import type { Session } from "../../store.js";
 import type { Palette } from "../palette.js";
-import { cellWidth, fold, safeText } from "../tui/text.js";
-import { INDENT, label, MIN_WIDTH, note, shortId } from "./text.js";
+import { cellWidth, fold, foldLiteral, safeText } from "../tui/text.js";
+import { INDENT, label, shortId } from "./text.js";
+import { START_MIN_WIDTH } from "./start-frame.js";
 
 /** Measure plain values before applying the terminal's ink. */
 export function startRows(
   name: string, value: string, ink: (text: string) => string,
-  palette: Palette, width?: number, continuation = 0, inset = 0,
+  palette: Palette, width?: number, continuation = 0, inset = 0, wrap = fold,
 ): string[] {
   const clean = safeText(value);
-  const available = width === undefined ? undefined : Math.max(MIN_WIDTH, width) - (INDENT + label("")).length - continuation - inset;
-  const parts = available === undefined ? [clean] : fold(clean, available);
+  const available = width === undefined ? undefined : Math.max(START_MIN_WIDTH, width) - (INDENT + label("")).length - continuation - inset;
+  const parts = available === undefined ? [clean] : wrap(clean, available);
   return parts.map((part, index) =>
     `${INDENT}${palette.meta(label(index === 0 ? name : ""))}${index > 0 ? " ".repeat(continuation) : ""}${ink(part)}`);
 }
@@ -18,7 +19,7 @@ export function startRows(
 /** Keep the complete declared scope in the existing labelled layout. */
 export function startScopeRows(scope: readonly string[], palette: Palette, width?: number, inset = 0): string[] {
   return scope.length > 0
-    ? scope.flatMap((path, index) => startRows(index === 0 ? "scope" : "", path, palette.path, palette, width, 2, inset))
+    ? scope.flatMap((path, index) => startRows(index === 0 ? "scope" : "", path, palette.path, palette, width, 2, inset, foldLiteral))
     : startRows("scope", "none declared", palette.meta, palette, width, 0, inset);
 }
 
@@ -55,7 +56,7 @@ export function startNextSteps(intent: string | null, palette: Palette, width?: 
   const plain = (text: string): string => text;
   const message = intent === null ? "Intent is unknown on this record." : "Your intent is recorded and stays fixed.";
   return [
-    "", ...note(message, palette.meta, width), "",
+    "", ...startDetails([INDENT + message], width).map(line => palette.meta(line)), "",
     ...startRows("next", "Work in your coding tool.", plain, palette, width),
     ...startRows("finish", "session stop", plain, palette, width),
   ];
@@ -67,6 +68,6 @@ export function startDetails(details: readonly string[], width?: number): string
   return details.flatMap(detail => {
     const indent = detail.startsWith(INDENT) ? INDENT : "";
     const clean = safeText(detail).slice(indent.length);
-    return fold(clean, Math.max(MIN_WIDTH, width) - indent.length).map(line => indent + line);
+    return fold(clean, Math.max(START_MIN_WIDTH, width) - indent.length).map(line => indent + line);
   });
 }

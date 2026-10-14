@@ -1,7 +1,10 @@
 import { stripVTControlCharacters } from "node:util";
 import { plainPalette, type Palette } from "../palette.js";
 import { cellWidth } from "../tui/text.js";
-import { INDENT, MIN_WIDTH } from "./text.js";
+import { INDENT } from "./text.js";
+
+/** The start card remains readable below the table views' minimum. */
+export const START_MIN_WIDTH = 40;
 
 function frameBorder(left: string, right: string, width: number, palette: Palette): string {
   return INDENT + palette.meta(left + "─".repeat(width - INDENT.length - 2) + right);
@@ -16,7 +19,7 @@ function frameLine(line: string, width: number, palette: Palette): string {
 
 /** Share the exact frame budget with its wrapped contents. */
 export function startFrameWidth(width?: number): number | undefined {
-  return width === undefined || !Number.isFinite(width) ? undefined : Math.max(MIN_WIDTH, Math.min(80, Math.trunc(width)));
+  return width === undefined || !Number.isFinite(width) ? undefined : Math.max(START_MIN_WIDTH, Math.min(80, Math.trunc(width)));
 }
 
 /** Draw a terminal frame while leaving unknown-width output undecorated. */

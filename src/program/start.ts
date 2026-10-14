@@ -10,6 +10,7 @@ import { startReviewed } from "../commands/review.js";
 import { readStartPrompt } from "../commands/start-prompt.js";
 import { plainPalette, type Palette } from "../render/palette.js";
 import { formatStartConfirmation } from "../render/terminal/start.js";
+import { START_MIN_WIDTH } from "../render/terminal/start-frame.js";
 import { safeText } from "../render/tui/text.js";
 import { terminalWidth } from "../render/terminal/text.js";
 
@@ -31,7 +32,6 @@ async function routeStart(intent: string | undefined, flags: StartFlags, options
   if (flags.passive) return startPassive(flags, options);
   if (intent !== undefined) return startDeclared(intent, flags, options);
   if (flags.review) throw new Error('No intent given. Run: session start "what you are about to do"');
-  const width = terminalWidth(options.startTerminal?.output);
   const declaration = await readStartPrompt({ ...options, scope: flags.scope });
   printLines([""]);
   if (declaration === undefined) {
@@ -39,7 +39,10 @@ async function routeStart(intent: string | undefined, flags: StartFlags, options
     return;
   }
   return startDeclared(declaration.intent, { ...flags, scope: declaration.scope }, options,
-    session => formatStartConfirmation(session, palette, formatStarted(session).slice(2), width));
+    session => {
+      const width = terminalWidth(options.startTerminal?.output, START_MIN_WIDTH);
+      return formatStartConfirmation(session, palette, formatStarted(session).slice(2), width);
+    });
 }
 
 /** Hook stdout becomes editor context, so the passive route stays silent. */

@@ -18,6 +18,7 @@ import {
   type StoreOptions,
 } from "../store.js";
 import { intentOf, shortId } from "../render/terminal.js";
+import { settlementReason as because } from "../render/terminal/settle-reason.js";
 import { findSession } from "./show.js";
 
 /**
@@ -276,21 +277,6 @@ function line(label: string, value: string): string {
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
-}
-
-/** A short account of why a session was called what it was called. */
-function because(verdict: OutcomeVerdict): string {
-  const parts: string[] = [];
-  if (verdict.landed.length > 0) {
-    parts.push(`${plural(verdict.landed.length, "file", "files")} in the branch`);
-  }
-  if (verdict.inFlight.length > 0) {
-    parts.push(`${plural(verdict.inFlight.length, "file", "files")} still in the tree`);
-  }
-  if (verdict.lost.length > 0) {
-    parts.push(`${plural(verdict.lost.length, "file", "files")} nowhere`);
-  }
-  return parts.length > 0 ? parts.join(", ") : "nothing was left behind";
 }
 
 /** What `session settle` prints: one line per session it decided about. */

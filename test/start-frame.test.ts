@@ -26,15 +26,15 @@ it.each([60, 80])("keeps ANSI and NO_COLOR frame geometry identical at %i column
   expect(formatStartConfirmation(session, paletteFor({ env: { NO_COLOR: "1" }, isTTY: true }), [], width)).toEqual(plain);
 });
 
-it.each([20, 0, -1])("uses the existing width floor for a %i-column frame", width => {
-  expect(formatStartConfirmation(session, plainPalette, [], width)).toEqual(formatStartConfirmation(session, plainPalette, [], 60));
+it.each([20, 0, -1])("uses the start width floor for a %i-column frame", width => {
+  expect(formatStartConfirmation(session, plainPalette, [], width)).toEqual(formatStartConfirmation(session, plainPalette, [], 40));
 });
 
 it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY])("omits frame decoration when width is unavailable: %s", width => {
   expect(formatStartConfirmation(session, plainPalette, [], width)[0]).toBe("  ◔ session  RECORDING");
 });
 
-it.each([60, 80, 120])("fits long declarations, literal paths and Unicode inside a %i-column terminal", width => {
+it.each([40, 60, 80, 120])("fits long declarations, literal paths and Unicode inside a %i-column terminal", width => {
   const long = { ...session, intent: "Keep every word visible. ".repeat(8).trim(), scope: ["資料/" + "e\u0301界".repeat(40) + ".ts", "src/" + "folder  ".repeat(15) + "file.ts"] };
   const lines = formatStartConfirmation(long, plainPalette, [], width);
   const end = lines.findIndex(line => /^  ╰─+╯$/u.test(line));

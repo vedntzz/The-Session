@@ -5,6 +5,7 @@ import { UNKNOWN_REPO, type ScanReport } from "../../scan.js";
 import type { Palette } from "../palette.js";
 import { NO_PRICE, RATES_HINT, stubLines } from "./cost.js";
 import { figure, INDENT, note, padLeft, padRight, plural, width } from "./text.js";
+import { scanWindow } from "./scan-window.js";
 
 // --- scan -----------------------------------------------------------------
 
@@ -55,11 +56,6 @@ export function formatScan(report: ScanReport, palette: Palette, limit?: number,
 /** A block of the report, with the blank line that separates it from the last. */
 function section(lines: readonly string[]): string[] {
   return lines.length === 0 ? [] : ["", ...lines];
-}
-
-/** What was read, under the headline computed from it. */
-function scanWindow(report: ScanReport): string {
-  return `the last ${plural(report.days, "day", "days")} · ${plural(report.repos.length, "repo", "repos")}`;
 }
 
 /**

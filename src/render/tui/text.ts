@@ -49,6 +49,19 @@ export function fold(text: string, width: number): string[] {
   return [...lines, line];
 }
 
+/** Wrap literal paths without removing spaces or splitting a grapheme. */
+export function foldLiteral(text: string, width: number): string[] {
+  const lines: string[] = []; let line = ""; let used = 0;
+  for (const { segment } of segmenter.segment(safeText(text))) {
+    const size = cells(segment);
+    if (used + size > width && line) {
+      lines.push(line); line = ""; used = 0;
+    }
+    line += segment; used += size;
+  }
+  return [...lines, line];
+}
+
 export function fit(text: string, width: number): string {
   const clean = safeText(text);
   const value = cellWidth(clean) <= width ? clean : `${fold(clean, Math.max(1, width - 1))[0]}…`;
