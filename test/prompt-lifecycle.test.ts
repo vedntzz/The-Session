@@ -84,7 +84,7 @@ it("does not write another prompt from queued pasted answers after cancellation"
   io.input.write("Already queued\nsrc/\n\n"); io.signals.emit("SIGINT");
   expect(await result).toBeUndefined();
   await turn();
-  expect(written).toBe("  What are you working on?\n  › ");
+  expect(written).toBe("  Intent\n  What are you working on?\n  Describe the change you want to make.\n  Enter to continue · Ctrl-C to cancel\n\n  › ");
   expect(io.signals.exitCode).toBe(130); cleanup(io, before);
 });
 it.each(["input", "output"] as const)("preserves an asynchronous %s error", async (stream) => {

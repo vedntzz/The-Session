@@ -31,7 +31,7 @@ function terminal() {
   output.on("data", (chunk: Buffer) => { text += chunk.toString(); }); streams.push(input, output);
   return { input, output, text: () => text, raw: () => raw };
 }
-const ready = (io: ReturnType<typeof terminal>) => vi.waitFor(() => expect(io.text()).toContain("  What are you working on?\n  › "));
+const ready = (io: ReturnType<typeof terminal>) => vi.waitFor(() => expect(io.text()).toContain("  Enter to continue · Ctrl-C to cancel\n\n  › "));
 const run = (io: ReturnType<typeof terminal>, args = ["start"], palette: Palette = plainPalette) =>
   buildProgram({ ...options(), startTerminal: io, palette }).parseAsync(args, { from: "user" });
 beforeEach(async () => {
@@ -163,4 +163,16 @@ it("uses the current width when provided scope skips the scope prompt", async ()
   expect(session?.scope).toEqual(["src/webhooks/"]);
   expect(printed.map(stripVTControlCharacters).every(line => cellWidth(line) <= 40)).toBe(true);
   expect(io.text()).not.toContain("Which files?");
+});
+
+it("explains the intent step in 40 columns before recording anything", async () => {
+  const io = terminal(); io.output.columns = 40;
+  const running = run(io); await ready(io);
+  expect(io.text().split("\n").every(line => cellWidth(line) <= 40)).toBe(true);
+  expect(io.text()).toContain("  Intent\n  What are you working on?");
+  expect(io.text()).toContain("  Describe the change you want to make.");
+  expect(io.text()).not.toContain("RECORDING");
+  expect(printed).toEqual([]); expect(await readSessions(options())).toEqual([]);
+  io.input.end(); await running;
+  expect(existsSync(home)).toBe(false);
 });

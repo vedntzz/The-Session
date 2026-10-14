@@ -29,7 +29,7 @@ describe("promptIntent", () => {
     const answer = promptIntent(io.answers, io.output);
     io.input.write("Make the terminal readable\n");
     expect(await answer).toBe("Make the terminal readable");
-    expect(io.written()).toBe("  What are you working on?\n  › ");
+    expect(io.written()).toBe("  Intent\n  What are you working on?\n  Describe the change you want to make.\n  Enter to continue · Ctrl-C to cancel\n\n  › ");
   });
 
   it("trims only the edges and keeps internal whitespace, punctuation and Unicode", async () => {
