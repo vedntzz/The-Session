@@ -4,7 +4,8 @@ import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
-import { readSessions } from "../src/store.js";
+import { getOpenSession, readSessions } from "../src/store.js";
+import { startPassiveSession } from "../src/commands/start.js";
 import { ansiPalette, plainPalette, type Palette } from "../src/render/palette.js";
 import { cellWidth } from "../src/render/tui/text.js";
 import { createStartRepo } from "./fixtures/start-repo.js";
@@ -65,5 +66,43 @@ it.each([["plain", plainPalette], ["ANSI", ansiPalette]] as const)("separates th
     io.input.write("src/a file.ts\n\n"); await running;
     const [session] = await readSessions(options());
     expect(session?.intent).toBe("Keep  café intent literal"); expect(session?.scope).toEqual(["src/a file.ts"]);
+  } finally { io.input.end(); await running; }
+});
+
+const literalPaths = [
+  "src/a  file.ts", "notes/a,b*[draft].md", "資料/cafe\u0301.ts",
+  "-not-a-flag.txt", "notes/$(keep literal).md",
+];
+it.each([["LF", "\n", 40, plainPalette], ["CRLF", "\r\n", 80, ansiPalette]] as const)("preserves literal scope from a %s paste through recording", async (_name, ending, columns, palette) => {
+  const intent = "Build  café UI — 改善";
+  const io = terminal(); io.output.columns = columns; const running = run(io, ["start"], palette);
+  try {
+    await ready(io);
+    io.input.write(["  " + intent + "  ", ...literalPaths.map(path => "  " + path + "  "), literalPaths[0], "", ""].join(ending));
+    await running; const sessions = await readSessions(options());
+    expect(sessions).toHaveLength(1); expect(sessions[0]?.intent).toBe(intent);
+    expect(sessions[0]?.scope).toEqual(literalPaths);
+    expect(printed.map(stripVTControlCharacters).every(line => cellWidth(line) <= columns)).toBe(true);
+  } finally { io.input.end(); await running; }
+});
+
+it("records no declared scope when the first scope line contains only whitespace", async () => {
+  const io = terminal(); const running = run(io);
+  try {
+    await ready(io); io.input.write("Skip optional scope\n \t \n"); await running;
+    const sessions = await readSessions(options()); expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.intent).toBe("Skip optional scope"); expect(sessions[0]?.scope).toEqual([]);
+    expect(printed.join("\n")).toContain("none declared");
+  } finally { io.input.end(); await running; }
+});
+
+it.each(["src/a file.ts", "src/a file.ts\n資料/\n"])("keeps captured work unchanged when scope ends at EOF after %j", async (partial) => {
+  const captured = await startPassiveSession(options()); const before = await readSessions(options());
+  const io = terminal(); const running = run(io);
+  try {
+    await ready(io); io.input.end("Unfinished declaration\n" + partial); await running;
+    expect(await readSessions(options())).toEqual(before); expect(await getOpenSession(options())).toEqual(captured);
+    expect(printed.join("\n")).toContain("Cancelled. No session started.");
+    expect(printed.join("\n")).not.toContain("RECORDING");
   } finally { io.input.end(); await running; }
 });

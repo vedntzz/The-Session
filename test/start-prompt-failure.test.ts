@@ -28,7 +28,7 @@ function failingTerminal(failure: Error, failedWrite: number) {
   return { input, output, writes: () => writes };
 }
 
-it.each([["intent", 1], ["scope", 2]] as const)("stops writing when the %s prompt fails and creates no record", async (_step, failedWrite) => {
+it.each([["intent", 1], ["scope", 2], ["scope continuation", 3]] as const)("stops writing when the %s prompt fails and creates no record", async (_step, failedWrite) => {
   const failure = new Error("terminal output failed"); const io = failingTerminal(failure, failedWrite);
   const print = vi.spyOn(console, "log").mockImplementation(() => {});
   const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
