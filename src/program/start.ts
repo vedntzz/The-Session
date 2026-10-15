@@ -30,7 +30,8 @@ export function registerStart(program: Command, options: ProgramOptions, palette
 
 async function routeStart(intent: string | undefined, flags: StartFlags, options: ProgramOptions, palette: Palette): Promise<void> {
   if (flags.passive) return startPassive(flags, options);
-  if (intent !== undefined) return startDeclared(intent, flags, options);
+  if (intent !== undefined) return startDeclared(intent, flags, options,
+    session => formatQuotedStart(session, options, palette));
   if (flags.review) throw new Error('No intent given. Run: session start "what you are about to do"');
   const declaration = await readStartPrompt({ ...options, scope: flags.scope }, palette);
   printLines([""]);
@@ -61,4 +62,13 @@ async function startDeclared(intent: string, flags: StartFlags, options: Program
   };
   const session = flags.review ? await startReviewed(intent, startOptions) : await startSession(intent, startOptions);
   printLines([...closed.map(safeText), ...(session ? formatter(session) : ["  Cancelled. No session started."])]);
+}
+
+/** A quoted declaration needs no input; its output follows the destination. */
+function formatQuotedStart(session: Session, options: ProgramOptions, palette: Palette): string[] {
+  const output = options.appTerminal?.output ?? process.stdout;
+  const legacy = formatStarted(session);
+  if (!output.isTTY) return legacy;
+  const width = terminalWidth(output, START_MIN_WIDTH);
+  return formatStartConfirmation(session, palette, legacy.slice(2), width);
 }
