@@ -25,5 +25,5 @@ function header(total: number, outside: number): string {
 
 /** An out-of-scope file, marked so it reads as one without colour. */
 function flagged(file: CardFile): string {
-  return `⚠ ${file.path} (outside agreed scope)`;
+  return `${file.path} (outside agreed scope)`;
 }

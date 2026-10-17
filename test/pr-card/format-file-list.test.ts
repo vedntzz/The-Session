@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { formatFileList } from "../../src/pr-card/format-file-list.js";
 
+const EMOJI = /\p{Extended_Pictographic}/u;
 const inside = (path: string) => ({ path, inScope: true });
 const outside = (path: string) => ({ path, inScope: false });
 const many = (count: number, make: (path: string) => { path: string; inScope: boolean }, prefix: string) =>
@@ -15,7 +16,7 @@ describe("formatFileList", () => {
   it("flags out-of-scope files and lists them first", () => {
     expect(formatFileList([inside("a.ts"), outside("x.ts")])).toEqual([
       "2 files · 1 outside scope",
-      "⚠ x.ts (outside agreed scope)",
+      "x.ts (outside agreed scope)",
       "a.ts",
     ]);
   });
@@ -37,7 +38,7 @@ describe("formatFileList", () => {
 
   it("always shows every out-of-scope file, even past ten", () => {
     const lines = formatFileList([...many(5, inside, "in"), ...many(12, outside, "out")]);
-    expect(lines.filter((line) => line.startsWith("⚠"))).toHaveLength(12);
+    expect(lines.filter((line) => line.endsWith("(outside agreed scope)"))).toHaveLength(12);
     expect(lines.at(-1)).toBe("+5 more");
   });
 
@@ -45,5 +46,10 @@ describe("formatFileList", () => {
     const lines = formatFileList([...many(15, inside, "in"), ...many(3, outside, "out")]);
     expect(lines.slice(1, -1)).toHaveLength(10);
     expect(lines.at(-1)).toBe("+8 more");
+  });
+
+  it("uses no emoji", () => {
+    const lines = formatFileList([...many(12, inside, "in"), ...many(2, outside, "out")]);
+    expect(lines.filter((line) => EMOJI.test(line))).toEqual([]);
   });
 });
