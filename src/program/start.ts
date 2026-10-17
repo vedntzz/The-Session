@@ -10,7 +10,8 @@ import { startReviewed } from "../commands/review.js";
 import { readStartPrompt } from "../commands/start-prompt.js";
 import { plainPalette, type Palette } from "../render/palette.js";
 import { formatStartConfirmation } from "../render/terminal/start.js";
-import { START_MIN_WIDTH } from "../render/terminal/start-frame.js";
+import { startDetails } from "../render/terminal/start-rows.js";
+import { START_MIN_WIDTH, startFrameWidth } from "../render/terminal/start-frame.js";
 import { safeText } from "../render/tui/text.js";
 import { terminalWidth, type WidthSignals } from "../render/terminal/text.js";
 
@@ -31,7 +32,7 @@ export function registerStart(program: Command, options: ProgramOptions, palette
 async function routeStart(intent: string | undefined, flags: StartFlags, options: ProgramOptions, palette: Palette): Promise<void> {
   if (flags.passive) return startPassive(flags, options);
   if (intent !== undefined) return startDeclared(intent, flags, options,
-    session => formatSavedStart(session, options.appTerminal?.output ?? process.stdout, palette));
+    (session, notices) => formatSavedStart(session, options.appTerminal?.output ?? process.stdout, palette, notices));
   if (flags.review) throw new Error('No intent given. Run: session start "what you are about to do"');
   const declaration = await readStartPrompt({ ...options, scope: flags.scope }, palette);
   printLines([""]);
@@ -40,7 +41,7 @@ async function routeStart(intent: string | undefined, flags: StartFlags, options
     return;
   }
   return startDeclared(declaration.intent, { ...flags, scope: declaration.scope }, options,
-    session => formatSavedStart(session, options.startTerminal?.output ?? process.stdout, palette));
+    (session, notices) => formatSavedStart(session, options.startTerminal?.output ?? process.stdout, palette, notices));
 }
 
 /** Hook stdout becomes editor context, so the passive route stays silent. */
@@ -51,20 +52,22 @@ async function startPassive(flags: StartFlags, options: ProgramOptions): Promise
 }
 
 async function startDeclared(intent: string, flags: StartFlags, options: ProgramOptions,
-  formatter: (session: Session) => string[]): Promise<void> {
+  formatter: (session: Session, notices: readonly string[]) => string[]): Promise<void> {
   const closed: string[] = [];
   const startOptions = {
     ...options, scope: flags.scope,
     onCapturedClosed: (stopped: Session) => closed.push(formatClosedCaptured(stopped)),
   };
   const session = flags.review ? await startReviewed(intent, startOptions) : await startSession(intent, startOptions);
-  printLines([...closed.map(safeText), ...(session ? formatter(session) : ["  Cancelled. No session started."])]);
+  printLines(session ? formatter(session, closed) : [...closed.map(safeText), "  Cancelled. No session started."]);
 }
 
 /** One destination-aware confirmation policy for both start entry points. */
-function formatSavedStart(session: Session, output: WidthSignals, palette: Palette): string[] {
+function formatSavedStart(
+  session: Session, output: WidthSignals, palette: Palette, notices: readonly string[],
+): string[] {
   const legacy = formatStarted(session);
-  if (!output.isTTY) return legacy;
-  const width = terminalWidth(output, START_MIN_WIDTH);
-  return formatStartConfirmation(session, palette, legacy.slice(2), width);
+  if (!output.isTTY) return [...notices.map(safeText), ...legacy];
+  const width = startFrameWidth(terminalWidth(output, START_MIN_WIDTH));
+  return [...startDetails(notices, width), ...formatStartConfirmation(session, palette, legacy.slice(2), width)];
 }

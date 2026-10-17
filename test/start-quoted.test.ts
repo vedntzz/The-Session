@@ -1,12 +1,14 @@
-import { rm } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
-import { formatStarted } from "../src/commands/start.js";
+import { formatStarted, startPassiveSession, startSession } from "../src/commands/start.js";
 import { readSessions, type Session } from "../src/store.js";
 import { ansiPalette, plainPalette, type Palette } from "../src/render/palette.js";
 import { cellWidth } from "../src/render/tui/text.js";
+import { setConfig } from "../src/commands/config.js";
 import { createStartRepo } from "./fixtures/start-repo.js";
 
 let fixture: Awaited<ReturnType<typeof createStartRepo>>; let printed: string[];
@@ -89,4 +91,41 @@ it.each([[40, plainPalette], [80, ansiPalette]] as const)("matches the interacti
     expect(comparableReceipt(printed, session!)).toEqual(interactive);
     expect(io.prompts()).toBe(prompts);
   } finally { await rm(quoted.root, { recursive: true, force: true }); }
+});
+
+it("keeps all attribution values after the saved panel at 40 columns", async () => {
+  const declared = { client: "Acme Studio", project: "Terminal UI", sow: "Scope Alpha", billingCode: "DEV-42" };
+  for (const [key, value] of Object.entries(declared)) await setConfig(key, value, fixture.cwd);
+  await run(terminal(40), ["start", "Attributed work"]);
+  const [session] = await readSessions(options()); expect(session?.attribution).toEqual(declared);
+  const lines = printed.map(stripVTControlCharacters);
+  const frame = lines.findIndex(line => /^  ╰─+╯$/u.test(line));
+  const attribution = lines.findIndex(line => line.startsWith("  for "));
+  expect(attribution).toBeGreaterThan(frame);
+  const shown = lines.slice(attribution, lines.indexOf("", attribution)).join(" ").trim().replace(/\s+/gu, " ");
+  expect(shown).toBe("for " + Object.values(declared).join(" "));
+  expect(lines.every(line => cellWidth(line) <= 40)).toBe(true);
+});
+
+it.each(["quoted", "interactive"] as const)("keeps the hook handoff readable before the %s saved panel", async route => {
+  const captured = await startPassiveSession(options());
+  if (captured === undefined) throw new Error("Expected a captured session.");
+  await writeFile(path.join(fixture.cwd, "base.txt"), "captured change");
+  const io = terminal(40);
+  if (route === "quoted") await run(io, ["start", "Declared next"]);
+  else await interactiveReceipt(io, plainPalette);
+  const sessions = await readSessions(options()); expect(sessions).toHaveLength(2);
+  expect(sessions[0]?.id).toBe(captured.id); expect(sessions[0]?.endedAt).not.toBeNull();
+  expect(sessions[0]?.reality).toEqual(["base.txt"]); expect(sessions[1]?.intent).toBe(route === "quoted" ? "Declared next" : "Shared declaration");
+  const lines = printed.map(stripVTControlCharacters); const frame = lines.findIndex(line => /^  ╭─+╮$/u.test(line));
+  expect(frame).toBeGreaterThan(0);
+  expect(lines.slice(0, frame).join(" ").replace(/\s+/gu, " ").trim()).toBe("closed the hook's session: (no prompt) changed base.txt");
+  expect(lines.every(line => cellWidth(line) <= 40)).toBe(true);
+});
+
+it.each(["blank", "open"] as const)("does not show a saved panel when quoted start is refused: %s", async reason => {
+  if (reason === "open") await startSession("Existing declaration", options());
+  const before = await readSessions(options()); const intent = reason === "blank" ? " \t " : "Attempted declaration";
+  await expect(run(terminal(40), ["start", intent])).rejects.toThrow(reason === "blank" ? /No intent given/ : /already open/);
+  expect(printed).toEqual([]); expect(await readSessions(options())).toEqual(before);
 });
