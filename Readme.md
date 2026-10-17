@@ -47,8 +47,6 @@ edited afterwards.
 
 ```
 $ session start "add a farewell function next to greet" --scope src
-  started  add a farewell function next to greet  (head 124515a)
-  scope    src
 ```
 
 **4. Run the agent.** Use it the way you normally would.
@@ -118,8 +116,9 @@ outside-scope paths, turns, four token counters, and cost. Missing measurements
 read `unknown`; a measured zero cost reads `$0.00`. Use
 `session week last --full` for the full record. Output adapts to terminal width
 and inherits your terminal's background; `NO_COLOR=1` removes color.
-Explicit `session start` arguments, passive hooks, and `start --review` keep
-their existing behavior. Normal `session stop` uses the completion shown above.
+Quoted `session start "<intent>"` uses the saved-session confirmation in a terminal.
+Piped starts keep their compact output, and `start --passive` stays silent.
+Normal `session stop` uses the completion shown above.
 
 For a soft lavender background, [import the optional Session Lavender
 theme](docs/themes/Readme.md) for Apple Terminal or iTerm2.

@@ -1,7 +1,7 @@
+import { createStartRepo } from "./fixtures/start-repo.js";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { promisify, stripVTControlCharacters } from "node:util";
@@ -31,16 +31,13 @@ function terminal() {
   output.on("data", (chunk: Buffer) => { text += chunk.toString(); }); streams.push(input, output);
   return { input, output, text: () => text, raw: () => raw };
 }
-const ready = (io: ReturnType<typeof terminal>) => vi.waitFor(() => expect(io.text()).toContain("  What are you working on?\n  › "));
+const ready = (io: ReturnType<typeof terminal>) => vi.waitFor(() => expect(stripVTControlCharacters(io.text())).toContain("  Enter to continue · Ctrl-C to cancel\n\n  › "));
 const run = (io: ReturnType<typeof terminal>, args = ["start"], palette: Palette = plainPalette) =>
   buildProgram({ ...options(), startTerminal: io, palette }).parseAsync(args, { from: "user" });
 beforeEach(async () => {
   vi.stubEnv("TERM", "xterm-256color"); printed = [];
   vi.spyOn(console, "log").mockImplementation((...lines) => { printed.push(lines.join(" ")); });
-  root = await mkdtemp(path.join(tmpdir(), "session-start-prompt-")); cwd = path.join(root, "repo"); home = path.join(root, "store");
-  await mkdir(cwd); await git(["init", "-q"]); await git(["config", "user.name", "Test"]);
-  await git(["config", "user.email", "test@example.com"]); await git(["config", "commit.gpgsign", "false"]);
-  await commit("base.txt");
+  ({ root, cwd, home } = await createStartRepo());
 });
 afterEach(async () => {
   streams.splice(0).forEach((stream) => stream.destroy()); vi.restoreAllMocks(); vi.unstubAllEnvs();
@@ -62,20 +59,23 @@ it.each([["plain", plainPalette], ["ANSI", ansiPalette]] as const)("bare start p
     expect(displayed).toContain(`  id          ${session?.id.slice(0, 8)}`);
     expect(displayed).toContain(`  head        ${session?.startCommit.slice(0, 7)}`);
     if (palette === ansiPalette) expect(printed.join("\n")).toContain("\u001b[36m");
-    expect(io.raw()).toBe(0); expect(io.text()).not.toContain("\u001b");
+    expect(io.raw()).toBe(0);
+    if (palette === ansiPalette) expect(io.text()).toContain(ansiPalette.intent("Intent"));
+    else expect(io.text()).not.toContain("\u001b");
   } finally { io.input.end(); await running; }
 });
 it("skips scope with a blank answer on a dumb terminal", async () => {
   vi.stubEnv("TERM", "dumb"); const io = terminal(); const running = run(io);
   await ready(io); io.input.write("Work with no scope\n\n"); await running;
   expect((await readSessions(options()))[0]?.scope).toEqual([]);
-  expect(io.text()).toContain("Which files? Enter to skip."); expect(io.raw()).toBe(0);
+  expect(io.text()).toContain("Empty line to finish or skip."); expect(io.raw()).toBe(0);
 });
 it("uses --scope without asking for paths", async () => {
   const io = terminal(); const running = run(io, ["start", "--scope", "given/a file.ts", "notes/a,b.md"]);
   await ready(io); io.input.write("Use provided scope\n"); await running;
   expect((await readSessions(options()))[0]?.scope).toEqual(["given/a file.ts", "notes/a,b.md"]);
   expect(io.text()).not.toContain("Which files?");
+  expect(io.text()).toMatch(/  › $/u);
 });
 it.each(["", "\n", "Intent\n", "Intent\nsrc/\n"])("creates no store for unfinished input %j", async (input) => {
   const io = terminal(); const running = run(io); await ready(io);
@@ -163,4 +163,30 @@ it("uses the current width when provided scope skips the scope prompt", async ()
   expect(session?.scope).toEqual(["src/webhooks/"]);
   expect(printed.map(stripVTControlCharacters).every(line => cellWidth(line) <= 40)).toBe(true);
   expect(io.text()).not.toContain("Which files?");
+});
+
+it("explains the intent step in 40 columns before recording anything", async () => {
+  const io = terminal(); io.output.columns = 40;
+  const running = run(io); await ready(io);
+  expect(io.text().split("\n").every(line => cellWidth(line) <= 40)).toBe(true);
+  expect(io.text()).toContain("  Intent\n  What are you working on?");
+  expect(io.text()).toContain("  Describe the change you want to make.");
+  expect(io.text()).not.toContain("RECORDING");
+  expect(io.text()).toMatch(/^  ◔ session  start a session\n  ─+\n\n  Intent\n/u);
+  expect(printed).toEqual([]); expect(await readSessions(options())).toEqual([]);
+  io.input.end(); await running;
+  expect(existsSync(home)).toBe(false);
+});
+
+it.each([["NO_COLOR", undefined, "1", plainPalette], ["forced off", "0", "", plainPalette], ["forced on", "1", "1", ansiPalette]] as const)("uses the process palette for the intent prompt: %s", async (_name, forced, off, palette) => {
+  vi.stubEnv("FORCE_COLOR", forced); vi.stubEnv("NO_COLOR", off);
+  const io = terminal(); const running = buildProgram({ ...options(), startTerminal: io }).parseAsync(["start"], { from: "user" });
+  try {
+    await ready(io);
+    expect(io.text()).toContain("  " + palette.intent("Intent") + "\n");
+    expect(stripVTControlCharacters(io.text())).toContain("Enter to continue · Ctrl-C to cancel");
+    if (palette === plainPalette) expect(io.text()).not.toContain("\u001b");
+    io.input.write("Preserve  café intent\nsrc/a file.ts\n\n"); await running;
+    expect((await readSessions(options()))[0]?.intent).toBe("Preserve  café intent");
+  } finally { io.input.end(); await running; }
 });

@@ -5,7 +5,7 @@ import { createPromptReader } from "../src/commands/prompt-reader.js";
 import { promptIntent } from "../src/commands/start-intent.js";
 import { promptScope } from "../src/commands/start-scope.js";
 
-const PROMPT = "  Which files? Enter to skip.\n  One file or folder per line; an empty line finishes.\n  › ";
+const PROMPT = "\n  Scope (optional)\n  Which files?\n  One file or folder prefix per line.\n  Empty line to finish or skip.\n  Enter to add · Ctrl-C to cancel\n\n  › ";
 const readers: Interface[] = [];
 const streams: PassThrough[] = [];
 
