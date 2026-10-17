@@ -23,6 +23,14 @@ selected text** for the preset's selection colors. Set **Faint text opacity**
 to at least **80%** to keep Session's dim labels readable. See iTerm2's
 [color settings guide](https://iterm2.com/documentation-preferences-profiles-colors.html).
 
+## VS Code
+
+Session inherits the integrated terminal's active color theme. Customize its
+ANSI colors through `workbench.colorCustomizations`, as described in the
+[VS Code terminal appearance guide](https://code.visualstudio.com/docs/terminal/appearance#_terminal-colors).
+The `terminal.background` and `terminal.foreground` customizations set the
+background and default text color; see the [terminal color reference](https://code.visualstudio.com/api/references/theme-color#integrated-terminal-colors).
+
 ## Readability
 
 The stored text colors have at least 5.1:1 contrast against the lavender

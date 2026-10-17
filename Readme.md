@@ -107,8 +107,9 @@ from the record.
 Run `session start` with no arguments to answer two prompts in your terminal:
 what you are working on, then expected files or folders, one per line. An empty
 line finishes the scope; Enter at the first scope prompt skips it. Ctrl-C or
-Ctrl-D cancels the draft before a session starts. The confirmation stays in
-your terminal's scrollback, and your recorded intent stays fixed.
+Ctrl-D on an empty input line cancels the draft before a session starts.
+The confirmation stays in your terminal's scrollback, and your recorded
+intent stays fixed.
 
 Keep building in your coding tool. Run `session` to see what is recording and
 `session stop` to end it. The completion shows the outcome, changed files,
@@ -119,6 +120,10 @@ and inherits your terminal's background; `NO_COLOR=1` removes color.
 Quoted `session start "<intent>"` uses the saved-session confirmation in a terminal.
 Piped starts keep their compact output, and `start --passive` stays silent.
 Normal `session stop` uses the completion shown above.
+
+To test this checkout in VS Code or another terminal, follow the
+[local terminal walkthrough](docs/terminal-start.md). It builds this branch
+and records a disposable demo outside your project.
 
 For a soft lavender background, [import the optional Session Lavender
 theme](docs/themes/Readme.md) for Apple Terminal or iTerm2.

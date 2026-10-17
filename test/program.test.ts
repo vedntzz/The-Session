@@ -12,17 +12,21 @@ import { sweepStampFile } from "../src/commands/sweep.js";
 import { buildProgram, parseFlag, type ProgramOptions } from "../src/program.js";
 import { didYouMean } from "../src/program/help.js";
 import { readSessions, type Session } from "../src/store.js";
+import { stdinWith, watchProcessStdin } from "./fixtures/hook-stdin.js";
 
 const execFileAsync = promisify(execFile);
 
 let root: string;
 let store: ProgramOptions;
+let assertNoProcessStdin: () => void;
 const LAUNCHER = { node: "/usr/local/bin/node", cli: "/opt/session/dist/cli.js" };
 const VIA = "  via      /usr/local/bin/node /opt/session/dist/cli.js";
 /** Files `--open` was asked to hand to the desktop. No browser is launched. */
 let opened: string[];
 /** What `--copy` was asked to put on the clipboard. Nobody's is touched. */
 let copied: string[];
+
+beforeEach(() => { assertNoProcessStdin = watchProcessStdin(); });
 
 /**
  * A throwaway repo with one commit, so `start` has a HEAD to record and never
@@ -34,13 +38,14 @@ beforeEach(async () => {
   await mkdir(cwd, { recursive: true });
   opened = [];
   copied = [];
-  // `adapters: []` keeps these tests off the machine's real transcripts, and
-  // `launch` keeps `--open` from opening a browser on whoever runs them.
+  // Explicit adapters, hook input and launch keep these tests off real
+  // transcripts, the runner's stdin and the desktop.
   store = {
     appTerminal: { input: new PassThrough(), output: new PassThrough() } as PromptTerminal,
     home: path.join(root, "store"),
     cwd,
     adapters: [],
+    stdin: stdinWith(""),
     // Never the machine's own ~/.codex: absent here, so Codex is skipped
     // unless a test makes the directory.
     codexHooks: path.join(root, "codex", "hooks.json"),
@@ -84,15 +89,6 @@ async function nextDay(): Promise<void> {
   await rm(await sweepStampFile(store), { force: true });
 }
 
-/** A hook payload on a stream, standing in for the one Claude Code pipes in. */
-function stdinWith(payload: string): AsyncIterable<string> {
-  return {
-    async *[Symbol.asyncIterator]() {
-      yield payload;
-    },
-  };
-}
-
 /** Runs a subcommand and returns everything it wrote to stdout via console.log. */
 async function run(...argv: string[]): Promise<string[]> {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -102,8 +98,11 @@ async function run(...argv: string[]): Promise<string[]> {
 }
 
 afterEach(async () => {
-  vi.restoreAllMocks();
-  await rm(root, { recursive: true, force: true });
+  try { assertNoProcessStdin(); }
+  finally {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 /** A session's figure line: the one under the intent that names it. */

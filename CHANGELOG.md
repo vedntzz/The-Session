@@ -9,12 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Optional Session Lavender color profiles for Apple Terminal and iTerm2, with import instructions.
+- A [local terminal walkthrough](docs/terminal-start.md) for testing this checkout in a disposable repository, with VS Code color guidance.
 
 ### Changed
 - `session start` uses line prompts for intent and scope; the bare state view and stop confirmation stay in terminal scrollback.
+- Bare and quoted `session start` share a saved-session panel in a terminal. Piped starts keep their compact confirmation, and `start --passive` stays silent.
+- Saved start panels wrap between 40 and 80 columns and preserve the full intent and literal scope paths. When width is unknown, the confirmation prints without a frame.
 - The full-screen `session ui` launcher and screens are removed. Use `session week` for history and `session week <id> --full` for details.
 
 ### Fixed
+- Start confirmations wrap attribution and hook-session handoff notices in narrow terminals.
+- Cancelling an unfinished start creates no declared session and keeps any captured session open.
 - A hook never closes a declared session, and `/clear` closes nothing; a passive session closes when the agents in it have ended, so the agreement's write check no longer goes silent after `/clear`.
 - Cost is read from the session's own agent transcripts, so two agents in one repo are no longer each billed for both. `week <id> --full` says how a cost was captured.
 - A session that used several models is priced at each model's own rate.
