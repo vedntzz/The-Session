@@ -3,7 +3,7 @@ import type { Session } from "../../../store.js";
 import type { Palette } from "../../palette.js";
 import { cellWidth } from "../../tui/text.js";
 import { outcomeInk } from "../cost.js";
-import { gridHeading, gridIntent, gridRow, gridRule, type GridColumn } from "./grid.js";
+import { gridHeading, gridIntent, gridRow, gridRule, type GridColumn } from "../table-grid.js";
 import { figureRow, headingRow, intentLines, intentText, type Columns, type WeekCells, type Widths } from "./table.js";
 
 export interface WeekLayout {

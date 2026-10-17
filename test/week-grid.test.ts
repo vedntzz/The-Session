@@ -1,7 +1,7 @@
 import { stripVTControlCharacters } from "node:util";
 import { describe, expect, it } from "vitest";
 import { plainPalette } from "../src/render/palette.js";
-import { gridHeading, gridIntent, gridRow, gridRule, type GridColumn } from "../src/render/terminal/week/grid.js";
+import { gridHeading, gridIntent, gridRow, gridRule, type GridColumn } from "../src/render/terminal/table-grid.js";
 import { cellWidth } from "../src/render/tui/text.js";
 
 const columns: GridColumn[] = [

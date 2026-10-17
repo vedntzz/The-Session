@@ -1,6 +1,6 @@
-import type { Palette } from "../../palette.js";
-import { cellWidth, foldLiteral, safeText } from "../../tui/text.js";
-import { INDENT } from "../text.js";
+import type { Palette } from "../palette.js";
+import { cellWidth, foldLiteral, safeText } from "../tui/text.js";
+import { INDENT } from "./text.js";
 
 type Ink = (text: string) => string;
 export interface GridColumn {
@@ -12,6 +12,7 @@ export interface GridColumn {
 const JOINS = {
   top: ["╭", "┬", "╮"],
   bottom: ["╰", "┴", "╯"],
+  row: ["├", "┼", "┤"],
   aboveIntent: ["├", "┴", "┤"],
   belowIntent: ["├", "┬", "┤"],
 } as const;
