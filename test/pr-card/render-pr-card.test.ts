@@ -41,6 +41,7 @@ describe("renderPrCard", () => {
       | Asked for | add a retry to the fetch client |
       | Agents | claude-code |
       | Outcome | merged |
+      | Files | 1 file |
       | Cost | $0.42 |
       | Signed log | signed log verified |
 
@@ -61,6 +62,7 @@ describe("renderPrCard", () => {
       | Asked for | add a retry to the fetch client |
       | Agents | claude-code |
       | Outcome | still open |
+      | Files | 1 file |
       | Cost | unpriced (no rate for claude-x) |
       | Signed log | signed log verified |
 
@@ -81,6 +83,7 @@ describe("renderPrCard", () => {
       | Asked for | add a retry to the fetch client |
       | Agents | claude-code, codex |
       | Outcome | merged |
+      | Files | 2 files · 1 outside scope |
       | Cost | $0.42 |
       | Signed log | signed log verified |
 

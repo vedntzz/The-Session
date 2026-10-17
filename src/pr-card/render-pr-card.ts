@@ -10,15 +10,17 @@ export const CARD_MARKER = "<!-- session-card -->";
 
 /** The card: marker, heading, the record as a table, then the files. */
 export function renderPrCard(card: CardData): string {
-  return [CARD_MARKER, "## Session record", "", ...table(card), "", filesBlock(card)].join("\n");
+  const [count = "", ...files] = formatFileList(card.files);
+  return [CARD_MARKER, "## Session record", "", ...table(card, count), "", filesBlock(card, count, files)].join("\n");
 }
 
-/** The two-column table, one row per fact. */
-function table(card: CardData): string[] {
+/** The two-column table, one row per fact; `count` is the file list's count line. */
+function table(card: CardData, count: string): string[] {
   return ["| | |", "|---|---|",
     tableRow("Asked for", card.askedFor ?? "not recorded"),
     tableRow("Agents", card.agents.length > 0 ? card.agents.join(", ") : "none recorded"),
     tableRow("Outcome", formatOutcome(card.outcome, card.reverted)),
+    tableRow("Files", count),
     tableRow("Cost", formatCost(card.cost)),
     tableRow("Signed log", formatChainStatus(card.chain))];
 }
@@ -34,8 +36,7 @@ function escapeCell(text: string): string {
 }
 
 /** The count line, then each file as a list item; out-of-scope ones in bold. */
-function filesBlock(card: CardData): string {
-  const [head = "", ...rest] = formatFileList(card.files);
+function filesBlock(card: CardData, head: string, rest: readonly string[]): string {
   const outside = card.files.filter((file) => !file.inScope).length;
   const items = rest.map((line, i) => `- ${i < outside ? `**${escapeInline(line)}**` : escapeInline(line)}`);
   return items.length > 0 ? `${head}\n\n${items.join("\n")}` : head;
