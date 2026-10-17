@@ -4,7 +4,7 @@ import { stripVTControlCharacters } from "node:util";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildProgram } from "../src/program.js";
 import { formatStarted } from "../src/commands/start.js";
-import { readSessions } from "../src/store.js";
+import { readSessions, type Session } from "../src/store.js";
 import { ansiPalette, plainPalette, type Palette } from "../src/render/palette.js";
 import { cellWidth } from "../src/render/tui/text.js";
 import { createStartRepo } from "./fixtures/start-repo.js";
@@ -63,4 +63,30 @@ it("keeps a passive start silent in a terminal", async () => {
   const io = terminal(40); await run(io, ["start", "--passive"]);
   const [session] = await readSessions(options()); expect(session?.intentSource).toBe("captured");
   expect(printed).toEqual([]); expect(io.prompts()).toBe("");
+});
+
+function comparableReceipt(lines: string[], session: Session): string[] {
+  return lines.map(stripVTControlCharacters).map(line =>
+    line.replaceAll(session.id.slice(0, 8), "<record>").replaceAll(session.startCommit.slice(0, 7), "<commit>"));
+}
+async function interactiveReceipt(io: ReturnType<typeof terminal>, palette: Palette) {
+  io.input.isTTY = true;
+  const running = buildProgram({ ...options(), startTerminal: io, palette }).parseAsync(["start"], { from: "user" });
+  try {
+    await vi.waitFor(() => expect(stripVTControlCharacters(io.prompts())).toContain("Enter to continue · Ctrl-C to cancel"));
+    io.input.write("Shared declaration\nsrc/\ndocs/a file.md\n\n"); await running;
+    const [session] = await readSessions(options()); return comparableReceipt(printed.slice(1), session!);
+  } finally { io.input.end(); await running; }
+}
+
+it.each([[40, plainPalette], [80, ansiPalette]] as const)("matches the interactive panel for a quoted start at %i columns", async (width, palette) => {
+  const io = terminal(width); const interactive = await interactiveReceipt(io, palette);
+  const quoted = await createStartRepo(); const prompts = io.prompts(); printed = [];
+  try {
+    await buildProgram({ ...quoted, adapters: [], appTerminal: io, palette }).parseAsync(
+      ["start", "Shared declaration", "--scope", "src/", "docs/a file.md"], { from: "user" });
+    const [session] = await readSessions(quoted);
+    expect(comparableReceipt(printed, session!)).toEqual(interactive);
+    expect(io.prompts()).toBe(prompts);
+  } finally { await rm(quoted.root, { recursive: true, force: true }); }
 });

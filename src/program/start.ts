@@ -12,7 +12,7 @@ import { plainPalette, type Palette } from "../render/palette.js";
 import { formatStartConfirmation } from "../render/terminal/start.js";
 import { START_MIN_WIDTH } from "../render/terminal/start-frame.js";
 import { safeText } from "../render/tui/text.js";
-import { terminalWidth } from "../render/terminal/text.js";
+import { terminalWidth, type WidthSignals } from "../render/terminal/text.js";
 
 interface StartFlags { scope?: string[]; passive?: boolean; review?: boolean; agent?: string }
 
@@ -31,7 +31,7 @@ export function registerStart(program: Command, options: ProgramOptions, palette
 async function routeStart(intent: string | undefined, flags: StartFlags, options: ProgramOptions, palette: Palette): Promise<void> {
   if (flags.passive) return startPassive(flags, options);
   if (intent !== undefined) return startDeclared(intent, flags, options,
-    session => formatQuotedStart(session, options, palette));
+    session => formatSavedStart(session, options.appTerminal?.output ?? process.stdout, palette));
   if (flags.review) throw new Error('No intent given. Run: session start "what you are about to do"');
   const declaration = await readStartPrompt({ ...options, scope: flags.scope }, palette);
   printLines([""]);
@@ -40,10 +40,7 @@ async function routeStart(intent: string | undefined, flags: StartFlags, options
     return;
   }
   return startDeclared(declaration.intent, { ...flags, scope: declaration.scope }, options,
-    session => {
-      const width = terminalWidth(options.startTerminal?.output, START_MIN_WIDTH);
-      return formatStartConfirmation(session, palette, formatStarted(session).slice(2), width);
-    });
+    session => formatSavedStart(session, options.startTerminal?.output ?? process.stdout, palette));
 }
 
 /** Hook stdout becomes editor context, so the passive route stays silent. */
@@ -54,7 +51,7 @@ async function startPassive(flags: StartFlags, options: ProgramOptions): Promise
 }
 
 async function startDeclared(intent: string, flags: StartFlags, options: ProgramOptions,
-  formatter: (session: Session) => string[] = formatStarted): Promise<void> {
+  formatter: (session: Session) => string[]): Promise<void> {
   const closed: string[] = [];
   const startOptions = {
     ...options, scope: flags.scope,
@@ -64,9 +61,8 @@ async function startDeclared(intent: string, flags: StartFlags, options: Program
   printLines([...closed.map(safeText), ...(session ? formatter(session) : ["  Cancelled. No session started."])]);
 }
 
-/** A quoted declaration needs no input; its output follows the destination. */
-function formatQuotedStart(session: Session, options: ProgramOptions, palette: Palette): string[] {
-  const output = options.appTerminal?.output ?? process.stdout;
+/** One destination-aware confirmation policy for both start entry points. */
+function formatSavedStart(session: Session, output: WidthSignals, palette: Palette): string[] {
   const legacy = formatStarted(session);
   if (!output.isTTY) return legacy;
   const width = terminalWidth(output, START_MIN_WIDTH);
