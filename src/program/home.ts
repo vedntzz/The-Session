@@ -4,6 +4,7 @@ import { homeState } from "../commands/home.js";
 import { loadRates } from "../pricing.js";
 import type { Palette } from "../render/palette.js";
 import { formatHome, terminalWidth } from "../render/terminal.js";
+import { START_MIN_WIDTH } from "../render/terminal/start-frame.js";
 import { storeHome } from "../store.js";
 import { unknownCommand } from "./help.js";
 import type { ProgramOptions } from "./options.js";
@@ -24,6 +25,6 @@ export function registerHome(program: Command, options: ProgramOptions, palette:
 /** The state screen reads live facts without opening a workspace or sweeping records. */
 async function renderHome(name: string | undefined, program: Command, options: ProgramOptions, palette: Palette): Promise<void> {
   if (name !== undefined) throw new Error(unknownCommand(name, program));
-  const view = { rates: await loadRates(storeHome(options)), width: terminalWidth(options.appTerminal?.output) };
+  const view = { rates: await loadRates(storeHome(options)), width: terminalWidth(options.appTerminal?.output, START_MIN_WIDTH) };
   printLines(formatHome(await homeState(options), palette, view));
 }

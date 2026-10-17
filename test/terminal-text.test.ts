@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { cellWidth, fold, safeText } from "../src/render/tui/text.js";
+import { cellWidth, fold, foldLiteral, safeText } from "../src/render/tui/text.js";
 
 it.each([
   ["hello\u001b[2J\u001b]0;bad title\u0007\rworld", "hello world"],
@@ -20,4 +20,15 @@ it("hard-wraps a literal Unicode filename without splitting graphemes", () => {
   const text = `資料/${"e\u0301界👩‍💻".repeat(8)}*[x],.ts`; const lines = fold(text, 7);
   expect(lines.join("")).toBe(text); expect(lines.every((line) => cellWidth(line) <= 7)).toBe(true);
   expect(lines.some((line) => /^\p{Mark}/u.test(line) || /^\u200d|\u200d$/u.test(line))).toBe(false);
+});
+it.each([
+  ["docs/a very long folder name/with spaces inside/", 20, ["docs/a very long ", "folder name/with ", "spaces inside/"]],
+  ["src/components/settings/panel.tsx", 20, ["src/components/", "settings/panel.tsx"]],
+  ["src/a  b/c.ts", 7, ["src/a  ", "b/c.ts"]],
+  [`src/${"x".repeat(30)}.ts`, 20, ["src/", "x".repeat(20), `${"x".repeat(10)}.ts`]],
+] as const)("folds literal path %s after a slash or space when the line has one", (path, width, expected) => {
+  const lines = foldLiteral(path, width);
+  expect(lines).toEqual(expected);
+  expect(lines.join("")).toBe(path);
+  expect(lines.every((line) => cellWidth(line) <= width)).toBe(true);
 });

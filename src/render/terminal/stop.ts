@@ -1,5 +1,6 @@
 import type { Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
+import { foldLiteral } from "../tui/text.js";
 import { outcomeInk } from "./cost.js";
 import { sessionIntentRows } from "./home-recording.js";
 import { NO_SCOPE } from "./intent.js";
@@ -35,7 +36,7 @@ function stoppedPaths(session: Session, palette: Palette, width?: number): strin
   const summary = summarizePaths(session.reality);
   return [
     ...startRows("changed", plural(summary.count, "file", "files"), palette.meta, palette, width),
-    ...summary.named.flatMap(path => startRows("", path, palette.path, palette, width, 2)),
+    ...summary.named.flatMap(path => startRows("", path, palette.path, palette, width, 2, 0, foldLiteral)),
     ...(summary.where ? startRows("", summary.where, palette.meta, palette, width) : []),
   ];
 }

@@ -9,6 +9,7 @@ import { withOutcomes } from "../observe.js";
 import { storeHome, type Session } from "../store.js";
 import { paletteFor, type Palette } from "../render/palette.js";
 import { formatStopConfirmation } from "../render/terminal/stop.js";
+import { START_MIN_WIDTH } from "../render/terminal/start-frame.js";
 import { terminalWidth } from "../render/terminal/text.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
@@ -35,7 +36,7 @@ async function printStopped(session: Session, options: ProgramOptions, palette: 
   if (ifOpen) return printLines(legacy);
   const outcome = await stoppedOutcome(session, options);
   const checked = await loadChecked();
-  printLines(formatStopConfirmation(session, palette, legacy.slice(2), terminalWidth(options.appTerminal?.output), { rates, checked, outcome }));
+  printLines(formatStopConfirmation(session, palette, legacy.slice(2), terminalWidth(options.appTerminal?.output, START_MIN_WIDTH), { rates, checked, outcome }));
 }
 
 async function stoppedOutcome(session: Session, options: ProgramOptions): Promise<Session["outcome"] | "unknown"> {
