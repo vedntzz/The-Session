@@ -2,7 +2,8 @@ import { hasDeclaredScope, type Session } from "../../store.js";
 import type { Palette } from "../palette.js";
 import { DRIFT_MARKER } from "./intent.js";
 import { summarizePaths } from "./paths.js";
-import { startRows } from "./start-rows.js";
+import { foldLiteral } from "../tui/text.js";
+import { startRows, startScopeRows } from "./start-rows.js";
 import { plural } from "./text.js";
 
 /** Scope is a comparison only when the record has a nonempty declaration. */
@@ -12,8 +13,7 @@ function hasComparison(session: Session): boolean {
 
 export function stopScopeRows(session: Session, palette: Palette, width?: number): string[] {
   if (!hasComparison(session)) return startRows("scope", "none declared", palette.meta, palette, width);
-  return session.scope.flatMap((path, index) =>
-    startRows(index === 0 ? "scope" : "", path, palette.path, palette, width, 2));
+  return startScopeRows(session.scope, palette, width);
 }
 
 export function stopOutsideRows(session: Session, palette: Palette, width?: number): string[] {
@@ -36,5 +36,5 @@ function markedPath(path: string, palette: Palette, width?: number): string[] {
     const marked = first ? `${DRIFT_MARKER} ${text}` : text;
     first = false;
     return palette.drift(marked);
-  }, palette, width, 2);
+  }, palette, width, 2, 0, foldLiteral);
 }

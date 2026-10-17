@@ -1,7 +1,7 @@
 import { hasDeclaredScope, inOwnWords, type Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { headOf } from "./intent.js";
-import { startRows } from "./start-rows.js";
+import { startRows, startScopeRows } from "./start-rows.js";
 import { clock, INDENT, shortId } from "./text.js";
 
 /** The declaration or captured prompt currently being recorded. */
@@ -15,9 +15,7 @@ export function formatRecordingHome(
     `${INDENT}${palette.recording("◔ session  recording")}`,
     "",
     ...sessionIntentRows(running, palette, width),
-    ...(scope.length > 0
-      ? scope.flatMap((path, index) => startRows(index === 0 ? "scope" : "", path, palette.path, palette, width, 2))
-      : row("scope", "none declared", palette.meta)),
+    ...startScopeRows(scope, palette, width),
     ...row("id", shortId(running.id), palette.meta),
     ...row("since", clock(running.startedAt), palette.meta),
     "",
