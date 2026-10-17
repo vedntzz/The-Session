@@ -2,7 +2,6 @@
 // what the blocks do not say. The geometry of the rows is in `week/table.ts`.
 import type { SessionFilter } from "../../commands/week.js";
 import { emptyTurnsTotal, unmeasuredEmpty } from "../../empty.js";
-import { reportedOutcome } from "../../outcome.js";
 import {
   formatUsd,
   shippedNote,
@@ -22,23 +21,14 @@ import { plainPalette, type Palette } from "../palette.js";
 import {
   NO_PRICE,
   NO_RATES,
-  outcomeInk,
   pricesChecked,
   type View,
 } from "./cost.js";
 import { intentLegends } from "./intent.js";
 import { unpricedNotes } from "./unpriced.js";
 import { figure, INDENT, note, plural } from "./text.js";
-import {
-  cellsFor,
-  figureRow,
-  headingRow,
-  intentLines,
-  measure,
-  type Columns,
-  type WeekCells,
-  type Widths,
-} from "./week/table.js";
+import { cellsFor, measure } from "./week/table.js";
+import { weekRows, type WeekLayout as Layout } from "./week/rows.js";
 
 import { countOutcomes as count } from "./week/outcomes.js";
 export { outcomeHeadline } from "./week/outcomes.js";
@@ -85,16 +75,6 @@ export const NO_POOL =
 /** What a block says instead of a drift figure when nothing was declared. */
 export const NOTHING_DECLARED =
   "nothing was declared, so there is nothing to measure drift against";
-
-/** Everything a row needs beyond the session itself. */
-interface Layout {
-  cells: ReadonlyMap<Session, WeekCells>;
-  widths: Widths;
-  show: Columns;
-  palette: Palette;
-  /** Columns the lines may wrap at. Absent is no limit — see `terminalWidth`. */
-  limit: number | undefined;
-}
 
 /**
  * The week as `session week` prints it: the window, then one block per intent
@@ -180,8 +160,7 @@ function sourceBlock(source: IntentSource, all: readonly Session[], layout: Layo
   return [
     ...note(weekSourceHeadline(source, mine), (text) => text, limit),
     ...note(driftLine(mine), palette.meta, limit),
-    palette.meta(headingRow(layout.widths, layout.show)),
-    ...mine.flatMap((session) => sessionLines(session, layout)),
+    ...weekRows(mine, layout),
   ];
 }
 
@@ -226,26 +205,6 @@ function driftLine(mine: readonly Session[]): string {
   }
   const drifted = scoped.filter((session) => session.drift.length > 0).length;
   return `${plural(paths, "path", "paths")} outside what was declared, in ${drifted} of ${declared}`;
-}
-
-/**
- * A session, in two lines: its intent at the left margin, its figures under it.
- *
- * The intent takes the width of the view and the `intent` ink, because it is
- * what the row is about; everything else is what became of it. A row written
- * off by a mark takes one ink and no other — nothing inside it gets to argue
- * with the strike.
- */
-function sessionLines(session: Session, layout: Layout): string[] {
-  const { palette, widths, show } = layout;
-  const cells = layout.cells.get(session) as WeekCells;
-  const intent = intentLines(session, layout.limit);
-  const outcome = reportedOutcome(session);
-  if (outcome === "abandoned") {
-    return [...intent, figureRow(cells, widths, show)].map((line) => palette.abandoned(line));
-  }
-  const ink = { outcome: outcomeInk(palette, outcome) };
-  return [...intent.map((line) => palette.intent(line)), figureRow(cells, widths, show, ink)];
 }
 
 /**
