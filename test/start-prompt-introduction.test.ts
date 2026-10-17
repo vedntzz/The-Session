@@ -39,7 +39,7 @@ it.each([40, 60, 80])("prints one %i-column introduction before asking for inten
   try {
     await ready(io);
     const lines = stripVTControlCharacters(io.text()).split("\n");
-    expect(lines.slice(0, 4)).toEqual(["  ◔ session  start a session", "  " + "─".repeat(width - 2), "", "  Intent"]);
+    expect(lines.slice(0, 3)).toEqual(["  ◔ session  start a session", "  " + "─".repeat(width - 2), ""]);
     expect(lines.every(line => cellWidth(line) <= width)).toBe(true);
     expect(io.text()).toContain(ansiPalette.intent("◔ session"));
     io.input.write("A literal declaration\nsrc/\n\n"); await running;
@@ -59,7 +59,7 @@ it.each([["plain", plainPalette], ["ANSI", ansiPalette]] as const)("separates th
   try {
     await ready(io); io.input.write("Keep  café intent literal\n");
     await vi.waitFor(() => expect(io.text()).toContain("Which files?"));
-    expect(stripVTControlCharacters(io.text())).toContain("  › \n  Scope (optional)\n  Which files?");
+    expect(stripVTControlCharacters(io.text())).toContain("\n  Scope (optional)\n  Which files?");
     expect(io.text()).toContain(palette.intent("Scope (optional)"));
     expect(io.text()).toContain(palette.meta("Empty line to finish or skip."));
     expect(await readSessions(options())).toEqual([]);

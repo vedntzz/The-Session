@@ -10,9 +10,11 @@ export async function promptIntent(
   answers: AsyncIterator<string>,
   output: PromptTerminal["output"],
   palette: Palette = plainPalette,
+  scope?: readonly string[],
 ): Promise<string | undefined> {
-  const header = formatStartPromptHeader(palette, terminalWidth(output, START_MIN_WIDTH));
-  output.write([...header, ...formatIntentPrompt(palette)].join("\n"));
+  const width = terminalWidth(output, START_MIN_WIDTH);
+  const header = formatStartPromptHeader(palette, width);
+  output.write([...header, ...formatIntentPrompt(palette, width, scope)].join("\n"));
   const answer = await answers.next();
   if (answer.done) return undefined;
   const intent = answer.value.trim();

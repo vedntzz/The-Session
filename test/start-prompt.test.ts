@@ -172,7 +172,7 @@ it("explains the intent step in 40 columns before recording anything", async () 
   expect(io.text()).toContain("  Intent\n  What are you working on?");
   expect(io.text()).toContain("  Describe the change you want to make.");
   expect(io.text()).not.toContain("RECORDING");
-  expect(io.text()).toMatch(/^  ◔ session  start a session\n  ─+\n\n  Intent\n/u);
+  expect(io.text()).toMatch(/^  ◔ session  start a session\n  ─+\n\n  ╭/u);
   expect(printed).toEqual([]); expect(await readSessions(options())).toEqual([]);
   io.input.end(); await running;
   expect(existsSync(home)).toBe(false);

@@ -27,10 +27,10 @@ async function collectStartPrompt(
   palette: Palette,
   provided?: string[],
 ): Promise<Declaration | undefined> {
-  const intent = await promptIntent(answers, output, palette);
+  const intent = await promptIntent(answers, output, palette, provided);
   if (intent === undefined) return undefined;
   if (provided !== undefined) return { intent, scope: provided };
-  const scope = await promptScope(answers, output, palette);
+  const scope = await promptScope(answers, output, palette, intent);
   if (scope === undefined) return undefined;
   return scope.length > 0 ? { intent, scope } : { intent };
 }
