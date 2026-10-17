@@ -49,13 +49,20 @@ export function fold(text: string, width: number): string[] {
   return [...lines, line];
 }
 
-/** Wrap literal paths without removing spaces or splitting a grapheme. */
+/** Wrap literal paths after a slash or space where one fits, without removing spaces or splitting a grapheme. */
 export function foldLiteral(text: string, width: number): string[] {
   const lines: string[] = []; let line = ""; let used = 0;
   for (const { segment } of segmenter.segment(safeText(text))) {
     const size = cells(segment);
     if (used + size > width && line) {
-      lines.push(line); line = ""; used = 0;
+      // Break after a slash or space when the line has one; both stay on the line, so joining gives the path back.
+      const cut = Math.max(line.lastIndexOf("/"), line.lastIndexOf(" ")) + 1;
+      if (cut > 0 && cut < line.length) {
+        lines.push(line.slice(0, cut)); line = line.slice(cut); used = cellWidth(line);
+      }
+      if (used + size > width) {
+        lines.push(line); line = ""; used = 0;
+      }
     }
     line += segment; used += size;
   }
