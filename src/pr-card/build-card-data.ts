@@ -83,11 +83,13 @@ function costOf(sessions: readonly Session[], rates: RateTable): CardCost {
   }
   if (unpriced === 0 && uncaptured === 0) return { priced: true, usd };
   const of = `of ${plural(sessions.length, "session", "sessions")}`;
+  const noRate = `no rate for ${[...models].join(", ")}`;
   const reasons = [
-    unpriced > 0 ? `${unpriced} ${of} unpriced (${[...models].join(", ")})` : "",
+    unpriced === 0 ? "" : sessions.length === 1 ? noRate : `${unpriced} ${of}, ${noRate}`,
     uncaptured > 0 ? `${uncaptured} ${of} uncaptured` : "",
   ];
-  return { priced: false, reason: reasons.filter((reason) => reason !== "").join(", ") };
+  // A semicolon between the two, since the model list already uses commas.
+  return { priced: false, reason: reasons.filter((reason) => reason !== "").join("; ") };
 }
 
 /** The weakest state any session's log is in: verified only where every one was checked against its key. */

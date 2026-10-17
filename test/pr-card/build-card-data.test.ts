@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentInfo } from "../../src/agents.js";
 import { buildCardData, type CardInputs } from "../../src/pr-card/build-card-data.js";
+import { renderPrCard } from "../../src/pr-card/render-pr-card.js";
 import type { Session } from "../../src/store.js";
 import type { ChainCheck } from "../../src/verify.js";
 import { cost, RATES, session } from "../fixtures/markdown.js";
@@ -75,14 +76,27 @@ describe("buildCardData", () => {
   it("makes the whole card unpriced when any session is, with no partial dollar figure", () => {
     const unrated = worked("b", 2, { cost: cost({ model: "claude-x", inputTokens: 100_000 }) });
     const card = build([worked("a", 1), unrated]);
-    expect(card?.cost).toEqual({ priced: false, reason: "1 of 2 sessions unpriced (claude-x)" });
+    expect(card?.cost).toEqual({ priced: false, reason: "1 of 2 sessions, no rate for claude-x" });
     expect(card?.cost).not.toHaveProperty("usd");
   });
 
   it("names each unrated model once, joined with commas", () => {
     const unrated = (id: string, day: number, model: string) => worked(id, day, { cost: cost({ model, inputTokens: 1 }) });
     const card = build([unrated("a", 1, "claude-x"), unrated("b", 2, "gpt-y"), unrated("c", 3, "claude-x")]);
-    expect(card?.cost).toEqual({ priced: false, reason: "3 of 3 sessions unpriced (claude-x, gpt-y)" });
+    expect(card?.cost).toEqual({ priced: false, reason: "3 of 3 sessions, no rate for claude-x, gpt-y" });
+  });
+
+  it("names the model alone when the card has one session", () => {
+    const unrated = worked("a", 1, { cost: cost({ model: "claude-x", inputTokens: 1 }) });
+    expect(build([unrated])?.cost).toEqual({ priced: false, reason: "no rate for claude-x" });
+  });
+
+  it("renders the cost row with unpriced said once", () => {
+    const unrated = worked("b", 2, { cost: cost({ model: "claude-x", inputTokens: 1 }) });
+    const card = build([worked("a", 1), unrated]);
+    const row = renderPrCard(card!).split("\n").find((line) => line.startsWith("| Cost |"));
+    expect(row).toBe("| Cost | unpriced (1 of 2 sessions, no rate for claude-x) |");
+    expect(row?.match(/unpriced/gu)).toHaveLength(1);
   });
 
   it("counts a session nothing was captured for apart from one with no rate", () => {
