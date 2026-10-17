@@ -85,7 +85,7 @@ it.each(["declared", "captured"] as const)("prints safe %s intent without changi
   expect(io.raw).not.toHaveBeenCalled(); expect(io.text()).toBe("");
 });
 
-it.each([[60, true], [80, true], [60, false]] as const)("uses %i-column TTY=%s geometry and preserves the full declaration", async (columns, tty) => {
+it.each([[40, true], [60, true], [80, true], [60, false]] as const)("uses %i-column TTY=%s geometry and preserves the full declaration", async (columns, tty) => {
   const intent = "Keep all declared words in the home output. ".repeat(5).trim();
   const literal = `src/${"a".repeat(90)}.ts`;
   await startSession(intent, { ...options(), scope: [literal] }); const io = terminal(columns, tty); await bare(io);

@@ -48,7 +48,7 @@ it.each([false, true])("counts the actual diff with a baseline changed again=%s"
   expect(lines).toContain(`  changed     ${touched ? "2 files" : "1 file"}`); expect(lines).toContain(`  id          ${open.id.slice(0, 8)}`);
   expect(lines).toContain("  cost        unknown"); expect(lines).toContain("  turns       unknown"); expect(lines).toContain("  tokens      unknown");
 });
-it.each([[60, true], [80, true], [60, false]] as const)("wraps safe confirmation at %i columns TTY=%s", async (columns, tty) => {
+it.each([[40, true], [60, true], [80, true], [60, false]] as const)("wraps safe confirmation at %i columns TTY=%s", async (columns, tty) => {
   const intent = "Keep every declared word in the completion. ".repeat(4).trim(); const literal = `資料/${"é界".repeat(30)}.ts`;
   await startSession(intent, { ...options(), scope: [literal] }); await mkdir(path.dirname(path.join(cwd, literal)));
   await writeFile(path.join(cwd, literal), "changed"); const lines = await run(columns, tty);
