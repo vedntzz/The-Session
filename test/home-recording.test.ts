@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { zeroCost, type Session } from "../src/store.js";
 import { ansiPalette, paletteFor, plainPalette } from "../src/render/palette.js";
 import { formatHome } from "../src/render/terminal.js";
+import { tableValues } from "./fixtures/table.js";
 import { cellWidth } from "../src/render/tui/text.js";
 
 const running = (overrides: Partial<Session> = {}): Session => ({
@@ -31,11 +32,11 @@ it.each([60, 80, undefined].flatMap((width) => (["declared", "primed", undefined
     const literal = `資料/${"e\u0301界".repeat(40)}.ts`;
     const record = running({ intent, intentSource: source, scope: [literal, "notes/[draft]*, a  file.ts"] });
     const before = JSON.stringify(record); const lines = formatHome({ running: record }, plainPalette, { width });
-    expect(rows(lines, "  intent      ", "  scope       ").map((line) => line.slice(14)).join(" ")).toBe(intent);
-    const scope = rows(lines, "  scope       ", "  id          ");
-    expect(scope.slice(0, -1).map((line, index) => line.slice(index ? 16 : 14)).join("")).toBe(literal);
-    expect(scope.at(-1)).toBe("              notes/[draft]*, a  file.ts");
-    expect(scope.slice(1, -1).every((line) => line.startsWith("                ") && !/^\p{Mark}/u.test(line.slice(16)))).toBe(true);
+    const declaration = width === undefined ? rows(lines, "  intent      ", "  scope       ").map(line => line.slice(14)) : tableValues(lines, "intent");
+    expect(declaration.join(" ")).toBe(intent);
+    const scope = width === undefined ? rows(lines, "  scope       ", "  id          ").map(line => line.slice(14)) : tableValues(lines, "scope");
+    expect(scope.slice(0, -1).join("")).toBe(literal); expect(scope.at(-1)).toBe("notes/[draft]*, a  file.ts");
+    expect(scope.every(line => !/^\p{Mark}/u.test(line))).toBe(true);
     if (width !== undefined) expect(lines.every((line) => cellWidth(line) <= width)).toBe(true);
     expect(JSON.stringify(record)).toBe(before);
   },

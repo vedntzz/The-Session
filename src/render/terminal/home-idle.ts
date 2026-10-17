@@ -25,7 +25,6 @@ function readyHome(palette: Palette, width?: number): string[] {
 
 function stoppedHome(last: Session, palette: Palette, view: View): string[] {
   const row = (name: string, value: string): string[] => startRows(name, value, palette.meta, palette, view.width);
-  const price = hasCompleteTokens(last.cost) ? sessionFigure(last.cost, view.rates ?? NO_RATES) : undefined;
   return [
     `${INDENT}${palette.meta("◔ session  stopped")}`,
     "",
@@ -33,9 +32,14 @@ function stoppedHome(last: Session, palette: Palette, view: View): string[] {
     ...sessionIntentRows(last, palette, view.width),
     ...row("last", shortId(last.id)),
     ...row("ended", last.endedAt === null ? "unknown" : clock(last.endedAt)),
-    ...row("cost", price ?? "unknown"),
+    ...row("cost", homePrice(last, view)),
     "",
     ...row("next", "session week last"),
     ...row("", "session start"),
   ];
+}
+
+/** One pricing rule for the plain and framed views; partial capture stays unknown. */
+export function homePrice(last: Session, view: View): string {
+  return (hasCompleteTokens(last.cost) ? sessionFigure(last.cost, view.rates ?? NO_RATES) : undefined) ?? "unknown";
 }
