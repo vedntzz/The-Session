@@ -10,6 +10,7 @@ export function buildCardData(overrides: Partial<CardData> = {}): CardData {
     cost: { priced: true, usd: 0.42 },
     chain: "verified",
     outcome: "merged",
+    reverted: false,
     ...overrides,
   };
 }

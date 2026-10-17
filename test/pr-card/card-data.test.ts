@@ -8,6 +8,7 @@ describe("buildCardData", () => {
     expect(card.cost).toEqual({ priced: true, usd: expect.any(Number) });
     expect(card.chain).toBe("verified");
     expect(card.outcome).toBe("merged");
+    expect(card.reverted).toBe(false);
     expect(card.askedFor).not.toBeNull();
   });
 
@@ -20,5 +21,9 @@ describe("buildCardData", () => {
     const card = buildCardData({ cost: { priced: false, reason: "no rate for claude-x" } });
     expect(card.cost).toEqual({ priced: false, reason: "no rate for claude-x" });
     expect(card.cost).not.toHaveProperty("usd");
+  });
+
+  it("accepts a session that changed nothing as an outcome", () => {
+    expect(buildCardData({ outcome: "empty" }).outcome).toBe("empty");
   });
 });
