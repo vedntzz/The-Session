@@ -8,8 +8,8 @@ type UnpricedPrice = Extract<Price, { priced: false }>;
 /** What it cost, or why that cannot be said; an unpriced cost never carries a usd. */
 export type CardCost = Pick<PricedPrice, "priced" | "usd"> | (Pick<UnpricedPrice, "priced"> & { reason: string });
 
-/** Whether the log's hash chain checked out, broke, or is not there to check. */
-export type CardChain = "verified" | "broken" | "missing";
+/** Whether the log checked out with its signatures, by its hashes alone, broke, or is not there to check. */
+export type CardChain = "verified" | "hashes-only" | "broken" | "missing";
 
 /** One changed path, and whether it sat inside the declared scope. */
 export interface CardFile {

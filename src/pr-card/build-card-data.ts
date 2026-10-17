@@ -22,6 +22,9 @@ export interface CardInputs {
   reverted: boolean;
 }
 
+/** Chain states from weakest to strongest; the card shows the first any session's log is in. */
+const WEAKEST_CHAIN: readonly CardChain[] = ["broken", "missing", "hashes-only", "verified"];
+
 /** Outcomes from least landed to most; the card shows the first any session has. */
 const LEAST_LANDED: readonly SessionOutcome[] = ["open", "abandoned", "merged"];
 
@@ -57,31 +60,45 @@ function filesOf(sessions: readonly Session[]): CardFile[] {
   return [...files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([path, inScope]) => ({ path, inScope }));
 }
 
-/** The sum when every session has a figure; otherwise unpriced, counting no rate and nothing captured apart. */
+/**
+ * The sum when every session has a figure; otherwise unpriced, counting no rate
+ * and nothing captured apart, and naming each unrated model, since a rate for
+ * that name is the fix.
+ */
 function costOf(sessions: readonly Session[], rates: RateTable): CardCost {
   let usd = 0;
   let unpriced = 0;
   let uncaptured = 0;
+  const models = new Set<string>();
   for (const session of sessions) {
     const price = priceSession(session.cost, rates);
-    if (!wasMeasured(session.cost)) uncaptured += 1;
-    else if (!price.priced) unpriced += 1;
-    else usd += price.usd;
+    if (!wasMeasured(session.cost)) {
+      uncaptured += 1;
+    } else if (!price.priced) {
+      unpriced += 1;
+      models.add(price.model);
+    } else {
+      usd += price.usd;
+    }
   }
   if (unpriced === 0 && uncaptured === 0) return { priced: true, usd };
   const of = `of ${plural(sessions.length, "session", "sessions")}`;
-  const reasons = [unpriced > 0 ? `${unpriced} ${of} unpriced` : "", uncaptured > 0 ? `${uncaptured} ${of} uncaptured` : ""];
+  const reasons = [
+    unpriced > 0 ? `${unpriced} ${of} unpriced (${[...models].join(", ")})` : "",
+    uncaptured > 0 ? `${uncaptured} ${of} uncaptured` : "",
+  ];
   return { priced: false, reason: reasons.filter((reason) => reason !== "").join(", ") };
 }
 
-/** Verified only if every log is intact and holds records; any break outranks a missing log. */
+/** The weakest state any session's log is in: verified only where every one was checked against its key. */
 function chainOf(sessions: readonly Session[], chains: ReadonlyMap<string, ChainCheck>): CardChain {
   const states = sessions.map((session): CardChain => {
     const check = chains.get(session.id);
     if (check === undefined || isEmpty(check)) return "missing";
-    return isIntact(check) ? "verified" : "broken";
+    if (!isIntact(check)) return "broken";
+    return check.signaturesChecked ? "verified" : "hashes-only";
   });
-  return states.includes("broken") ? "broken" : states.includes("missing") ? "missing" : "verified";
+  return WEAKEST_CHAIN.find((state) => states.includes(state)) ?? "verified";
 }
 
 /** The least-landed outcome among sessions that changed something; empty only when none did. */

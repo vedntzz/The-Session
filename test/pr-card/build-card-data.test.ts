@@ -8,6 +8,7 @@ import { cost, RATES, session } from "../fixtures/markdown.js";
 
 const AGENTS: AgentInfo[] = [];
 const INTACT: ChainCheck = { total: 3, verified: 3, unsigned: 0, signaturesChecked: true, truncatedTail: false };
+const HASHES_ONLY: ChainCheck = { ...INTACT, signaturesChecked: false };
 const BROKEN: ChainCheck = { ...INTACT, verified: 1, break: { line: 2, kind: "hash", detail: "does not hash" } };
 
 /** A merged session at 09:00 on the given day, by claude-code, priced at $1.50, its log intact. */
@@ -74,13 +75,34 @@ describe("buildCardData", () => {
   it("makes the whole card unpriced when any session is, with no partial dollar figure", () => {
     const unrated = worked("b", 2, { cost: cost({ model: "claude-x", inputTokens: 100_000 }) });
     const card = build([worked("a", 1), unrated]);
-    expect(card?.cost).toEqual({ priced: false, reason: "1 of 2 sessions unpriced" });
+    expect(card?.cost).toEqual({ priced: false, reason: "1 of 2 sessions unpriced (claude-x)" });
     expect(card?.cost).not.toHaveProperty("usd");
+  });
+
+  it("names each unrated model once, joined with commas", () => {
+    const unrated = (id: string, day: number, model: string) => worked(id, day, { cost: cost({ model, inputTokens: 1 }) });
+    const card = build([unrated("a", 1, "claude-x"), unrated("b", 2, "gpt-y"), unrated("c", 3, "claude-x")]);
+    expect(card?.cost).toEqual({ priced: false, reason: "3 of 3 sessions unpriced (claude-x, gpt-y)" });
   });
 
   it("counts a session nothing was captured for apart from one with no rate", () => {
     const uncaptured = worked("b", 2, { cost: cost({ turns: 0, apiCalls: 0 }) });
     expect(build([worked("a", 1), uncaptured])?.cost).toEqual({ priced: false, reason: "1 of 2 sessions uncaptured" });
+  });
+
+  it("reads a log checked by hashes alone as hashes-only, never verified", () => {
+    const sessions = [worked("a", 1)];
+    expect(build(sessions, { chains: new Map([["a", HASHES_ONLY]]) })?.chain).toBe("hashes-only");
+  });
+
+  it("ranks broken over missing over hashes-only over verified", () => {
+    const sessions = [worked("a", 1), worked("b", 2)];
+    const chainsOf = (a?: ChainCheck, b?: ChainCheck) =>
+      new Map([...(a ? [["a", a] as const] : []), ...(b ? [["b", b] as const] : [])]);
+    expect(build(sessions, { chains: chainsOf(INTACT, HASHES_ONLY) })?.chain).toBe("hashes-only");
+    expect(build(sessions, { chains: chainsOf(HASHES_ONLY) })?.chain).toBe("missing");
+    expect(build(sessions, { chains: chainsOf(BROKEN) })?.chain).toBe("broken");
+    expect(build(sessions, { chains: chainsOf(BROKEN, HASHES_ONLY) })?.chain).toBe("broken");
   });
 
   it("is verified only when every session's chain verifies", () => {
