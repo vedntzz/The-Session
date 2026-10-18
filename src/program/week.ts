@@ -12,17 +12,18 @@ import {
   writeWeekPage,
   type SessionFilter,
 } from "../commands/week.js";
-import { showSession } from "../commands/show.js";
 import { sweepFirst } from "../commands/sweep.js";
 import { parseOutcome } from "../outcome.js";
 import { loadChecked, loadRates } from "../pricing.js";
 import { renderWeek } from "../render/html.js";
 import { renderMarkdownWeek } from "../render/markdown.js";
 import type { Palette } from "../render/palette.js";
-import { formatBrief, formatSession, formatWeek, terminalWidth } from "../render/terminal.js";
+import { formatWeek, terminalWidth } from "../render/terminal.js";
 import { INTENT_SOURCES, parseIntentSource, storeHome } from "../store.js";
 import type { ProgramOptions } from "./options.js";
 import { printLines } from "./print.js";
+import { emitSession } from "./week-session.js";
+export { LAST } from "./week-session.js";
 
 /** What `session week` accepts, as commander hands it over. */
 export type WeekFlags = {
@@ -71,9 +72,6 @@ export function registerWeek(program: Command, options: ProgramOptions, palette:
     );
 }
 
-/** What `last` stands for: no id, which `showSession` reads as the last closed one. */
-export const LAST = "last";
-
 /**
  * `--full` is a layout for one session, and the table has none to lay out.
  * Refused rather than ignored, so the reader learns where it does apply.
@@ -102,32 +100,6 @@ function refuseWindowFlags(flags: WeekFlags, command: Command): WeekFlags {
     throw new Error(`${named} ${verb} to the week, not to one session. Drop the id, or drop ${them}.`);
   }
   return flags;
-}
-
-/**
- * One session: three sentences and a bottom line, or with `--full` the
- * labelled layout. `--tokens` asks for counters the brief view has no place
- * for, so it implies `--full` rather than being quietly ignored.
- */
-async function emitSession(
-  id: string,
-  flags: WeekFlags,
-  options: ProgramOptions,
-  palette: Palette,
-): Promise<void> {
-  // Silent unless it wrote something; its facts resolve the outcome — see `sweepFirst`.
-  const { notice, facts } = await sweepFirst(options);
-  const session = await showSession(id === LAST ? undefined : id, options, facts);
-  const view = {
-    rates: await loadRates(storeHome(options)),
-    // Only `--tokens` prints it: the brief line and the plain `--full` layout
-    // carry no room for a note about where prices come from.
-    ...(flags.tokens === true ? { checked: await loadChecked() } : {}),
-    tokens: flags.tokens, width: terminalWidth(), agents: knownAgents(),
-  };
-  const full = flags.full === true || flags.tokens === true;
-  const render = full ? formatSession : formatBrief;
-  printLines([...notice, ...render(session, palette, view)]);
 }
 
 /** Reads the filtering flags off `week` into the shape the store filters on. */
