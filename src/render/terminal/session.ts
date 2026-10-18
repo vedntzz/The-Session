@@ -5,45 +5,19 @@ import { plainPalette, type Palette } from "../palette.js";
 import { outcomeInk, type View } from "./cost.js";
 import { intentOf, INTENT_NOTE } from "./intent.js";
 import { costLines, pricesLines } from "./session-cost.js";
+import { detailDeclarationTable } from "./session-declaration.js";
 import { changedLines, declaredLine, labelledPaths, outsideLines } from "./session-paths.js";
 import { turnModelRows } from "./turn-models.js";
 import { clock, flatten, gap, INDENT, label, shortId, wrapSegments } from "./text.js";
 
-/**
- * The session as `session week <id> --full` prints it.
- *
- * `outcome` is the first labelled row: where the work ended up is the question
- * the reader came with, and it used to be the last thing they found. The
- * intent stays above it as the heading, because it is the title of the view
- * rather than a row in it.
- *
- * `changed` and `outside` partition what actually changed: the paths that
- * landed inside the declared scope, then the ones that did not. Reading both
- * gives back `reality` exactly, with no path listed twice. Both come before
- * the cost rows — the gap between what was declared and what happened is what
- * this tool measures that nothing else does.
- */
+/** Full detail tables begin with the declaration; paths still precede the cost. */
 export function formatSession(
   session: Session,
   palette: Palette = plainPalette,
   view: View = {},
 ): string[] {
-  // The id, the cost and the attribution share the last block. A session no
-  // transcript was captured for has no cost rows and may have no attribution,
-  // but it always has an id, so the block — and the blank line above it — is
-  // always there.
-  const footer = [
-    idLine(session, palette),
-    ...costLines(session, palette, view), ...turnModelRows(session, palette),
-    ...attributionLines(session, palette),
-    ...pricesLines(session, palette, view),
-  ];
   return [
-    "",
-    ...headingLine(session, palette, view.width),
-    "",
-    outcomeLine(session, palette),
-    ...capturedIntentLines(session, palette),
+    ...declarationRows(session, palette, view.width),
     ...declaredLine(session, palette, view.width),
     ...(session.proposal ? labelledPaths("proposed",
       session.proposal.scope.length ? session.proposal.scope.map((p) => JSON.stringify(p)) : ["no suggestion"],
@@ -51,7 +25,20 @@ export function formatSession(
     ...changedLines(session, palette, view.width),
     ...outsideLines(session, palette, view.width),
     "",
-    ...footer,
+    ...sessionFooter(session, palette, view),
+  ];
+}
+
+/** A pipe retains the existing heading and source rows byte for byte. */
+function declarationRows(session: Session, palette: Palette, width?: number): string[] {
+  if (width !== undefined) return ["", ...detailDeclarationTable(session, palette, width)];
+  return ["", ...headingLine(session, palette), "", outcomeLine(session, palette), ...capturedIntentLines(session, palette)];
+}
+
+function sessionFooter(session: Session, palette: Palette, view: View): string[] {
+  return [idLine(session, palette),
+    ...costLines(session, palette, view), ...turnModelRows(session, palette),
+    ...attributionLines(session, palette), ...pricesLines(session, palette, view),
   ];
 }
 
