@@ -1,8 +1,7 @@
 import type { Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
 import { foldLiteral } from "../tui/text.js";
-import { outcomeInk } from "./cost.js";
-import { sessionIntentRows } from "./home-recording.js";
+import { stopDeclarationRows } from "./stop-declaration.js";
 import { NO_SCOPE } from "./intent.js";
 import { summarizePaths } from "./paths.js";
 import { startDetails, startRows } from "./start-rows.js";
@@ -15,12 +14,10 @@ export function formatStopConfirmation(
   session: Session, palette: Palette = plainPalette, details: string[] = [], width?: number,
   view: StopView = {},
 ): string[] {
-  const outcome = view.outcome ?? session.outcome;
   return [
     `${INDENT}${palette.meta("◔ session  stopped")}`,
     "",
-    ...startRows("outcome", outcome, outcome === "unknown" ? palette.meta : outcomeInk(palette, outcome), palette, width),
-    ...sessionIntentRows(session, palette, width),
+    ...stopDeclarationRows(session, palette, width, view.outcome),
     ...stopScopeRows(session, palette, width),
     ...stoppedPaths(session, palette, width),
     ...stopOutsideRows(session, palette, width),

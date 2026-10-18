@@ -9,7 +9,7 @@ Implement, test and commit one ticket at a time, then stop for review.
 
 ## Tickets
 
-- [ ] S1 — Outcome and declaration table. Reuse `fieldTable`, `sessionIntentFields` and the existing outcome ink. Show the caller-resolved outcome and complete declared intent; retain captured-prompt boundaries and reasons for unknown intent. Leave remaining stop sections in their current layout.
+- [x] S1 — Outcome and declaration table. Reuse `fieldTable`, `sessionIntentFields` and the existing outcome ink. Show the caller-resolved outcome and complete declared intent; retain captured-prompt boundaries and reasons for unknown intent. Leave remaining stop sections in their current layout.
   - Tests: 40/60/80-column geometry, ANSI/plain parity, unknown outcome, full and captured intent, missing intent, signed-record immutability, and unchanged pipe/hook behavior.
 - [ ] S2 — Scope and changed-path tables. Reuse the existing scope comparison and path-summary rules. Keep exact changed/outside counts, explicit missing scope and literal path wrapping; retain the record ID.
   - Tests: scoped/unscoped/captured records, zero and nonzero drift, capped named paths with exact totals, long Unicode paths, and baseline changes recorded by Git.
@@ -21,3 +21,9 @@ Implement, test and commit one ticket at a time, then stop for review.
 ## Boundaries
 
 This is a presentation change. Preserve command behavior, append-only records, scope/outcome rules and pricing. Add no prompts, mutation actions, dependencies, colours or terminal control sequences. Leave pipe and hook output stable.
+
+## S1 validation
+
+- Node 24.19.0: 241 targeted tests passed across 9 test files, including normal stop, pipe and hook output, baseline-aware diffs, and signed-record integrity checks.
+- Build, type, file-size and whitespace checks passed.
+- New declaration renderer: 12 lines; stop formatter: 18 lines.

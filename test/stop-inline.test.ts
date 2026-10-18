@@ -14,6 +14,7 @@ import { sweepStampFile } from "../src/commands/sweep.js";
 import type { Adapter } from "../src/capture/adapter.js";
 import { readSessions, zeroCost } from "../src/store.js";
 import { plainPalette } from "../src/render/palette.js";
+import { tableValues } from "./fixtures/table.js";
 import { cellWidth } from "../src/render/tui/text.js";
 import * as observe from "../src/observe.js";
 
@@ -54,7 +55,7 @@ it.each([[40, true], [60, true], [80, true], [60, false]] as const)("wraps safe 
   await writeFile(path.join(cwd, literal), "changed"); const lines = await run(columns, tty);
   const first = lines.findIndex((line) => line.startsWith("  intent      ")); const scope = lines.findIndex((line) => line.startsWith("  scope       "));
   const changed = lines.findIndex((line) => line.startsWith("  changed     ")); const outside = lines.findIndex((line) => line.startsWith("  outside     "));
-  expect(lines.slice(first, scope).map((line) => line.slice(14)).join(" ")).toBe(intent);
+  expect((tty ? tableValues(lines, "intent") : lines.slice(first, scope).map(line => line.slice(14))).join(" ")).toBe(intent);
   expect(lines.slice(changed + 1, outside).map((line, index) => line.slice(index ? 16 : 14)).join("")).toBe(literal);
   expect((await readSessions(options()))[0]?.reality).toEqual([literal]);
   if (tty) expect(lines.every((line) => cellWidth(line) <= columns)).toBe(true);
@@ -74,7 +75,7 @@ it("sanitizes completion text while preserving literal signed intent and paths",
   await startSession(intent, { ...options(), scope: [literal] }); await writeFile(path.join(cwd, literal), "changed");
   const lines = await run(); const [saved] = await readSessions(options());
   expect(saved?.intent).toBe(intent); expect(saved?.reality).toEqual([literal]);
-  expect(lines).toContain("  intent      Work safely"); expect(lines).toContain("              notes.txt");
+  expect(tableValues(lines, "intent")).toEqual(["Work safely"]); expect(lines).toContain("              notes.txt");
   expect(printed.join("\n")).not.toContain("\u001b");
 });
 it.each([true, false])("records the actual diff with an accepted scope=%s", async (scoped) => {
@@ -96,7 +97,7 @@ it.each([true, false])("shows a freshly resolved outcome when work was committed
   await writeFile(await sweepStampFile(options()), new Date().toISOString());
   if (committed) { await writeFile(path.join(cwd, "base.txt"), "landed"); await git(["add", "base.txt"]); await git(["commit", "-qm", "landed"]); }
   const lines = await run(); const [saved] = await readSessions(options());
-  expect(lines).toContain(`  outcome     ${committed ? "merged" : "empty"}`); expect(saved?.outcome).toBe("open");
+  expect(tableValues(lines, "outcome")).toEqual([committed ? "merged" : "empty"]); expect(saved?.outcome).toBe("open");
   expect(saved?.id).toBe(open.id); expect(saved?.intent).toBe(open.intent); expect(saved?.scope).toEqual(open.scope);
   expect(saved?.observations ?? []).toEqual([]);
 });
@@ -112,7 +113,7 @@ it("confirms a completed stop and sweeps when outcome lookup fails", async () =>
   await startSession("Finish before lookup fails", options());
   vi.spyOn(observe, "withOutcomes").mockRejectedValueOnce(new Error("private outcome lookup failure"));
   const lines = await run(); const [saved] = await readSessions(options());
-  expect(lines).toContain("  ◔ session  stopped"); expect(lines).toContain("  outcome     unknown");
+  expect(lines).toContain("  ◔ session  stopped"); expect(tableValues(lines, "outcome")).toEqual(["unknown"]);
   expect(saved?.endedAt).not.toBeNull(); expect(saved?.outcome).toBe("open");
   expect((await verifyLog(options())).check).toMatchObject({ signaturesChecked: true, total: 2, verified: 2 });
   await expect(readFile(await sweepStampFile(options()), "utf8")).resolves.toMatch(/^\d{4}-/u);
