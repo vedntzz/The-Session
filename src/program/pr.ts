@@ -3,6 +3,10 @@ import { writeFile } from "node:fs/promises";
 import type { Command } from "commander";
 import { prBody } from "../commands/pr.js";
 import { copyToClipboard } from "../commands/week.js";
+import { cardDataForRange } from "../pr-card/card-for-range.js";
+import { renderCardJson } from "../pr-card/render-card-json.js";
+import { renderNoRecordCard } from "../pr-card/render-no-record-card.js";
+import { renderPrCard } from "../pr-card/render-pr-card.js";
 import { placeholderList } from "../render/pr.js";
 import type { ProgramOptions } from "./options.js";
 
@@ -11,6 +15,10 @@ export type PrFlags = {
   copy?: boolean;
   out?: string;
   template?: string;
+  card?: boolean;
+  json?: boolean;
+  base?: string;
+  head?: string;
 };
 
 /**
@@ -33,21 +41,44 @@ export function registerPr(program: Command, options: ProgramOptions): void {
     .option("--copy", "put it on the clipboard instead of printing it")
     .option("--out <path>", "write it to a file instead of printing it")
     .option("--template <path>", `a Markdown file with ${placeholderList()} in it`)
+    .option("--card", "print the PR card for a commit range instead")
+    .option("--json", "print the PR card's data as JSON instead")
+    .option("--base <ref>", "with --card or --json: where the PR starts (default: merge base with the default branch)")
+    .option("--head <ref>", "with --card or --json: where the PR ends (default: HEAD)")
     .action(async (id: string | undefined, flags: PrFlags) => {
-      const body = await prBody(id, options, flags.template);
-
-      if (flags.out !== undefined) {
-        // A newline the document itself does not carry: a file ends in one,
-        // and a paste should not.
-        await writeFile(flags.out, `${body}\n`, "utf8");
-        console.log(`  wrote    ${flags.out}`);
+      if (flags.card === true || flags.json === true) return emitCard(id, flags, options);
+      if (flags.base !== undefined || flags.head !== undefined) {
+        throw new Error("--base and --head need --card or --json. Run session pr --card --base <ref> --head <ref>.");
       }
-      if (flags.copy === true) {
-        await copyToClipboard(body, options);
-        console.log("  copied   the pull request body");
-      }
-      if (flags.out === undefined && flags.copy !== true) {
-        console.log(body);
-      }
+      await emitBody(id, flags, options);
     });
+}
+
+/** The card for a commit range, as Markdown with --card or as JSON with --json. */
+async function emitCard(id: string | undefined, flags: PrFlags, options: ProgramOptions): Promise<void> {
+  if (flags.card === true && flags.json === true) throw new Error("choose --card or --json");
+  const flag = flags.json === true ? "--json" : "--card";
+  if (id !== undefined) throw new Error(`${flag} works on a commit range; drop the session id.`);
+  const card = await cardDataForRange(flags, options);
+  if (flags.json === true) console.log(renderCardJson(card));
+  else console.log(card === null ? renderNoRecordCard() : renderPrCard(card));
+}
+
+/** The body, to a file, the clipboard, or stdout. */
+async function emitBody(id: string | undefined, flags: PrFlags, options: ProgramOptions): Promise<void> {
+  const body = await prBody(id, options, flags.template);
+
+  if (flags.out !== undefined) {
+    // A newline the document itself does not carry: a file ends in one,
+    // and a paste should not.
+    await writeFile(flags.out, `${body}\n`, "utf8");
+    console.log(`  wrote    ${flags.out}`);
+  }
+  if (flags.copy === true) {
+    await copyToClipboard(body, options);
+    console.log("  copied   the pull request body");
+  }
+  if (flags.out === undefined && flags.copy !== true) {
+    console.log(body);
+  }
 }
