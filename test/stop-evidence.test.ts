@@ -51,7 +51,7 @@ it.each([60, 80, undefined])("keeps four raw counters, dim money and color geome
   const tokens = plain.findIndex((line) => line.startsWith("  tokens      ")); const money = plain.findIndex((line) => line.startsWith("  cost        "));
   expect(plain.slice(tokens, money).map((line) => line.slice(14)).join(" ")).toBe("1,000,000 in · 2,000,000 cache read · 3,000,000 cache write · 4,000,000 out");
   expect(plain).toContain("  cost        $51.00"); expect(dim).toContain("$51.00"); expect(plain).toContain("  note     safe metadata");
-  expect(plain.indexOf("  turns       1")).toBeGreaterThan(plain.indexOf("  id          abcdef01"));
+  expect(plain.indexOf("  turns       1")).toBeGreaterThan(plain.findIndex(line => /^  (?:id\s|│ id\s)/u.test(line)));
   expect(formatStopConfirmation(record, ansiPalette, ["  note     safe metadata"], width, { rates }).map(stripVTControlCharacters)).toEqual(plain);
   expect(formatStopConfirmation(record, paletteFor({ env: { NO_COLOR: "1" }, isTTY: true }), ["  note     safe metadata"], width, { rates })).toEqual(plain);
   if (width !== undefined) expect(plain.every((line) => cellWidth(line) <= width)).toBe(true);

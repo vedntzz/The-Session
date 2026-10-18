@@ -58,11 +58,12 @@ it("keeps table geometry independent of colour and sanitizes before ink", () => 
   expect(plain.join("\n")).not.toContain("\u001b");
 });
 
-it("keeps the pending path, evidence and next-command sections intact", () => {
+it("keeps recorded paths, pending evidence and next commands intact", () => {
   const record = stopped({ reality: ["src/panel.ts", "outside.txt"], drift: ["outside.txt"] });
   const lines = formatStopConfirmation(record, plainPalette, [], 80);
-  for (const line of ["  scope       src/", "  changed     2 files", "              ! outside.txt",
-    "  id          abcdef01", "  turns       unknown", "  cost        unknown", "  next        session week last --full"]) {
+  expect(tableValues(lines, "scope")).toEqual(["src/"]); expect(tableValues(lines, "changed")[0]).toBe("2 files");
+  expect(tableValues(lines, "outside")).toContain("! outside.txt"); expect(tableValues(lines, "id")).toEqual(["abcdef01"]);
+  for (const line of ["  turns       unknown", "  cost        unknown", "  next        session week last --full"]) {
     expect(lines).toContain(line);
   }
 });

@@ -4,6 +4,7 @@ import { zeroCost, type Session } from "../src/store.js";
 import { ansiPalette, paletteFor, plainPalette } from "../src/render/palette.js";
 import { NO_SCOPE } from "../src/render/terminal/intent.js";
 import { formatStopConfirmation } from "../src/render/terminal/stop.js";
+import { tableValues } from "./fixtures/table.js";
 import { cellWidth } from "../src/render/tui/text.js";
 
 const stopped = (overrides: Partial<Session> = {}): Session => ({
@@ -40,12 +41,13 @@ it.each([60, 80, undefined])("keeps all accepted scope paths and color geometry 
   const literal = `資料/${"e\u0301界".repeat(30)}.ts`; const paths = [literal, "a  file*[x],.ts", "notes/third.ts", "fourth.ts"];
   const record = stopped({ scope: paths, drift: [literal] }); const before = JSON.stringify(record); const plain = formatStopConfirmation(record, plainPalette, [], width);
   const scope = plain.findIndex((line) => line.startsWith("  scope       ")); const changed = plain.findIndex((line) => line.startsWith("  changed     "));
-  const rows = plain.slice(scope, changed); expect(rows.slice(0, -3).map((line, index) => line.slice(index ? 16 : 14)).join("")).toBe(literal);
-  expect(rows.slice(-3)).toEqual(paths.slice(1).map((file) => `              ${file}`));
+  const rows = width === undefined ? plain.slice(scope, changed).map((line, index, all) =>
+    line.slice(index === 0 || index >= all.length - 3 ? 14 : 16)) : tableValues(plain, "scope");
+  expect(rows.slice(0, -3).join("")).toBe(literal); expect(rows.slice(-3)).toEqual(paths.slice(1));
   const outside = plain.findIndex((line) => line.startsWith("  outside     ")); const id = plain.findIndex((line) => line.startsWith("  id          "));
-  const marked = plain.slice(outside + 1, id).map((line, index) => line.slice(index ? 16 : 14));
+  const marked = width === undefined ? plain.slice(outside + 1, id).map((line, index) => line.slice(index ? 16 : 14)) : tableValues(plain, "outside").slice(1);
   expect(marked[0]).toMatch(/^! \S/u); expect(plain.some((line) => /^\s*!\s*$/u.test(line))).toBe(false);
-  expect(marked.map((line, index) => index ? line : line.replace(/^! ?/u, "")).join("")).toBe(literal);
+  expect(marked.map((line, index) => width !== undefined || index === 0 ? line.slice(2) : line).join("")).toBe(literal);
   expect(formatStopConfirmation(record, ansiPalette, [], width).map(stripVTControlCharacters)).toEqual(plain);
   expect(formatStopConfirmation(record, paletteFor({ env: { NO_COLOR: "1" }, isTTY: true }), [], width)).toEqual(plain);
   if (width !== undefined) expect(plain.every((line) => cellWidth(line) <= width)).toBe(true);
@@ -56,7 +58,7 @@ it.each([false, true])("sanitizes accepted scope and %s summarized outside paths
   const drift = summary ? ["a", "b", "c", "d"].map((name) => `api\u001b[2J/${name}.ts`) : ["notes/a\u001b[2J file.ts"];
   const record = stopped({ scope: ["src/\u001b[2J", "notes/a  file.ts"], drift }); const before = JSON.stringify(record);
   const lines = formatStopConfirmation(record, { ...plainPalette, path: ink, drift: ink, meta: ink }, ["  outside  duplicate", `  ${NO_SCOPE}`, "  note     retained"], 60);
-  expect(lines).toContain("  scope       src/"); expect(lines).toContain(`              ! ${summary ? "all in api/" : "notes/a file.ts"}`);
+  expect(tableValues(lines, "scope")).toEqual(["src/", "notes/a  file.ts"]); expect(tableValues(lines, "outside")).toContain(`! ${summary ? "all in api/" : "notes/a file.ts"}`);
   expect(lines).toContain("  note     retained"); expect(lines.join("\n")).not.toContain("duplicate"); expect(lines.join("\n")).not.toContain(NO_SCOPE);
   expect(seen.join("\n")).not.toContain("\u001b"); expect(JSON.stringify(record)).toBe(before);
 });
