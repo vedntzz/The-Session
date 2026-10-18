@@ -1,5 +1,6 @@
 import { hasDeclaredScope, type Session } from "../../store.js";
 import type { Palette } from "../palette.js";
+import type { TableField } from "./field-table.js";
 import { DRIFT_MARKER } from "./intent.js";
 import { summarizePaths } from "./paths.js";
 import { foldLiteral } from "../tui/text.js";
@@ -16,18 +17,27 @@ export function stopScopeRows(session: Session, palette: Palette, width?: number
   return startScopeRows(session.scope, palette, width);
 }
 
-export function stopOutsideRows(session: Session, palette: Palette, width?: number): string[] {
+/** Share comparison and summary facts between terminal tables and plain output. */
+export function stopScopeField(session: Session, palette: Palette): TableField {
+  const declared = hasComparison(session);
+  return { label: "scope", values: declared ? session.scope : ["none declared"], ink: declared ? palette.path : palette.meta };
+}
+
+export function stopOutsideFields(session: Session, palette: Palette): TableField[] {
   if (!hasComparison(session)) return [
-    ...startRows("outside", "unknown", palette.meta, palette, width),
-    ...startRows("", "no scope declared to compare against", palette.meta, palette, width),
+    { label: "outside", values: ["unknown"], ink: palette.meta },
+    { label: "", values: ["no scope declared to compare against"], ink: palette.meta },
   ];
   const summary = summarizePaths(session.drift);
-  const ink = summary.count > 0 ? palette.drift : palette.meta;
   return [
-    ...startRows("outside", plural(summary.count, "file", "files"), ink, palette, width),
-    ...summary.named.flatMap(path => markedPath(path, palette, width)),
-    ...(summary.where ? startRows("", `${DRIFT_MARKER} ${summary.where}`, palette.drift, palette, width) : []),
+    { label: "outside", values: [plural(summary.count, "file", "files")], ink: summary.count ? palette.drift : palette.meta },
+    { label: "", values: [...summary.named, ...(summary.where ? [summary.where] : [])], ink: palette.drift, prefix: `${DRIFT_MARKER} ` },
   ];
+}
+
+export function stopOutsideRows(session: Session, palette: Palette, width?: number): string[] {
+  return stopOutsideFields(session, palette).flatMap(field => field.values.flatMap(value => field.prefix
+    ? markedPath(value, palette, width) : startRows(field.label, value, field.ink ?? palette.meta, palette, width)));
 }
 
 function markedPath(path: string, palette: Palette, width?: number): string[] {

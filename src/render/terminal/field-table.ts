@@ -7,11 +7,14 @@ export interface TableField {
   label: string;
   values: readonly string[];
   ink?: (text: string) => string;
+  prefix?: string;
 }
 type FieldColumns = [GridColumn, GridColumn];
 
 function fieldRows(field: TableField, columns: FieldColumns, palette: Palette): string[] {
-  const values = field.values.flatMap(value => foldLiteral(value, columns[1].width));
+  const prefix = field.prefix ?? ""; const size = cellWidth(prefix);
+  const values = field.values.flatMap(value => foldLiteral(value, columns[1].width - size)
+    .map((part, index) => (index ? " ".repeat(size) : prefix) + part));
   return values.map((value, index) => gridRow([index ? "" : field.label, value], columns,
     palette, [palette.meta, field.ink ?? (text => text)]));
 }

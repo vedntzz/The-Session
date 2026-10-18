@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { zeroCost, type Session } from "../src/store.js";
 import { ansiPalette, plainPalette } from "../src/render/palette.js";
 import { formatStopConfirmation } from "../src/render/terminal/stop.js";
+import { tableValues } from "./fixtures/table.js";
 import { cellWidth } from "../src/render/tui/text.js";
 
 const stopped = (overrides: Partial<Session> = {}): Session => ({
@@ -26,10 +27,10 @@ it.each([60, 80, undefined])("retains full intent and literal Unicode paths at w
   const scope = plain.findIndex((line) => line.startsWith("  scope       "));
   const changed = plain.findIndex((line) => line.startsWith("  changed     "));
   const outside = plain.findIndex((line) => line.startsWith("  outside     "));
-  expect(plain.slice(first, scope).map((line) => line.slice(14)).join(" ")).toBe(intent);
-  const paths = plain.slice(changed + 1, outside);
-  expect(paths.slice(0, -1).map((line, index) => line.slice(index ? 16 : 14)).join("")).toBe(literal);
-  expect(paths.at(-1)).toBe("              notes/a  file*[x],.ts");
+  expect((width === undefined ? plain.slice(first, scope).map(line => line.slice(14)) : tableValues(plain, "intent")).join(" ")).toBe(intent);
+  const paths = width === undefined ? plain.slice(changed + 1, outside).map((line, index, all) =>
+    line.slice(index === 0 || index === all.length - 1 ? 14 : 16)) : tableValues(plain, "changed").slice(1);
+  expect(paths.slice(0, -1).join("")).toBe(literal); expect(paths.at(-1)).toBe("notes/a  file*[x],.ts");
   expect(formatStopConfirmation(record, ansiPalette, [], width).map(stripVTControlCharacters)).toEqual(plain);
   if (width !== undefined) expect(plain.every((line) => cellWidth(line) <= width)).toBe(true);
   expect(JSON.stringify(record)).toBe(before);
@@ -59,8 +60,8 @@ it.each([0, 1])("replaces legacy cost details with measured evidence for %i turn
 it("keeps safe full metadata in a separated wrapped block", () => {
   const detail = `  note     ${"Keep all metadata visible. ".repeat(6).trim()}\u001b[2J`;
   const lines = formatStopConfirmation(stopped(), plainPalette, [detail], 60);
-  const id = lines.findIndex((line) => line.startsWith("  id          ")); const turns = lines.findIndex((line) => line.startsWith("  turns       "));
-  const start = id + 2; const details = lines.slice(start, turns - 1);
+  const start = lines.findIndex(line => line.startsWith("  note     "));
+  const end = lines.findIndex((line, index) => index > start && line === ""); const details = lines.slice(start, end);
   expect(lines[start - 1]).toBe(""); expect(details.map((line) => line.slice(2)).join(" ")).toBe(stripVTControlCharacters(detail).slice(2));
   expect(lines.every((line) => cellWidth(line) <= 60)).toBe(true);
 });
