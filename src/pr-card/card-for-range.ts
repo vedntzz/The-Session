@@ -1,4 +1,4 @@
-// `session pr --card`: a PR's commits, the sessions they carry, the card as Markdown.
+// `session pr --card` and `--json`: a PR's commits, the sessions they carry, the card's data.
 import { knownAgents } from "../capture/index.js";
 import { verifyLog } from "../commands/verify.js";
 import { defaultBranch } from "../git/branch.js";
@@ -7,10 +7,9 @@ import { factsFor } from "../observe.js";
 import { loadRates } from "../pricing.js";
 import { readSessions, storeHome, type Session, type StoreOptions } from "../store.js";
 import { buildCardData, type CardInputs } from "./build-card-data.js";
+import type { CardData } from "./card-data.js";
 import { listCommitsInRange } from "./list-commits-in-range.js";
 import { matchSessionsToCommits } from "./match-sessions-to-commits.js";
-import { renderNoRecordCard } from "./render-no-record-card.js";
-import { renderPrCard } from "./render-pr-card.js";
 
 /** The PR's two ends; either left out takes its default. */
 export interface CardRange {
@@ -18,14 +17,13 @@ export interface CardRange {
   head?: string;
 }
 
-/** The card for base..head, or the no-record card when no session's work is in it. */
-export async function cardForRange(range: CardRange, options: StoreOptions = {}): Promise<string> {
+/** The card's data for base..head; null when no session's work is in it. */
+export async function cardDataForRange(range: CardRange, options: StoreOptions = {}): Promise<CardData | null> {
   const cwd = options.cwd ?? process.cwd();
   const head = range.head ?? "HEAD";
   const commits = await listCommitsInRange(cwd, range.base ?? (await defaultBase(cwd, head)), head);
   const sessions = await matchSessionsToCommits(cwd, commits, await readSessions(options));
-  const card = buildCardData(sessions, await cardInputs(sessions, options, cwd));
-  return card === null ? renderNoRecordCard() : renderPrCard(card);
+  return buildCardData(sessions, await cardInputs(sessions, options, cwd));
 }
 
 /** Where head left the default branch; no merge base is an error, never a guessed range. */
