@@ -1,5 +1,6 @@
 // The PR card as a comment, through GitHub's REST API. The one call this makes is the one the
 // GitHub Action exception in docs/decisions.md permits; nothing in the CLI reaches for it.
+import type { PrComment } from "./find-card-comment.js";
 
 /** The fetch this needs; the global one by default, a fake in tests. */
 export type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
@@ -61,12 +62,8 @@ export async function send(request: GitHubRequest, token: string, fetchFn: Fetch
 
 /** The comment's id from a 2xx answer; otherwise the status and GitHub's own message, never the token. */
 export async function readCommentId(response: Response, doing: string, token: string): Promise<number> {
-  const text = await response.text();
-  const json = parse(text);
-  if (!response.ok) {
-    const message = typeof json?.["message"] === "string" ? `: ${json["message"]}` : "";
-    throw new Error(scrub(`GitHub answered ${response.status} to ${doing}${message}. ${hint(response.status)}`, token));
-  }
+  const json = parse(await response.text());
+  if (!response.ok) throw failure(response.status, json, doing, token);
   const id = json?.["id"];
   if (typeof id !== "number" || !Number.isInteger(id)) {
     throw new Error(`GitHub answered ${response.status} to ${doing} with no comment id. Check the PR for a new comment before retrying.`);
@@ -96,6 +93,56 @@ export async function updateComment(
     throw new CommentGoneError(`GitHub answered 404 to ${doing}: the comment no longer exists. Post a new comment instead.`);
   }
   return readCommentId(response, doing, token);
+}
+
+/** More pages than this is not a PR worth paging through; it is a loop. */
+const MAX_PAGES = 20;
+
+/** Every comment on the PR, oldest first, across pages; only the fields the card match reads. */
+export async function listComments(target: PrTarget, token: string, fetchFn: FetchFn = fetch): Promise<PrComment[]> {
+  const doing = `listing comments on ${target.owner}/${target.repo}#${target.number}`;
+  const comments: PrComment[] = [];
+  let url: string | null = `${commentsUrl(target)}?per_page=100`;
+  for (let page = 0; url !== null; page++) {
+    if (page === MAX_PAGES) {
+      throw new Error(`Stopped ${doing} after ${MAX_PAGES} pages of 100 comments, the limit. Check the PR for a comment loop.`);
+    }
+    const response = await send(githubRequest("GET", url, token), token, fetchFn);
+    const json: unknown = parse(await response.text());
+    if (!response.ok) throw failure(response.status, json as Record<string, unknown> | undefined, doing, token);
+    if (!Array.isArray(json)) throw new Error(`GitHub answered ${response.status} to ${doing} with no list of comments. Try again.`);
+    for (const item of json) comments.push(toComment(item, doing));
+    url = nextLink(response.headers.get("Link"));
+    if (url !== null && new URL(url).origin !== API) {
+      throw new Error(`GitHub's next page for ${doing} is not on ${API}. Stopped rather than send the token there.`);
+    }
+  }
+  return comments;
+}
+
+/** The rel="next" URL of a Link header, or null when there is no next page. */
+function nextLink(header: string | null): string | null {
+  for (const part of header?.split(",") ?? []) {
+    const match = /^\s*<([^>]*)>(.*)$/.exec(part);
+    if (match && /;\s*rel="next"/.test(match[2]!)) return match[1]!;
+  }
+  return null;
+}
+
+/** id, body and updated_at; who wrote it is dropped here, before anything can read it. */
+function toComment(item: unknown, doing: string): PrComment {
+  const record = item !== null && typeof item === "object" ? (item as Record<string, unknown>) : {};
+  const { id, body, updated_at } = record;
+  if (typeof id !== "number" || !Number.isInteger(id) || typeof updated_at !== "string") {
+    throw new Error(`GitHub's answer to ${doing} had a comment missing its id or updated_at. Try again.`);
+  }
+  return { id, body: typeof body === "string" ? body : null, updated_at };
+}
+
+/** The status and GitHub's own message, with what to do next; never the token. */
+function failure(status: number, json: Record<string, unknown> | undefined, doing: string, token: string): Error {
+  const message = typeof json?.["message"] === "string" ? `: ${json["message"]}` : "";
+  return new Error(scrub(`GitHub answered ${status} to ${doing}${message}. ${hint(status)}`, token));
 }
 
 function parse(text: string): Record<string, unknown> | undefined {
