@@ -5,6 +5,7 @@ import { formatHome } from "../src/render/terminal.js";
 import { startScopeRows } from "../src/render/terminal/start-rows.js";
 import { formatStopConfirmation } from "../src/render/terminal/stop.js";
 import { cellWidth } from "../src/render/tui/text.js";
+import { tableValues } from "./fixtures/table.js";
 
 const spaced = "docs/a very long folder name/with  two spaces inside/";
 const session = (overrides: Partial<Session> = {}): Session => ({
@@ -24,7 +25,8 @@ it.each([40, 60])("wraps a scope path in home and stop as start does, at %i colu
   const home = formatHome({ running: session({ endedAt: null }) }, plainPalette, { width });
   const stop = formatStopConfirmation(session(), plainPalette, [], width);
   expect(start.length).toBeGreaterThan(1);
-  expect(pathRows(home, "scope")).toEqual(start);
+  // Home draws a table at a known width; its cells drop padding, so start's rows are compared without trailing space.
+  expect(tableValues(home, "scope")).toEqual(start.map((row) => row.trimEnd()));
   expect(pathRows(stop, "scope")).toEqual(start);
   expect(start.join("")).toBe(spaced);
   expect([...home, ...stop].every((line) => cellWidth(line) <= width)).toBe(true);
