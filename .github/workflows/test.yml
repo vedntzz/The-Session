@@ -1,0 +1,37 @@
+# Build, typecheck and the full suite on every pull request into master and every push to master.
+name: test
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # The suite builds git fixture repositories and reads history; a shallow clone is not enough.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Fixture repositories commit; git refuses to without an identity.
+      - name: Set git identity
+        run: |
+          git config --global user.name "session ci"
+          git config --global user.email "ci@example.invalid"
+
+      - run: npm ci
+      - run: npm run build
+      - run: npx tsc --noEmit
+      - run: npm run typecheck
+      - run: npx vitest run
