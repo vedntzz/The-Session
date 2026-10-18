@@ -13,6 +13,7 @@ import { verifyLog } from "../src/commands/verify.js";
 import type { PromptTerminal } from "../src/commands/prompt-terminal.js";
 import { plainPalette } from "../src/render/palette.js";
 import { formatHome } from "../src/render/terminal.js";
+import { tableValues } from "./fixtures/table.js";
 import { cellWidth } from "../src/render/tui/text.js";
 
 const exec = promisify(execFile);
@@ -92,9 +93,9 @@ it.each([[40, true], [60, true], [80, true], [60, false]] as const)("uses %i-col
   const first = printed.findIndex((line) => line.startsWith("  intent      "));
   const scope = printed.findIndex((line) => line.startsWith("  scope       "));
   const id = printed.findIndex((line) => line.startsWith("  id          "));
-  const prose = printed.slice(first, scope);
-  expect(prose.map((line) => line.slice(14)).join(" ")).toBe(intent);
-  expect(printed.slice(scope, id).map((line, index) => line.slice(index ? 16 : 14)).join("")).toBe(literal);
+  const prose = tty ? tableValues(printed, "intent") : printed.slice(first, scope).map(line => line.slice(14));
+  expect(prose.join(" ")).toBe(intent);
+  expect((tty ? tableValues(printed, "scope") : printed.slice(scope, id).map((line, index) => line.slice(index ? 16 : 14))).join("")).toBe(literal);
   expect((await getOpenSession(options()))?.scope).toEqual([literal]);
   if (tty) expect(printed.every((line) => cellWidth(line) <= columns)).toBe(true);
   else { expect(prose).toHaveLength(1); expect(cellWidth(prose[0]!)).toBeGreaterThan(columns); }
@@ -121,7 +122,7 @@ it.each(["partial-cost", "captured-scope"] as const)("renders historical signed 
     startCommit: commit.trim(), startedAt: new Date(Date.now() - 60_000).toISOString(), endedAt: captured ? null : new Date().toISOString(), cost }, options());
   await writeFile(path.join(home, "rates.json"), JSON.stringify({ models: { priced: { input: 15, cacheRead: 1.5, cacheCreation: 18.75, output: 75 } } }));
   const before = await snapshot(); await bare(terminal());
-  expect(printed).toContain(captured ? "  scope       none declared" : "  cost        unknown");
+  expect(tableValues(printed, captured ? "scope" : "cost")).toEqual([captured ? "none declared" : "unknown"]);
   expect(printed.join("\n")).not.toContain(captured ? "legacy/stale.ts" : "$"); expect(await snapshot()).toEqual(before);
   if (captured) expect((await getOpenSession(options()))?.scope).toEqual(saved.scope);
   expect((await verifyLog(options())).check).toMatchObject({ signaturesChecked: true, total: 1, verified: 1 });
