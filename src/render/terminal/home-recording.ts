@@ -1,5 +1,6 @@
 import { hasDeclaredScope, inOwnWords, type Session } from "../../store.js";
 import { plainPalette, type Palette } from "../palette.js";
+import type { TableField } from "./field-table.js";
 import { headOf } from "./intent.js";
 import { startRows, startScopeRows } from "./start-rows.js";
 import { clock, INDENT, shortId } from "./text.js";
@@ -26,13 +27,19 @@ export function formatRecordingHome(
 
 /** Captured text keeps its first-line boundary until the shared row sanitizes it. */
 export function sessionIntentRows(session: Session, palette: Palette, width?: number): string[] {
+  return sessionIntentFields(session, palette).flatMap(field => field.values.flatMap(value =>
+    startRows(field.label, value, field.ink ?? palette.meta, palette, width)));
+}
+
+/** Shared display facts keep tables and plain output on the same intent rule. */
+export function sessionIntentFields(session: Session, palette: Palette): TableField[] {
   const own = inOwnWords(session);
   const value = session.intent === null ? "unknown" : own ? session.intent : capturedPrompt(session.intent);
   const reason = session.intentMissing === "paste-only" ? "the first prompt was pasted text, not captured"
     : session.endedAt === null ? "no intent recorded yet" : "no intent recorded";
   return [
-    ...startRows(own ? "intent" : "prompt", value, palette.intent, palette, width),
-    ...(session.intent === null ? startRows("", reason, palette.meta, palette, width) : []),
+    { label: own ? "intent" : "prompt", values: [value], ink: palette.intent },
+    ...(session.intent === null ? [{ label: "", values: [reason], ink: palette.meta }] : []),
   ];
 }
 

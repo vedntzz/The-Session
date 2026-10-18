@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { zeroCost, type Session } from "../src/store.js";
 import { ansiPalette, plainPalette } from "../src/render/palette.js";
 import { formatHome } from "../src/render/terminal.js";
+import { tableValues } from "./fixtures/table.js";
 import { cellWidth } from "../src/render/tui/text.js";
 
 const last = (overrides: Partial<Session> = {}): Session => ({
@@ -52,7 +53,7 @@ it.each([60, 80, undefined])("keeps full safe intent and ANSI geometry at width 
   const plain = formatHome({ last: record }, { ...plainPalette, intent: ink }, { width });
   const first = plain.findIndex((line) => line.startsWith("  intent      "));
   const end = plain.findIndex((line) => line.startsWith("  last        "));
-  expect(plain.slice(first, end).map((line) => line.slice(14)).join(" ")).toBe(intent);
+  expect((width === undefined ? plain.slice(first, end).map(line => line.slice(14)) : tableValues(plain, "intent")).join(" ")).toBe(intent);
   expect(seen.join("\n")).not.toContain("\u001b"); expect(JSON.stringify(record)).toBe(before);
   expect(formatHome({ last: record }, ansiPalette, { width }).map(stripVTControlCharacters)).toEqual(plain);
   if (width !== undefined) expect(plain.every((line) => cellWidth(line) <= width)).toBe(true);
