@@ -1,6 +1,7 @@
 // `session week <id> --full`'s path rows: what was declared, what changed inside it, what went outside.
 import { hasDeclaredScope, type Session } from "../../store.js";
 import type { Palette } from "../palette.js";
+import { detailPathTable } from "./session-path-table.js";
 import { DRIFT_MARKER, NO_SCOPE, SCOPE_HINT } from "./intent.js";
 import { gap, INDENT, label, LABEL_WIDTH, MIN_WIDTH, width } from "./text.js";
 
@@ -117,4 +118,16 @@ export function outsideLines(session: Session, palette: Palette, limit?: number)
   const marked = session.drift.map((path) => `${DRIFT_MARKER} ${path}`);
   const note = `← you did not declare ${session.drift.length === 1 ? "this" : "these"}`;
   return labelledPaths("outside", marked, palette.drift, palette, limit, note);
+}
+
+/** Leave the legacy plain path rows unchanged when no terminal width was supplied. */
+export function sessionPathRows(session: Session, palette: Palette, limit?: number): string[] {
+  if (limit !== undefined) return detailPathTable(session, palette, limit);
+  return [
+    ...declaredLine(session, palette),
+    ...(session.proposal ? labelledPaths("proposed",
+      session.proposal.scope.length ? session.proposal.scope.map(path => JSON.stringify(path)) : ["no suggestion"],
+      palette.path, palette, undefined) : []),
+    ...changedLines(session, palette), ...outsideLines(session, palette),
+  ];
 }

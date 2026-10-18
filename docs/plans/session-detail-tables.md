@@ -7,7 +7,7 @@ Implement, test and commit one ticket, then stop for review.
 
 - [x] D1 — Declaration and outcome table. Reuse shared table geometry, intent labels and missing-data reasons. Show the full declared intent or captured prompt, source note and recorded times; keep plain output unchanged.
   - Tests: four outcomes, full multiline prompts, unknown/paste-only intent, running sessions, Unicode widths, safe ink, NO_COLOR and pipe compatibility.
-- [ ] D2 — Full scope and path tables. Retain every declared/proposed path and the existing inside/outside partition without the stop-summary path cap. Make unavailable scope comparison explicit.
+- [x] D2 — Full scope and path tables. Retain every declared/proposed path and the existing inside/outside partition without the stop-summary path cap. Make unavailable scope comparison explicit.
   - Tests: each changed path appears once, no missing long paths, literal Unicode wrapping, missing scope, historical proposal and immutable records.
 - [ ] D3 — Usage, cost and attribution tables. Preserve token completeness, all four counters when requested, model and agent provenance, empty-turn evidence and one combined cost. Keep unknowns distinct from measured zero.
   - Tests: uncaptured/partial/unpriced records, mixed models, shared cost, measured zero, unknown empty turns, and unchanged plain output.
@@ -21,4 +21,11 @@ This is presentation work: preserve signed records, scope and outcome rules, pri
 - Node 24.19.0: 241 targeted tests passed across 10 files: session-declaration-table, terminal, show, intent-source, intent, stop-declaration, stop-cost-table, architecture, inline-architecture and unused.
 - Build, type, size and whitespace checks passed. New and touched rendering functions are at most 17 lines.
 - Full captured prompts, missing intent reasons, caller-resolved outcomes, recorded times, 40/60/80-column declaration geometry and ANSI/NO_COLOR parity are covered. The plain view retains its existing layout.
-- D2–D4 remain pending. Command-level narrow-terminal wiring is part of D4.
+- Command-level narrow-terminal wiring is part of D4.
+
+## D2 validation
+
+- Node 24.19.0: 252 targeted tests passed across 11 files: session-path-table, session-declaration-table, terminal, show, intent-source, intent, stop-declaration, stop-cost-table, architecture, inline-architecture and unused. This was not a full-suite run.
+- Build, type, size and whitespace checks passed. New and touched rendering functions are at most 12 lines.
+- Full scope and historical proposal paths, exact changed/inside/outside counts, uncapped lists, literal Unicode wrapping, missing-scope comparisons, safe ink and record immutability are covered. Legacy pipe rows are unchanged.
+- D3 and D4 remain pending.

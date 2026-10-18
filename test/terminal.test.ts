@@ -1733,20 +1733,11 @@ describe("the full view holds the whole prompt", () => {
     expect(tableValues(wrapped, "time")).toEqual(tableValues(short, "time"));
   });
 
-  it("drops a gutter note under its row rather than off the edge", () => {
+  it.each([80, 200])("keeps unavailable scope comparison explicit in a %i-column terminal", width => {
     const bare = session({ intent: "add rate limiting", scope: [], intentSource: "captured" });
-    const lines = formatSession(bare, plainPalette, { width: 80 });
-
-    const declared = lines.find((line) => line.includes("no scope")) as string;
-    expect([...declared].length).toBeLessThanOrEqual(80);
-    // The hint is still there, one line down and in the value column.
-    expect(lines.some((line) => line.trimStart().startsWith("← session start --scope"))).toBe(true);
-  });
-
-  it("keeps the note in the gutter where the whole row fits", () => {
-    const bare = session({ intent: "add rate limiting", scope: [], intentSource: "captured" });
-    const lines = formatSession(bare, plainPalette, { width: 200 });
-
-    expect(lines.some((line) => /no scope.*← session start --scope/.test(line))).toBe(true);
+    const lines = formatSession(bare, plainPalette, { width });
+    expect(tableValues(lines, "scope")).toEqual(["none declared"]);
+    expect(tableValues(lines, "outside")).toEqual(["unknown", "no scope declared to compare against"]);
+    expect(lines.every(line => [...line].length <= Math.min(width, 80))).toBe(true);
   });
 });

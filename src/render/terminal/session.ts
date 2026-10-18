@@ -6,7 +6,7 @@ import { outcomeInk, type View } from "./cost.js";
 import { intentOf, INTENT_NOTE } from "./intent.js";
 import { costLines, pricesLines } from "./session-cost.js";
 import { detailDeclarationTable } from "./session-declaration.js";
-import { changedLines, declaredLine, labelledPaths, outsideLines } from "./session-paths.js";
+import { sessionPathRows } from "./session-paths.js";
 import { turnModelRows } from "./turn-models.js";
 import { clock, flatten, gap, INDENT, label, shortId, wrapSegments } from "./text.js";
 
@@ -18,12 +18,7 @@ export function formatSession(
 ): string[] {
   return [
     ...declarationRows(session, palette, view.width),
-    ...declaredLine(session, palette, view.width),
-    ...(session.proposal ? labelledPaths("proposed",
-      session.proposal.scope.length ? session.proposal.scope.map((p) => JSON.stringify(p)) : ["no suggestion"],
-      palette.path, palette, view.width) : []),
-    ...changedLines(session, palette, view.width),
-    ...outsideLines(session, palette, view.width),
+    ...sessionPathRows(session, palette, view.width),
     "",
     ...sessionFooter(session, palette, view),
   ];
