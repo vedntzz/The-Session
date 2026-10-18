@@ -15,7 +15,7 @@ export function modelRuns(models: readonly (string | null)[]): string {
 }
 
 /** The two facts, or nothing for either the record does not carry. */
-function facts(session: Session): { models?: string; imports?: string } {
+export function turnModelFacts(session: Session): { models?: string; imports?: string } {
   const models = session.cost.turnModels;
   const skipped = session.cost.importedTurnsSkipped ?? 0;
   return {
@@ -26,14 +26,14 @@ function facts(session: Session): { models?: string; imports?: string } {
 
 /** The brief view's line under the figures: which models the turns ran on, and what was set aside. */
 export function turnModelNote(session: Session, palette: Palette): string[] {
-  const { models, imports } = facts(session);
+  const { models, imports } = turnModelFacts(session);
   const parts = [models === undefined ? undefined : `turns ran on ${models}`, imports].filter((part) => part !== undefined);
   return parts.length === 0 ? [] : [`${INDENT}${palette.meta(parts.join(" · "))}`];
 }
 
 /** The labelled view's rows for the same two facts. */
 export function turnModelRows(session: Session, palette: Palette): string[] {
-  const { models, imports } = facts(session);
+  const { models, imports } = turnModelFacts(session);
   return [
     ...(models === undefined ? [] : [`${INDENT}${palette.meta(label("models"))}${models}`]),
     ...(imports === undefined ? [] : [`${INDENT}${palette.meta(label("imported"))}${imports}`]),

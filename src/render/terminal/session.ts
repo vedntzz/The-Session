@@ -5,6 +5,7 @@ import { plainPalette, type Palette } from "../palette.js";
 import { outcomeInk, type View } from "./cost.js";
 import { intentOf, INTENT_NOTE } from "./intent.js";
 import { costLines, pricesLines } from "./session-cost.js";
+import { detailCostTable } from "./session-cost-table.js";
 import { detailDeclarationTable } from "./session-declaration.js";
 import { sessionPathRows } from "./session-paths.js";
 import { turnModelRows } from "./turn-models.js";
@@ -31,6 +32,7 @@ function declarationRows(session: Session, palette: Palette, width?: number): st
 }
 
 function sessionFooter(session: Session, palette: Palette, view: View): string[] {
+  if (view.width !== undefined) return detailCostTable(session, palette, view.width, view);
   return [idLine(session, palette),
     ...costLines(session, palette, view), ...turnModelRows(session, palette),
     ...attributionLines(session, palette), ...pricesLines(session, palette, view),
