@@ -58,14 +58,13 @@ it("keeps table geometry independent of colour and sanitizes before ink", () => 
   expect(plain.join("\n")).not.toContain("\u001b");
 });
 
-it("keeps recorded paths, pending evidence and next commands intact", () => {
+it("keeps recorded paths, evidence and next commands intact", () => {
   const record = stopped({ reality: ["src/panel.ts", "outside.txt"], drift: ["outside.txt"] });
   const lines = formatStopConfirmation(record, plainPalette, [], 80);
   expect(tableValues(lines, "scope")).toEqual(["src/"]); expect(tableValues(lines, "changed")[0]).toBe("2 files");
   expect(tableValues(lines, "outside")).toContain("! outside.txt"); expect(tableValues(lines, "id")).toEqual(["abcdef01"]);
-  for (const line of ["  turns       unknown", "  cost        unknown", "  next        session week last --full"]) {
-    expect(lines).toContain(line);
-  }
+  expect(tableValues(lines, "turns")).toEqual(["unknown"]); expect(tableValues(lines, "cost")).toEqual(["unknown"]);
+  expect(lines).toContain("  next        session week last --full");
 });
 
 it("leaves the existing plain output unchanged without terminal width", () => {

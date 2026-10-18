@@ -47,7 +47,7 @@ it.each([false, true])("counts the actual diff with a baseline changed again=%s"
   expect(saved?.id).toBe(open.id); expect(saved?.intent).toBe(open.intent); expect(saved?.scope).toEqual(open.scope);
   expect(saved?.endedAt).not.toBeNull(); expect(await readSessions(options())).toHaveLength(1);
   expect(tableValues(lines, "changed")[0]).toBe(touched ? "2 files" : "1 file"); expect(tableValues(lines, "id")).toEqual([open.id.slice(0, 8)]);
-  expect(lines).toContain("  cost        unknown"); expect(lines).toContain("  turns       unknown"); expect(lines).toContain("  tokens      unknown");
+  for (const field of ["cost", "turns", "tokens"]) expect(tableValues(lines, field)).toEqual(["unknown"]);
 });
 it.each([[40, true], [60, true], [80, true], [60, false]] as const)("wraps safe confirmation at %i columns TTY=%s", async (columns, tty) => {
   const intent = "Keep every declared word in the completion. ".repeat(4).trim(); const literal = `資料/${"é界".repeat(30)}.ts`;
@@ -106,8 +106,8 @@ it("loads actual model rates and prints one combined measured cost", async () =>
   await writeFile(path.join(home, "rates.json"), JSON.stringify({ models: { priced: { input: 2, cacheRead: 3, cacheCreation: 5, output: 7 } } }));
   const cost = { ...zeroCost(), model: "priced", turns: 2, apiCalls: 2, inputTokens: 100_000, cacheReadTokens: 200_000, cacheCreationTokens: 300_000, outputTokens: 400_000 };
   const lines = await run(80, true, ["stop"], [{ name: "stub", isAvailable: async () => true, capture: async () => cost }]);
-  expect(lines).toContain("  turns       2"); expect(lines).toContain("  cost        $5.10");
-  expect(lines.filter((line) => line.startsWith("  cost"))).toHaveLength(1); expect((await readSessions(options()))[0]?.cost).toMatchObject(cost);
+  expect(tableValues(lines, "turns")).toEqual(["2"]); expect(tableValues(lines, "cost")[0]).toBe("$5.10");
+  expect(lines.filter(line => /^  │ cost\s/u.test(line))).toHaveLength(1); expect((await readSessions(options()))[0]?.cost).toMatchObject(cost);
 });
 it("confirms a completed stop and sweeps when outcome lookup fails", async () => {
   await startSession("Finish before lookup fails", options());

@@ -13,7 +13,7 @@ Implement, test and commit one ticket at a time, then stop for review.
   - Tests: 40/60/80-column geometry, ANSI/plain parity, unknown outcome, full and captured intent, missing intent, signed-record immutability, and unchanged pipe/hook behavior.
 - [x] S2 — Scope and changed-path tables. Reuse the existing scope comparison and path-summary rules. Keep exact changed/outside counts, explicit missing scope and literal path wrapping; retain the record ID.
   - Tests: scoped/unscoped/captured records, zero and nonzero drift, capped named paths with exact totals, long Unicode paths, and baseline changes recorded by Git.
-- [ ] S3 — Usage and cost table. Reuse the current measurement and pricing functions. Retain all four token counters, one combined cost and rate provenance. Missing or incomplete evidence stays unknown.
+- [x] S3 — Usage and cost table. Reuse the current measurement and pricing functions. Retain all four token counters, one combined cost and rate provenance. Missing or incomplete evidence stays unknown.
   - Tests: measured zero, uncaptured/partial capture, unpriced models, mixed-model pricing and no shared-cost allocation.
 - [ ] S4 — Stop-feature verification. Run the relevant command and rendering regressions, build, type and size checks; walk through normal stop in narrow/wide terminals, NO_COLOR, pipes and the editor hook.
   - Evidence: record the exact checks and counts; do not describe a targeted run as a full-suite run.
@@ -33,3 +33,9 @@ This is a presentation change. Preserve command behavior, append-only records, s
 - Node 24.19.0: 269 targeted tests passed across 12 test files, including exact path counts, full scope, missing comparisons, Unicode wrapping, baseline-aware changes and unchanged pipe/hook behavior.
 - Build, type, file-size and whitespace checks passed.
 - Drift markers stay attached to long filenames; new and touched rendering functions are at most 15 lines.
+
+## S3 validation
+
+- Node 24.19.0: 279 targeted tests passed across 13 test files, including measured zero, incomplete capture, missing rates, mixed-model totals, 40/60/80-column geometry and unchanged pipe/hook behavior.
+- Build, type, file-size and whitespace checks passed.
+- Evidence fields reuse existing measurement and pricing functions; the shared fact builder is 11 lines and its renderer is 7 lines. S4 remains pending.

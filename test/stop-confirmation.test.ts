@@ -60,8 +60,8 @@ it.each([0, 1])("replaces legacy cost details with measured evidence for %i turn
 it("keeps safe full metadata in a separated wrapped block", () => {
   const detail = `  note     ${"Keep all metadata visible. ".repeat(6).trim()}\u001b[2J`;
   const lines = formatStopConfirmation(stopped(), plainPalette, [detail], 60);
-  const start = lines.findIndex(line => line.startsWith("  note     ")); const turns = lines.findIndex((line) => line.startsWith("  turns       "));
-  const details = lines.slice(start, turns - 1);
+  const start = lines.findIndex(line => line.startsWith("  note     "));
+  const end = lines.findIndex((line, index) => index > start && line === ""); const details = lines.slice(start, end);
   expect(lines[start - 1]).toBe(""); expect(details.map((line) => line.slice(2)).join(" ")).toBe(stripVTControlCharacters(detail).slice(2));
   expect(lines.every((line) => cellWidth(line) <= 60)).toBe(true);
 });

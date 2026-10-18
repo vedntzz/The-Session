@@ -4,6 +4,7 @@ import { zeroCost, type Session, type SessionCost } from "../src/store.js";
 import { ansiPalette, paletteFor, plainPalette } from "../src/render/palette.js";
 import { formatStopConfirmation } from "../src/render/terminal/stop.js";
 import { cellWidth } from "../src/render/tui/text.js";
+import { tableValues } from "./fixtures/table.js";
 
 const stopped = (overrides: Partial<Session> = {}): Session => ({
   id: "abcdef01-2345", repo: "local:test", intent: "Build the UI", scope: ["src/"], baseline: [], reality: [], drift: [],
@@ -49,9 +50,13 @@ it.each([60, 80, undefined])("keeps four raw counters, dim money and color geome
   const record = stopped({ cost }); const before = JSON.stringify(record); const dim: string[] = [];
   const plain = formatStopConfirmation(record, { ...plainPalette, meta: (text) => { dim.push(text); return text; } }, ["  note     safe\u001b[2J metadata"], width, { rates });
   const tokens = plain.findIndex((line) => line.startsWith("  tokens      ")); const money = plain.findIndex((line) => line.startsWith("  cost        "));
-  expect(plain.slice(tokens, money).map((line) => line.slice(14)).join(" ")).toBe("1,000,000 in · 2,000,000 cache read · 3,000,000 cache write · 4,000,000 out");
-  expect(plain).toContain("  cost        $51.00"); expect(dim).toContain("$51.00"); expect(plain).toContain("  note     safe metadata");
-  expect(plain.indexOf("  turns       1")).toBeGreaterThan(plain.findIndex(line => /^  (?:id\s|│ id\s)/u.test(line)));
+  expect((width === undefined ? plain.slice(tokens, money).map(line => line.slice(14)) : tableValues(plain, "tokens")).join(" "))
+    .toBe("1,000,000 in · 2,000,000 cache read · 3,000,000 cache write · 4,000,000 out");
+  if (width === undefined) expect(plain).toContain("  cost        $51.00");
+  else expect(tableValues(plain, "cost")).toEqual(["$51.00"]);
+  expect(dim.some(text => text.trim() === "$51.00")).toBe(true); expect(plain).toContain("  note     safe metadata");
+  expect(plain.findIndex(line => /^  (?:turns\s|│ turns\s)/u.test(line)))
+    .toBeGreaterThan(plain.findIndex(line => /^  (?:id\s|│ id\s)/u.test(line)));
   expect(formatStopConfirmation(record, ansiPalette, ["  note     safe metadata"], width, { rates }).map(stripVTControlCharacters)).toEqual(plain);
   expect(formatStopConfirmation(record, paletteFor({ env: { NO_COLOR: "1" }, isTTY: true }), ["  note     safe metadata"], width, { rates })).toEqual(plain);
   if (width !== undefined) expect(plain.every((line) => cellWidth(line) <= width)).toBe(true);
@@ -60,8 +65,12 @@ it.each([60, 80, undefined])("keeps four raw counters, dim money and color geome
 it.each([60, 80])("shows safe price provenance only beneath measured money at width %i", (width) => {
   const checked = "2026-01-15\u001b[2J"; const record = stopped({ cost: counted({ inputTokens: 100_000 }) }); const seen: string[] = [];
   const lines = formatStopConfirmation(record, { ...plainPalette, meta: (text) => { seen.push(text); return text; } }, [], width, { rates, checked });
-  const money = lines.indexOf("  cost        $0.20"); const note = lines.slice(money + 1, -2);
-  expect(note.map((line) => line.trimStart()).join(" ")).toBe("prices checked 2026-01-15 — override in ~/.session/rates.json");
+  const money = tableValues(lines, "cost"); expect(money[0]).toBe("$0.20");
+  let remaining = "prices checked 2026-01-15 — override in ~/.session/rates.json";
+  for (const part of money.slice(1)) {
+    expect(remaining.startsWith(part)).toBe(true); remaining = remaining.slice(part.length).trimStart();
+  }
+  expect(remaining).toBe("");
   expect(lines.every((line) => cellWidth(line) <= width)).toBe(true); expect(seen.join("\n")).not.toContain("\u001b");
   expect(lines.filter((line) => line.includes("$"))).toHaveLength(1);
   expect(formatStopConfirmation(record, ansiPalette, [], width, { rates, checked }).map(stripVTControlCharacters)).toEqual(lines);
