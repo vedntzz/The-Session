@@ -12,7 +12,9 @@
 // find its lock "old" — so age decides only for a lock that names no owner
 // (written before owners were recorded) or names another host's. Taking over
 // moves the file aside and checks it is the same file that was judged stale,
-// so a lock someone else has just taken is never the one deleted.
+// by inode and by its bytes, so a lock someone else has just taken is never
+// the one deleted. The inode alone is not enough: Linux hands a freed inode
+// straight to the next file created, so a new lock can carry the old one's.
 import { randomUUID } from "node:crypto";
 import { link, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { hostname } from "node:os";
@@ -27,6 +29,12 @@ export const sleep = (ms: number): Promise<void> => new Promise((resolve) => set
 interface Owner {
   pid: number;
   host: string;
+}
+
+/** The lock as it was when judged abandoned: its inode and what it held. */
+export interface Judged {
+  ino: number;
+  text: string;
 }
 
 /** Runs `action` holding the lock beside `file`, and always lets it go. */
@@ -67,8 +75,9 @@ export async function acquireLock(lock: string): Promise<void> {
  */
 export async function waitForLock(lock: string, deadline: number): Promise<void> {
   const held = await stat(lock).catch(() => undefined);
-  if (held && isAbandoned(await ownerOf(lock), Date.now() - held.mtimeMs)) {
-    await takeOver(lock, held.ino);
+  const text = await readFile(lock, "utf8").catch(() => undefined);
+  if (held && text !== undefined && isAbandoned(ownerOf(text), Date.now() - held.mtimeMs)) {
+    await takeOver(lock, { ino: held.ino, text });
     return;
   }
   if (Date.now() > deadline) {
@@ -80,9 +89,9 @@ export async function waitForLock(lock: string, deadline: number): Promise<void>
 }
 
 /** Who wrote the lock, or nothing where it does not say: an older lock, or one still being written. */
-async function ownerOf(lock: string): Promise<Owner | undefined> {
+function ownerOf(text: string): Owner | undefined {
   try {
-    const parsed: unknown = JSON.parse(await readFile(lock, "utf8"));
+    const parsed: unknown = JSON.parse(text);
     const { pid, host } = (parsed ?? {}) as Record<string, unknown>;
     return Number.isInteger(pid) && typeof host === "string" ? { pid: pid as number, host } : undefined;
   } catch {
@@ -108,11 +117,12 @@ function isAlive(pid: number): boolean {
 /**
  * Removes the lock judged abandoned, and only that one. It is renamed aside
  * first — atomic, so two waiters cannot both move it — and deleted if it is
- * the same file that was judged. If another waiter took over in between, what
- * was moved is that waiter's live lock: it is put back where nobody has taken
- * the name since, and the wait goes on.
+ * the same file that was judged: the same inode holding the same bytes. If
+ * another waiter took over in between, what was moved is that waiter's live
+ * lock, whose token differs even where its inode is the old one's: it is put
+ * back where nobody has taken the name since, and the wait goes on.
  */
-export async function takeOver(lock: string, judged: number): Promise<void> {
+export async function takeOver(lock: string, judged: Judged): Promise<void> {
   const aside = `${lock}.${randomUUID()}.stale`;
   try {
     await rename(lock, aside);
@@ -120,7 +130,8 @@ export async function takeOver(lock: string, judged: number): Promise<void> {
     return; // gone already: somebody else took it over, or let it go
   }
   const moved = await stat(aside).catch(() => undefined);
-  if (moved !== undefined && moved.ino !== judged) {
+  const text = await readFile(aside, "utf8").catch(() => undefined);
+  if (moved !== undefined && (moved.ino !== judged.ino || text !== judged.text)) {
     await link(aside, lock).catch(() => undefined);
   }
   await rm(aside, { force: true });
