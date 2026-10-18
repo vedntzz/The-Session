@@ -28,6 +28,10 @@ function runHook(command: string, cwd: string, env: NodeJS.ProcessEnv, payload: 
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
     child.on("error", reject);
     child.on("close", (code) => resolve({ code, stderr }));
+    // A hook may exit without reading its payload; writing to it then is EPIPE, and the exit code still tells.
+    child.stdin.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EPIPE") reject(error);
+    });
     child.stdin.end(payload);
   });
 }
