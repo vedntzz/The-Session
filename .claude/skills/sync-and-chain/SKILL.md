@@ -109,8 +109,10 @@ refuses all three keys. See `agent-sessions.ts`.
 (`<log>.lock`, created `wx`, holding its owner's pid and host —
 `store/lock.ts`). It is taken over only when that pid is dead on this host;
 an ownerless or foreign lock falls back to stale after 10s. Takeover renames
-it aside and checks the inode it judged, so a lock just taken by someone else
-is put back. Never go back to age alone: a sleeping laptop's lock looks old.
+it aside and checks the inode and the bytes it judged, so a lock just taken by
+someone else is put back. The inode alone is not enough: Linux reuses a freed
+inode for the next file created. Never go back to age alone: a sleeping
+laptop's lock looks old.
 
 A line an append cut short becomes a mid-file line once the next append
 starts fresh and chains to it. `store/torn.ts` is the one rule: it is torn

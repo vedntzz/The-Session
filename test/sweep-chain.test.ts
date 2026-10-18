@@ -81,7 +81,7 @@ describe("SES-8: whose lock it is", () => {
   it("puts back a lock that another waiter took after this one judged the old lock stale", async () => {
     const lock = path.join(root, "log.jsonl.lock");
     await writeFile(lock, "");
-    const judged = (await stat(lock)).ino;
+    const judged = { ino: (await stat(lock)).ino, text: "" };
     await rm(lock);
     await writeFile(lock, JSON.stringify({ pid: process.pid, host: hostname(), token: "live" }));
 
@@ -93,8 +93,19 @@ describe("SES-8: whose lock it is", () => {
   it("removes the lock it judged", async () => {
     const lock = path.join(root, "log.jsonl.lock");
     await writeFile(lock, "");
-    await takeOver(lock, (await stat(lock)).ino);
+    await takeOver(lock, { ino: (await stat(lock)).ino, text: "" });
     await expect(stat(lock)).rejects.toThrow();
+  });
+
+  // Linux gives a freed inode to the next file created, so a live lock can carry the judged lock's inode.
+  it("puts back a live lock that took the judged lock's inode", async () => {
+    const lock = path.join(root, "log.jsonl.lock");
+    await writeFile(lock, JSON.stringify({ pid: process.pid, host: hostname(), token: "live" }));
+    const reused = (await stat(lock)).ino;
+
+    await takeOver(lock, { ino: reused, text: "" });
+
+    expect(await readFile(lock, "utf8")).toContain('"live"');
   });
 
   it("writes its owner into the lock while held", async () => {
