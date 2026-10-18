@@ -26,7 +26,7 @@ export type ProgramOptions = StopOptions &
     stdin?: AsyncIterable<Buffer | string>;
     /** Injected terminal for the interactive start flow. Hooks never use it. */
     startTerminal?: PromptTerminal;
-    /** Injected terminal for inline home and stop output width. */
+    /** Injected terminal for inline home, stop and session-detail output width. */
     appTerminal?: PromptTerminal;
   } & ReviewOptions;
 

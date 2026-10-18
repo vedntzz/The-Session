@@ -1,3 +1,4 @@
+import { tableValues } from "./fixtures/table.js";
 import { describe, expect, it } from "vitest";
 import type { RateTable } from "../src/pricing.js";
 import { renderMarkdownWeek } from "../src/render/markdown.js";
@@ -1716,37 +1717,27 @@ describe("the full view holds the whole prompt", () => {
       { width: 80 },
     );
 
-    expect(lines.join(" ")).toContain("and why it went");
+    expect(tableValues(lines, "prompt").join(" ")).toBe(prompt);
     for (const line of lines) {
       expect([...line].length).toBeLessThanOrEqual(80);
     }
   });
 
-  it("moves the times under the heading once the heading wraps", () => {
+  it("keeps the recorded times in a dedicated table row for short and long intent", () => {
     const wrapped = formatSession(session({ intent: prompt }), plainPalette, { width: 80 });
     const short = formatSession(session({ intent: "add rate limiting" }), plainPalette, {
       width: 80,
     });
 
-    // One line keeps them in its gutter; several have no gutter left to use.
-    expect(short[1]).toMatch(/add rate limiting\s+\d\d:\d\d → \d\d:\d\d$/);
-    expect(wrapped.find((line) => /^ {2}\d\d:\d\d → /.test(line))).toBeDefined();
+    expect(tableValues(short, "time")[0]).toMatch(/^\d\d:\d\d → \d\d:\d\d$/u);
+    expect(tableValues(wrapped, "time")).toEqual(tableValues(short, "time"));
   });
 
-  it("drops a gutter note under its row rather than off the edge", () => {
+  it.each([80, 200])("keeps unavailable scope comparison explicit in a %i-column terminal", width => {
     const bare = session({ intent: "add rate limiting", scope: [], intentSource: "captured" });
-    const lines = formatSession(bare, plainPalette, { width: 80 });
-
-    const declared = lines.find((line) => line.includes("no scope")) as string;
-    expect([...declared].length).toBeLessThanOrEqual(80);
-    // The hint is still there, one line down and in the value column.
-    expect(lines.some((line) => line.trimStart().startsWith("← session start --scope"))).toBe(true);
-  });
-
-  it("keeps the note in the gutter where the whole row fits", () => {
-    const bare = session({ intent: "add rate limiting", scope: [], intentSource: "captured" });
-    const lines = formatSession(bare, plainPalette, { width: 200 });
-
-    expect(lines.some((line) => /no scope.*← session start --scope/.test(line))).toBe(true);
+    const lines = formatSession(bare, plainPalette, { width });
+    expect(tableValues(lines, "scope")).toEqual(["none declared"]);
+    expect(tableValues(lines, "outside")).toEqual(["unknown", "no scope declared to compare against"]);
+    expect(lines.every(line => [...line].length <= Math.min(width, 80))).toBe(true);
   });
 });

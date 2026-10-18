@@ -92,3 +92,8 @@ function wasteLine(session: Session, palette: Palette, price: Price, counts: str
     palette.meta(counts)
   );
 }
+
+/** Older captures used the same window selection; absent metadata retains that meaning. */
+export function captureDescription(cost: Session["cost"]): string {
+  return CAPTURED[cost.capturedBy ?? "window"];
+}
