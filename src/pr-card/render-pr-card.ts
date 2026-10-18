@@ -8,10 +8,13 @@ import { formatOutcome } from "./format-outcome.js";
 /** The hidden first line that marks a comment as this card. */
 export const CARD_MARKER = "<!-- session-card -->";
 
+/** The card's heading, the same whether or not a session was recorded. */
+export const CARD_HEADING = "## Session record";
+
 /** The card: marker, heading, the record as a table, then the files. */
 export function renderPrCard(card: CardData): string {
   const [count = "", ...files] = formatFileList(card.files);
-  return [CARD_MARKER, "## Session record", "", ...table(card, count), "", filesBlock(card, count, files)].join("\n");
+  return [CARD_MARKER, CARD_HEADING, "", ...table(card, count), "", filesBlock(card, count, files)].join("\n");
 }
 
 /** The two-column table, one row per fact; `count` is the file list's count line. */

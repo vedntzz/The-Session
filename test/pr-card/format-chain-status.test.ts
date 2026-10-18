@@ -4,11 +4,15 @@ import type { CardChain } from "../../src/pr-card/card-data.js";
 import { formatChainStatus } from "../../src/pr-card/format-chain-status.js";
 
 const EMOJI = /\p{Extended_Pictographic}/u;
-const CHAINS: CardChain[] = ["verified", "broken", "missing"];
+const CHAINS: CardChain[] = ["verified", "hashes-only", "broken", "missing"];
 
 describe("formatChainStatus", () => {
   it("says a verified log is verified", () => {
     expect(formatChainStatus("verified")).toBe("signed log verified");
+  });
+
+  it("says when only the hashes were checked, not the signatures", () => {
+    expect(formatChainStatus("hashes-only")).toBe("log intact, signature not checked");
   });
 
   it("says a broken log failed verification", () => {
