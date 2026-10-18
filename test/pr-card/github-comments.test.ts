@@ -1,6 +1,6 @@
 // Posting the card as a PR comment through GitHub's REST API, against a fake fetch: nothing here reaches the network.
 import { describe, expect, it } from "vitest";
-import { createComment, type FetchFn } from "../../src/pr-card/github-comments.js";
+import { CommentGoneError, createComment, updateComment, type FetchFn } from "../../src/pr-card/github-comments.js";
 
 const target = { owner: "acme", repo: "tool", number: 42 };
 const TOKEN = "ghp_secret0123456789";
@@ -85,6 +85,60 @@ describe("createComment", () => {
     const fetchFn: FetchFn = async () => new Response(`<html>${TOKEN}</html>`, { status: 502 });
     const error = await createComment(target, card, TOKEN, fetchFn).catch((e: Error) => e);
     expect((error as Error).message).toContain("502");
+    expect((error as Error).message).not.toContain(TOKEN);
+  });
+});
+
+describe("updateComment", () => {
+  it("PATCHes the comment by id", async () => {
+    const { fetchFn, calls } = fakeFetch(200, { id: 99 });
+    await updateComment(target, 99, card, TOKEN, fetchFn);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://api.github.com/repos/acme/tool/issues/comments/99");
+    expect(calls[0]!.init.method).toBe("PATCH");
+  });
+
+  it("sends the same headers as createComment, and the markdown as the JSON body", async () => {
+    const created = fakeFetch(201, { id: 99 });
+    await createComment(target, card, TOKEN, created.fetchFn);
+    const updated = fakeFetch(200, { id: 99 });
+    await updateComment(target, 99, card, TOKEN, updated.fetchFn);
+    const want = Object.fromEntries(new Headers(created.calls[0]!.init.headers));
+    expect(Object.fromEntries(new Headers(updated.calls[0]!.init.headers))).toEqual(want);
+    expect(JSON.parse(String(updated.calls[0]!.init.body))).toEqual({ body: card });
+  });
+
+  it("returns the comment's id on 200", async () => {
+    const { fetchFn } = fakeFetch(200, { id: 99, body: card });
+    expect(await updateComment(target, 99, card, TOKEN, fetchFn)).toBe(99);
+  });
+
+  it("throws CommentGoneError on 404, so the caller can post a new comment", async () => {
+    const { fetchFn } = fakeFetch(404, { message: "Not Found" });
+    const error = await updateComment(target, 99, card, TOKEN, fetchFn).catch((e: Error) => e);
+    expect(error).toBeInstanceOf(CommentGoneError);
+    expect((error as Error).message).toContain("404");
+  });
+
+  it("throws with the status and GitHub's message on any other non-2xx answer", async () => {
+    const { fetchFn } = fakeFetch(403, { message: "Resource not accessible by integration" });
+    const error = await updateComment(target, 99, card, TOKEN, fetchFn).catch((e: Error) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(CommentGoneError);
+    expect((error as Error).message).toMatch(/403.*Resource not accessible by integration/);
+  });
+
+  it("keeps the token out of every error it throws", async () => {
+    for (const status of [401, 404, 422, 500]) {
+      const { fetchFn } = fakeFetch(status, { message: `Bad: ${TOKEN}` });
+      const error = await updateComment(target, 99, card, TOKEN, fetchFn).catch((e: Error) => e);
+      expect((error as Error).message).toContain(String(status));
+      expect((error as Error).message).not.toContain(TOKEN);
+    }
+    const thrower: FetchFn = async () => {
+      throw new Error(`ECONNRESET Bearer ${TOKEN}`);
+    };
+    const error = await updateComment(target, 99, card, TOKEN, thrower).catch((e: Error) => e);
     expect((error as Error).message).not.toContain(TOKEN);
   });
 });

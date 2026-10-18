@@ -24,6 +24,19 @@ export function commentsUrl(target: PrTarget): string {
   return `${API}/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/issues/${target.number}/comments`;
 }
 
+/** Where one comment lives, by its id; the PR number plays no part in the path. */
+export function commentUrl(target: PrTarget, commentId: number): string {
+  return `${API}/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/issues/comments/${commentId}`;
+}
+
+/** The comment was deleted after it was found; the caller may post a new one in its place. */
+export class CommentGoneError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CommentGoneError";
+  }
+}
+
 /** The headers GitHub asks for, the token, and the comment as `{ body }`. */
 export function githubRequest(method: string, url: string, token: string, body?: string): GitHubRequest {
   const headers: Record<string, string> = {
@@ -66,6 +79,23 @@ export async function createComment(target: PrTarget, body: string, token: strin
   const request = githubRequest("POST", commentsUrl(target), token, body);
   const doing = `commenting on ${target.owner}/${target.repo}#${target.number}`;
   return readCommentId(await send(request, token, fetchFn), doing, token);
+}
+
+/** Replaces the body of comment `commentId` with `body` and returns its id; a 404 is a CommentGoneError. */
+export async function updateComment(
+  target: PrTarget,
+  commentId: number,
+  body: string,
+  token: string,
+  fetchFn: FetchFn = fetch,
+): Promise<number> {
+  const request = githubRequest("PATCH", commentUrl(target, commentId), token, body);
+  const doing = `updating comment ${commentId} on ${target.owner}/${target.repo}#${target.number}`;
+  const response = await send(request, token, fetchFn);
+  if (response.status === 404) {
+    throw new CommentGoneError(`GitHub answered 404 to ${doing}: the comment no longer exists. Post a new comment instead.`);
+  }
+  return readCommentId(response, doing, token);
 }
 
 function parse(text: string): Record<string, unknown> | undefined {
