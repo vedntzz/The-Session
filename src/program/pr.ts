@@ -6,7 +6,9 @@ import { copyToClipboard } from "../commands/week.js";
 import { cardDataForRange } from "../pr-card/card-for-range.js";
 import { renderCardJson } from "../pr-card/render-card-json.js";
 import { renderNoRecordCard } from "../pr-card/render-no-record-card.js";
+import { postTarget } from "../pr-card/post-target.js";
 import { renderPrCard } from "../pr-card/render-pr-card.js";
+import { upsertCardComment } from "../pr-card/upsert-card-comment.js";
 import { placeholderList } from "../render/pr.js";
 import type { ProgramOptions } from "./options.js";
 
@@ -19,6 +21,9 @@ export type PrFlags = {
   json?: boolean;
   base?: string;
   head?: string;
+  post?: boolean;
+  pr?: string;
+  showIntent?: boolean;
 };
 
 /**
@@ -32,6 +37,9 @@ export type PrFlags = {
  * `--copy` and `--out` are the two other places a body ever goes, and both say
  * what they did on stdout instead of the document, since neither leaves
  * anything to pipe.
+ *
+ * `--post` is the GitHub Action's line: the card upserted as the PR's one card
+ * comment, with the recorded intent left off unless `--show-intent` asks for it.
  */
 export function registerPr(program: Command, options: ProgramOptions): void {
   program
@@ -45,7 +53,14 @@ export function registerPr(program: Command, options: ProgramOptions): void {
     .option("--json", "print the PR card's data as JSON instead")
     .option("--base <ref>", "with --card or --json: where the PR starts (default: merge base with the default branch)")
     .option("--head <ref>", "with --card or --json: where the PR ends (default: HEAD)")
+    .option("--post", "post the card as the PR's one card comment (reads GITHUB_TOKEN and GITHUB_REPOSITORY)")
+    .option("--pr <number>", "with --post: the pull request to post on")
+    .option("--show-intent", "with --post: put the recorded intent on the card")
     .action(async (id: string | undefined, flags: PrFlags) => {
+      if (flags.post === true) return postCard(id, flags, options);
+      if (flags.pr !== undefined || flags.showIntent === true) {
+        throw new Error("--pr and --show-intent need --post. Run session pr --post --pr <number>.");
+      }
       if (flags.card === true || flags.json === true) return emitCard(id, flags, options);
       if (flags.base !== undefined || flags.head !== undefined) {
         throw new Error("--base and --head need --card or --json. Run session pr --card --base <ref> --head <ref>.");
@@ -62,6 +77,17 @@ async function emitCard(id: string | undefined, flags: PrFlags, options: Program
   const card = await cardDataForRange(flags, options);
   if (flags.json === true) console.log(renderCardJson(card));
   else console.log(card === null ? renderNoRecordCard() : renderPrCard(card));
+}
+
+/** The card for a range, upserted as the PR's one card comment; prints what that did and the comment's id. */
+async function postCard(id: string | undefined, flags: PrFlags, options: ProgramOptions): Promise<void> {
+  const extra = [id !== undefined && "a session id", flags.card && "--card", flags.json && "--json", flags.copy && "--copy", flags.out !== undefined && "--out", flags.template !== undefined && "--template"].filter(Boolean);
+  if (extra.length > 0) throw new Error(`--post posts the card for a commit range; drop ${extra.join(", ")}.`);
+  const { target, token } = postTarget(flags.pr, options.env ?? process.env);
+  const card = await cardDataForRange(flags, options);
+  const body = card === null ? renderNoRecordCard() : renderPrCard(card, { showIntent: flags.showIntent === true });
+  const result = await upsertCardComment(target, body, token, options.fetch);
+  console.log(`  ${result.action.padEnd(10)}comment ${result.id}`);
 }
 
 /** The body, to a file, the clipboard, or stdout. */
