@@ -7,6 +7,7 @@ import type { WeekOptions } from "../commands/week.js";
 import type { Palette } from "../render/palette.js";
 import type { ReviewOptions } from "../commands/review.js";
 import type { PromptTerminal } from "../commands/prompt-terminal.js";
+import type { FetchFn } from "../pr-card/github-comments.js";
 
 /** Everything the command tree can be pointed somewhere else with. */
 export type ProgramOptions = StopOptions &
@@ -28,6 +29,10 @@ export type ProgramOptions = StopOptions &
     startTerminal?: PromptTerminal;
     /** Injected terminal for inline home, stop and session-detail output width. */
     appTerminal?: PromptTerminal;
+    /** Where `session pr --post` reads GITHUB_TOKEN and GITHUB_REPOSITORY. Defaults to process.env. */
+    env?: NodeJS.ProcessEnv;
+    /** How `session pr --post` reaches GitHub. Defaults to the global fetch; a fake in tests. */
+    fetch?: FetchFn;
   } & ReviewOptions;
 
 /**
