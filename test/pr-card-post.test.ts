@@ -29,6 +29,9 @@ interface Call {
   body?: string;
 }
 
+/** A comment as GitHub returns it: id, body and updated_at. */
+const asGitHub = (comment: { id: number; body: string }) => ({ ...comment, updated_at: "2026-10-01T00:00:00Z" });
+
 /** A GitHub holding `comments`, recording each call; it posts and patches like the real one. */
 function fakeGitHub(comments: { id: number; body: string }[] = [], status = 200): { fetch: FetchFn; calls: Call[] } {
   const calls: Call[] = [];
@@ -37,10 +40,10 @@ function fakeGitHub(comments: { id: number; body: string }[] = [], status = 200)
     const body = init.body === undefined ? undefined : (JSON.parse(String(init.body)) as { body: string }).body;
     calls.push({ method, url, body });
     if (status !== 200) return new Response(JSON.stringify({ message: `Bad credentials for ${TOKEN}` }), { status });
-    if (method === "GET" && url === LIST) return Response.json(comments);
-    if (method === "POST" && url === CREATE) return Response.json({ id: 900 }, { status: 201 });
+    if (method === "GET" && url === LIST) return Response.json(comments.map(asGitHub));
+    if (method === "POST" && url === CREATE) return Response.json(asGitHub({ id: 900, body: body ?? "" }), { status: 201 });
     const patched = comments.find((c) => url.endsWith(`/issues/comments/${c.id}`));
-    if (method === "PATCH" && patched) return Response.json({ id: patched.id });
+    if (method === "PATCH" && patched) return Response.json(asGitHub({ id: patched.id, body: body ?? "" }));
     throw new Error(`unexpected ${method} ${url}`);
   };
   return { fetch, calls };
