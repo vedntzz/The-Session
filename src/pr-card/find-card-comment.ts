@@ -23,7 +23,7 @@ export function findCardComment(comments: readonly PrComment[]): number | null {
 }
 
 /** A body edited on GitHub comes back with CRLF; the marker line is the same line either way. */
-function isCard(body: string | null | undefined): boolean {
+export function isCard(body: string | null | undefined): boolean {
   if (!body) return false;
   return body.split("\n", 1)[0]?.replace(/\r$/, "") === CARD_MARKER;
 }
