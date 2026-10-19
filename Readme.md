@@ -183,6 +183,28 @@ Work on files you had already changed before a session started counts too:
 the session records a hash of each dirty file at start, and `stop` counts any
 whose content the session changed again. `session help all` lists every command.
 
+## PR card
+
+One comment on each pull request, updated on every push, saying what the
+record holds for its commits. The records come from `session push`.
+
+```yaml
+on: pull_request
+permissions: { contents: read, pull-requests: write, issues: write }
+jobs:
+  card:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: vedntzz/The-Session@v3
+```
+
+`pull-requests: write` and `issues: write` let it post the comment; the full
+history lets it read the PR's commits. Intent text stays out of the card
+unless you set `show-intent: "true"`. Fork pull requests are skipped with a
+warning, since their token cannot write.
+
 ## Privacy
 
 Records are JSONL under `~/.session/`. No account, no server, no telemetry.
