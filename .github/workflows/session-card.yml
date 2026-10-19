@@ -1,0 +1,30 @@
+# Posts this repository's own session card on every pull request, from the CLI built here.
+name: session card
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  card:
+    runs-on: ubuntu-latest
+    steps:
+      # The card reads the PR's commits against origin/<base>; a shallow clone has neither.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci && npm run build
+
+      - uses: ./
+        with:
+          cli: "node dist/cli.js"

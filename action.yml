@@ -1,0 +1,60 @@
+# Posts the session card on a pull request: one comment, updated in place on every push.
+name: "session PR card"
+description: "Post what the session record says about a pull request's commits as one comment on it."
+branding:
+  icon: "file-text"
+  color: "gray-dark"
+
+inputs:
+  github-token:
+    description: "Token that may write pull request comments"
+    default: "${{ github.token }}"
+  show-intent:
+    description: "Set to true to print each session's intent text in the card"
+    default: "false"
+  cli:
+    description: "Command that runs session"
+    default: "npx --yes @vedantzz/session@3"
+
+runs:
+  using: "composite"
+  steps:
+    # A fork's token is read-only, so posting there could only fail the check.
+    - name: "Decide whether to post"
+      id: "gate"
+      shell: "bash"
+      env:
+        EVENT_NAME: "${{ github.event_name }}"
+        HEAD_REPO: "${{ github.event.pull_request.head.repo.full_name }}"
+        REPO: "${{ github.repository }}"
+      run: |
+        if [ "$EVENT_NAME" != "pull_request" ]; then
+          echo "session card: skipped, the event is $EVENT_NAME and the card is posted on pull_request only."
+          echo "post=false" >> "$GITHUB_OUTPUT"
+        elif [ "$HEAD_REPO" != "$REPO" ]; then
+          echo "::warning::session card: skipped, this pull request comes from a fork and its token cannot write comments."
+          echo "post=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "post=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: "Fetch session refs"
+      if: "steps.gate.outputs.post == 'true'"
+      shell: "bash"
+      run: |
+        git fetch origin '+refs/session/*:refs/session/*' || echo "session card: no session refs on origin."
+
+    - name: "Post the card"
+      id: "post"
+      if: "steps.gate.outputs.post == 'true'"
+      shell: "bash"
+      env:
+        GITHUB_TOKEN: "${{ inputs.github-token }}"
+        SESSION_CLI: "${{ inputs.cli }}"
+        SHOW_INTENT: "${{ inputs.show-intent }}"
+        PR_NUMBER: "${{ github.event.pull_request.number }}"
+        BASE_REF: "${{ github.event.pull_request.base.ref }}"
+      run: |
+        show_intent=()
+        if [ "$SHOW_INTENT" = "true" ]; then show_intent=(--show-intent); fi
+        $SESSION_CLI pr --post --pr "$PR_NUMBER" --base "origin/$BASE_REF" --head HEAD "${show_intent[@]}"
