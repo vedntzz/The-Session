@@ -82,10 +82,11 @@ describe("session.ts, split", () => {
       "declaredLine",
       "labelledPaths",
       "outsideLines",
+      "sessionPathRows",
     ]);
   });
 
   it("takes its cost rows from session-cost.ts", () => {
-    expect(Object.keys(sessionCost).sort()).toEqual(["costLines", "pricesLines"]);
+    expect(Object.keys(sessionCost).sort()).toEqual(["captureDescription", "costLines", "pricesLines"]);
   });
 });
