@@ -5,6 +5,37 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0]
+
+### Added
+
+- `session pr --card` prints a Markdown PR card for a commit range.
+- `session pr --json` prints the card's data as JSON.
+- `session pr --post` posts the card as a PR comment, updating the existing card comment in place.
+- Posted cards hide intent text by default. Add `--show-intent` to `session pr --post` to include it.
+- A composite GitHub Action and workflow fetch session records and post the PR card. Intent text is included only when `show-intent` is `"true"`. Fork pull requests are skipped.
+- PR matching compares file content against the PR's commits.
+- Cards include file counts, scope flags, outcome, cost, and signed-log status, with a separate card when no record matches.
+- A placeholder file for the TeamReport contract.
+
+### Fixed
+
+- Stale-lock takeover checks both inode and file contents. Linux can reuse a freed inode, so the inode alone could identify a replacement lock as the abandoned one.
+- PR comment lookup reads all pages of comments.
+- Cards distinguish a chain checked by hashes alone from one whose signatures were verified.
+- Unpriced cost explanations name the model without a rate.
+- Out-of-scope file lines no longer contain emoji.
+- Fake GitHub responses in posting tests use real comment response shapes.
+- Renderer tests expect the sessionPathRows and captureDescription exports.
+- Status and stop tests read path rows from the new tables.
+
+### Changed
+
+- Terminal week and session-status views use bordered tables.
+- Session-start guidance presents intent and scope in tables.
+- Stop summaries and session details use tables for outcome, declaration, scope, changed paths, usage, cost, and attribution.
+- CI runs the build, typecheck, and tests on every pull request.
+
 ## [Unreleased]
 
 ### Added
