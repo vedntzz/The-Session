@@ -1,7 +1,7 @@
 // Self-contained HTML report for team-level agent activity.
 import { formatUsd } from "../pricing.js";
 import { escapeHtml } from "../render/html/text.js";
-import type { TeamReport } from "./team-report.js";
+import type { CostlyUnshipped, TeamGroup, TeamReport } from "./team-report.js";
 
 export { escapeHtml };
 
@@ -13,11 +13,17 @@ const TEAM_STYLE = `
 body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; padding: 2rem; }
 main { max-width: 64rem; margin: 0 auto; }
 h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; }
+h2 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
 .summary { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; }
 .metric { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; min-width: 9rem; }
 .metric .val { display: block; font-size: 1.1rem; font-weight: 600; }
 .metric .lbl { display: block; font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
 .empty { padding: 2rem 0; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
+ol { padding-left: 1.5rem; margin-top: 0.5rem; }
+li { padding: 0.25rem 0; }
 `.trim();
 
 // Formats a count as a rounded share percentage of total sessions.
@@ -56,12 +62,63 @@ function renderSummary(report: TeamReport): string {
   return `<div class="summary">${renderMetrics(report).join("")}</div>`;
 }
 
-// Renders main content or an empty state when 0 sessions exist.
+// Checks if a group has no priced dollars but has unpriced sessions.
+function isUnpricedOnly(group: TeamGroup): boolean {
+  return group.pricedUsd === 0 && group.unpricedSessions > 0;
+}
+
+// Sorts groups by spend descending, putting unpriced-only groups last.
+function compareGroups(a: TeamGroup, b: TeamGroup): number {
+  const aUnpriced = isUnpricedOnly(a);
+  const bUnpriced = isUnpricedOnly(b);
+  if (aUnpriced !== bUnpriced) return aUnpriced ? 1 : -1;
+  return b.pricedUsd - a.pricedUsd;
+}
+
+// Renders a single row in the group breakdown table.
+function renderGroupRow(g: TeamGroup): string {
+  const spend = spendDisplay(g.pricedUsd, g.unpricedSessions);
+  const share = percent(g.outcomes.shipped, g.sessions);
+  const cells = [g.repo, g.agent, g.sessions, spend, g.unpricedSessions, share];
+  const rendered = cells.map((c) => `<td>${escapeHtml(String(c))}</td>`).join("");
+  return `<tr>${rendered}</tr>`;
+}
+
+// Renders the group breakdown table sorted by spend.
+function renderGroupTable(groups: TeamGroup[]): string {
+  if (groups.length === 0) return "";
+  const sorted = [...groups].sort(compareGroups);
+  const head = "<tr><th>Repo</th><th>Agent</th><th>Sessions</th><th>Spend</th><th>Unpriced</th><th>Shipped</th></tr>";
+  const rows = sorted.map(renderGroupRow).join("");
+  return `<section class="groups"><h2>Groups</h2><table><thead>${head}</thead><tbody>${rows}</tbody></table></section>`;
+}
+
+// Renders a single list item for an unshipped session.
+function renderCostlyItem(item: CostlyUnshipped): string {
+  const cost = item.usd !== null ? formatUsd(item.usd) : "unpriced";
+  const repo = escapeHtml(item.repo);
+  const agent = escapeHtml(item.agent);
+  const outcome = escapeHtml(item.outcome);
+  const date = escapeHtml(item.date);
+  return `<li><span class="date">${date}</span> · <span class="repo">${repo}</span> · <span class="agent">${agent}</span> · <span class="outcome">${outcome}</span> · <span class="cost">${cost}</span></li>`;
+}
+
+// Renders up to 5 costliest unshipped sessions in an ordered list.
+function renderCostliestList(items: CostlyUnshipped[]): string {
+  if (items.length === 0) return "";
+  const rendered = items.slice(0, 5).map(renderCostlyItem).join("");
+  return `<section class="costliest"><h2>Costliest Unshipped</h2><ol>${rendered}</ol></section>`;
+}
+
+// Renders main content with summary, group table, and unshipped list.
 function renderBody(report: TeamReport): string {
   if (report.totals.sessions === 0) {
     return `<p class="empty">No sessions in this window</p>`;
   }
-  return renderSummary(report);
+  const summary = renderSummary(report);
+  const table = renderGroupTable(report.groups);
+  const costliest = renderCostliestList(report.costliestUnshipped);
+  return `${summary}${table}${costliest}`;
 }
 
 // Builds the document head with meta tags, title, and inline styles.
