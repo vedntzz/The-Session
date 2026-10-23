@@ -16,6 +16,8 @@ export function registerTeam(program: Command, options: ProgramOptions): void {
     .option("--since <window>", "how far back: 7d, 30d or 90d", "30d")
     .action(async (flags: TeamFlags) => {
       if (flags.html !== true) throw new Error("--html is required for now. Run session team --html.");
-      console.log(`  wrote    ${await writeTeamPage(flags.since, flags.out, options)}`);
+      const { file, note } = await writeTeamPage(flags.since, flags.out, options);
+      console.log(`  wrote    ${file}`);
+      if (note !== undefined) console.log(`  ${note}`);
     });
 }

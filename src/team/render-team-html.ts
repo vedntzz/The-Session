@@ -127,10 +127,15 @@ function renderHead(title: string): string {
   return `<head>${meta}<title>${escapeHtml(title)}</title><style>${TEAM_STYLE}</style></head>`;
 }
 
+// Renders the optional note line, escaped, or nothing.
+function renderNote(note: string | undefined): string {
+  return note === undefined ? "" : `<p class="note">${escapeHtml(note)}</p>`;
+}
+
 // Renders a complete self-contained HTML page for the team report.
-export function renderTeamHtml(report: TeamReport): string {
+export function renderTeamHtml(report: TeamReport, note?: string): string {
   const title = `Team Report (${report.window.from} to ${report.window.to})`;
   const head = renderHead(title);
-  const body = `<body><main><h1>${escapeHtml(title)}</h1>${renderBody(report)}</main></body>`;
+  const body = `<body><main><h1>${escapeHtml(title)}</h1>${renderNote(note)}${renderBody(report)}</main></body>`;
   return `<!doctype html>\n<html lang="en">\n${head}\n${body}\n</html>\n`;
 }
