@@ -16,7 +16,7 @@ let root: string;
 let cwd: string;
 
 /** One unsigned creating record per session, as a log line. */
-function logOf(sessions: readonly (Session & Record<string, unknown>)[]): string {
+function logOf(sessions: readonly Session[]): string {
   return sessions.map(({ id, ...set }) => JSON.stringify({ v: 1, id, at: set.startedAt, set }) + "\n").join("");
 }
 
@@ -83,7 +83,8 @@ describe("loadTeamRecords", () => {
 
   it("strips name, email and author even when the stored record has them", async () => {
     const personal = { name: "Ada", email: "ada@example.com", author: "Ada <ada@example.com>" };
-    await publish(MACHINE_A, logOf([{ ...session({ id: "a1" }), ...personal }]));
+    const stored: Session & typeof personal = { ...session({ id: "a1" }), ...personal };
+    await publish(MACHINE_A, logOf([stored]));
     const [record] = await loadTeamRecords(cwd);
     expect(record).toBeDefined();
     expect(record).not.toHaveProperty("email");
