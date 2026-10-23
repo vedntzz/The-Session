@@ -6,10 +6,10 @@ import type { TeamReport } from "./team-report.js";
 /** This repo's records, and a count of in-window sessions from any other repo. */
 export interface RepoSplit { own: readonly TeamRecord[]; otherRepoSessions: number }
 
-/** Records whose repo is `identity`; the rest are counted, never classified here. */
-export function splitByRepo(records: readonly TeamRecord[], identity: string, window: TeamReport["window"]): RepoSplit {
-  const own = records.filter((record) => record.repo === identity);
-  const others = records.filter((record) => record.repo !== identity && startedWithin(record, window));
+/** Records whose repo is one of this repo's `identities`; the rest are counted, never classified here. */
+export function splitByRepo(records: readonly TeamRecord[], identities: readonly string[], window: TeamReport["window"]): RepoSplit {
+  const own = records.filter((record) => identities.includes(record.repo));
+  const others = records.filter((record) => !identities.includes(record.repo) && startedWithin(record, window));
   return { own, otherRepoSessions: others.length };
 }
 

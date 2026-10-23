@@ -4,7 +4,7 @@ import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildProgram } from "../../src/program.js";
-import type { Session } from "../../src/store.js";
+import { pathIdentity, remoteIdentity, type Session } from "../../src/store.js";
 import { commitTree, refFor, updateRef, writeBlob, writeTree } from "../../src/sync.js";
 import { aggregateTeam } from "../../src/team/aggregate-team.js";
 import { buildTeamReport } from "../../src/team/build-team-report.js";
@@ -165,13 +165,13 @@ describe("splitByRepo", () => {
     .map((s) => ({ ...s, sourceRef: "refs/session/x" }));
 
   it("keeps only this repo's records and counts the other repos' in the window", () => {
-    const split = splitByRepo(records(), TOOL, window());
+    const split = splitByRepo(records(), [TOOL], window());
     expect(split.own.map((record) => record.id)).toEqual(["a"]);
     expect(split.otherRepoSessions).toBe(1);
   });
 
   it("never hands another repo's record to the report, so it is never classified here", () => {
-    const report = buildTeamReport(splitByRepo(records(), TOOL, window()).own, undefined, RATES, window());
+    const report = buildTeamReport(splitByRepo(records(), [TOOL], window()).own, undefined, RATES, window());
     expect(report.totals.sessions).toBe(1);
     expect(report.groups.map((group) => group.repo)).toEqual([TOOL]);
     expect(report.costliestUnshipped.map((entry) => entry.repo)).toEqual([TOOL]);
@@ -180,5 +180,31 @@ describe("splitByRepo", () => {
   it("has a note only when something was left out", () => {
     expect(otherReposNote(0)).toBeUndefined();
     expect(otherReposNote(3)).toBe("3 sessions from other repos not included; run session team in those repos");
+  });
+});
+
+describe("session team --html, this checkout's two keys", () => {
+  const OTHER_CLONE = "remote:/some/other/local/clone";
+  const counted = async (repo: string) => {
+    await publish(refFor("ed25519:aaaa"), [synced("k", repo, 2)]);
+    await run("team", "--html");
+    const html = await readFile(path.join(cwd, "session-team.html"), "utf8");
+    return { own: html.match(/<li>/g)?.length ?? 0, other: html.includes("1 sessions from other repos") };
+  };
+
+  it("counts a record keyed on this checkout's root as this repo", async () => {
+    expect(await counted(await pathIdentity(cwd))).toEqual({ own: 1, other: false });
+  });
+
+  it("counts a record keyed on this checkout's remote as this repo", async () => {
+    expect(await counted((await remoteIdentity(cwd))!)).toEqual({ own: 1, other: false });
+  });
+
+  it("leaves a record keyed on another local clone under other repos", async () => {
+    expect(await counted(OTHER_CLONE)).toEqual({ own: 0, other: true });
+  });
+
+  it("leaves a different remote repo under other repos", async () => {
+    expect(await counted(SITE)).toEqual({ own: 0, other: true });
   });
 });

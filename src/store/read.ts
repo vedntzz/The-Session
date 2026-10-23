@@ -135,23 +135,21 @@ export async function readLogAt(file: string): Promise<RawLog> {
 export async function sameRepoLogs(
   options: StoreOptions = {},
 ): Promise<{ identity: string; logs: RawLog[] }> {
-  const cwd = options.cwd ?? process.cwd();
-  const remote = await remoteIdentity(cwd);
-  if (remote === undefined) {
-    // Nothing to merge: this checkout is keyed on its location, which is the
-    // key it has always had. Resolved from the identity in hand rather than
-    // through `readLog`, which would ask git the same two questions again.
-    const identity = await pathIdentity(cwd);
-    return { identity, logs: [await readLogAt(storeFileFor(identity, options))] };
-  }
+  const { identity, keys } = await sameRepoIdentities(options.cwd ?? process.cwd());
+  const logs = await Promise.all(keys.map((key) => readLogAt(storeFileFor(key, options))));
+  return { identity, logs };
+}
 
+/**
+ * The identities the repo at `cwd` has been recorded under, oldest first, and
+ * the one it has now: its root alone, or its root then its origin remote.
+ */
+export async function sameRepoIdentities(cwd: string): Promise<{ identity: string; keys: string[] }> {
+  const location = await pathIdentity(cwd);
+  const remote = await remoteIdentity(cwd);
   // Oldest first, so a record created before the remote existed is folded
   // before the patches that later landed in the current log for it.
-  const previous = storeFileFor(await pathIdentity(cwd), options);
-  return {
-    identity: remote,
-    logs: [await readLogAt(previous), await readLogAt(storeFileFor(remote, options))],
-  };
+  return remote === undefined ? { identity: location, keys: [location] } : { identity: remote, keys: [location, remote] };
 }
 
 /**
