@@ -21,15 +21,15 @@ let home: string;
 
 interface Ran { code: number | null; ms: number; stdout: string }
 
-/** Runs a registered hook's command line with `stdin` as its payload; null sends nothing and closes. */
-function runHook(hook: HookSpec, stdin: string | null, agent?: string): Promise<Ran> {
+/** Runs a registered hook's command line with `stdin` as its payload; null sends nothing and closes, undefined leaves it open. */
+function runHook(hook: HookSpec, stdin: string | null | undefined, agent?: string): Promise<Ran> {
   const started = performance.now();
   const child = spawn("/bin/sh", ["-c", commandLine(hook, LAUNCHER, agent)], {
     cwd: repo, env: { ...process.env, SESSION_HOME: home }, stdio: ["pipe", "pipe", "inherit"],
   });
   let stdout = "";
   child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
-  child.stdin.end(stdin ?? "");
+  if (stdin !== undefined) child.stdin.end(stdin ?? "");
   return new Promise((resolve, reject) => {
     child.on("error", reject);
     child.on("close", (code) => resolve({ code, ms: performance.now() - started, stdout }));
@@ -109,11 +109,13 @@ describe("Codex's start hook, through the built CLI", () => {
 });
 
 describe("a hook with nothing on stdin, through the built CLI", () => {
-  it("start falls back to a session nobody named, inside a second", async () => {
-    const ran = await runHook(OPEN_HOOK, null, "claude-code");
+  // Stdin left open, as a runner that sends nothing leaves it; the bound is the
+  // editor's 10-second hook timeout halved, not node's startup under load.
+  it("start falls back to a session nobody named without waiting on an open stdin", async () => {
+    const ran = await runHook(OPEN_HOOK, undefined, "claude-code");
 
     expect(ran.code).toBe(0);
-    expect(ran.ms).toBeLessThan(1000);
+    expect(ran.ms).toBeLessThan(5000);
     const [session] = await sessions();
     expect(session).toMatchObject({ intentSource: "captured", endedAt: null });
     expect(session?.openedBy).toBeUndefined();

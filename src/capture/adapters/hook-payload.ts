@@ -55,11 +55,12 @@ export async function hookPayloadFrom(
       text += typeof chunk === "string" ? chunk : chunk.toString("utf8");
       if (parseHookPayload(text) !== undefined) return;
     }
-  })();
+  })().catch(() => undefined);
   let timer: NodeJS.Timeout | undefined;
   const late = new Promise<void>((resolve) => { timer = setTimeout(resolve, waitMs); });
-  await Promise.race([read.catch(() => undefined), late]);
+  await Promise.race([read, late]);
   clearTimeout(timer);
-  if (stream === process.stdin) process.stdin.pause();
+  // A paused stdin a runner holds open still keeps node alive; nothing reads it again.
+  if (stream === process.stdin) process.stdin.destroy();
   return parseHookPayload(text);
 }
