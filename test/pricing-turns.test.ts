@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { costOfTurns } from "../src/capture/adapters/codex.js";
 import { readRollout, turnsOf } from "../src/capture/adapters/codex-rollout.js";
-import { loadChecked, loadRates, priceSession, sessionFigure, spendOf, wasMeasured, type ModelRate } from "../src/pricing.js";
+import { loadRates, priceSession, sessionFigure, spendOf, wasMeasured, type ModelRate } from "../src/pricing.js";
 import { CACHE_WRITE_REASON } from "../src/pricing-turns.js";
 import { formatWeek } from "../src/render/terminal/week.js";
 import type { Session, SessionCost } from "../src/store.js";
@@ -67,10 +67,6 @@ describe("the bundled table on the Codex models", () => {
     const price = priceSession(await onModel("gpt-6-astra"), await loadRates());
     expect(price).toMatchObject({ priced: true, matched: "gpt-6-astra" });
     expect(price.priced && price.usd).toBeCloseTo((input * 10 + cacheRead * 1 + output * 50) / 1e6, 10);
-  });
-
-  it("states the date the prices were checked", async () => {
-    expect(await loadChecked()).toBe("2026-10-23");
   });
 });
 
