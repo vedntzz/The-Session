@@ -746,7 +746,7 @@ describe("session", () => {
       "agents", "config",
       "help", "hook", "intent", "key", "knowledge", "mark",
       "peers", "pr", "prime", "pull", "push", "scan",
-      "settle", "start", "stop", "survival", "verify", "week",
+      "settle", "start", "stop", "survival", "team", "verify", "week",
     ]);
   });
 

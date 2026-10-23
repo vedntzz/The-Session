@@ -20,7 +20,7 @@ export function aggregateTeam(records: readonly TeamRecord[], facts: RepoFacts |
 }
 
 /** True for a session started inside [from, to], both ends included. */
-function startedWithin(record: TeamRecord, window: TeamWindow): boolean {
+export function startedWithin(record: TeamRecord, window: TeamWindow): boolean {
   const started = Date.parse(record.startedAt);
   return started >= Date.parse(window.from) && started <= Date.parse(window.to);
 }

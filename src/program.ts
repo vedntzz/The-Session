@@ -19,6 +19,7 @@ import { registerStart } from "./program/start.js";
 import { registerStop } from "./program/stop.js";
 import { registerSurvival } from "./program/survival.js";
 import { registerSync } from "./program/sync.js";
+import { registerTeam } from "./program/team.js";
 import { registerVerify } from "./program/verify.js";
 import { registerWeek } from "./program/week.js";
 import { registerKnowledge } from "./program/knowledge.js";
@@ -94,6 +95,7 @@ function registerCommands(program: Command, options: ProgramOptions, palette: Pa
   registerAgents(program, options, palette);
   registerKnowledge(program, options);
   registerPr(program, options);
+  registerTeam(program, options);
   registerScan(program, options, palette);
   registerVerify(program, options);
   registerSettle(program, options);
