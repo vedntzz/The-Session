@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { factsFor } from "../observe.js";
 import { loadRates } from "../pricing.js";
-import { repoIdentity, storeHome, type StoreOptions } from "../store.js";
+import { sameRepoIdentities, storeHome, type StoreOptions } from "../store.js";
 import { buildTeamReport } from "../team/build-team-report.js";
 import { loadTeamRecords } from "../team/load-team-records.js";
 import { renderTeamHtml } from "../team/render-team-html.js";
@@ -20,7 +20,7 @@ export interface TeamPage { file: string; note: string | undefined }
 export async function writeTeamPage(since: string, out: string | undefined, options: StoreOptions = {}): Promise<TeamPage> {
   const window = windowSince(since, new Date());
   const cwd = options.cwd ?? process.cwd();
-  const { own, otherRepoSessions } = splitByRepo(await loadTeamRecords(cwd), await repoIdentity(cwd), window);
+  const { own, otherRepoSessions } = splitByRepo(await loadTeamRecords(cwd), (await sameRepoIdentities(cwd)).keys, window);
   const report = buildTeamReport(own, await factsFor(own, cwd), await loadRates(storeHome(options)), window);
   const file = path.resolve(cwd, out ?? DEFAULT_PAGE);
   const note = otherReposNote(otherRepoSessions);
