@@ -17,7 +17,7 @@ export const BUCKET_OF_OUTCOME: Readonly<Record<SessionOutcome, keyof OutcomeSpl
 const WASTE_BUCKETS: ReadonlySet<keyof OutcomeSplit> = new Set(["reverted", "neverMerged"]);
 
 /** Nothing detects reverts yet, so no record is reverted. */
-const NO_REVERT_DETECTION = false;
+export const NO_REVERT_DETECTION = false;
 
 /** The bucket for one session, from what the repository says now. */
 export function classifyOutcome(session: Session, facts: RepoFacts | undefined, reverted: boolean): keyof OutcomeSplit {

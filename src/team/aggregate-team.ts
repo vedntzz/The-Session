@@ -26,7 +26,7 @@ function startedWithin(record: TeamRecord, window: TeamWindow): boolean {
 }
 
 /** Every agent that captured the session, sorted and joined, so one session is one group. */
-function agentLabel(record: TeamRecord): string {
+export function agentLabel(record: TeamRecord): string {
   return agentsOf(record.cost, knownAgents()).join("+") || UNKNOWN_AGENT;
 }
 
@@ -40,7 +40,7 @@ function groupRecords(records: readonly TeamRecord[]): Map<string, TeamRecord[]>
 }
 
 /** The session's dollars, or undefined where no rate covers it or nothing was captured. */
-function pricedUsdOf(record: TeamRecord, rates: RateTable): number | undefined {
+export function pricedUsdOf(record: TeamRecord, rates: RateTable): number | undefined {
   if (!wasMeasured(record.cost)) return undefined;
   const price = priceSession(record.cost, rates);
   return price.priced ? price.usd : undefined;
