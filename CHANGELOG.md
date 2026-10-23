@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A hook never closes a declared session, and `/clear` closes nothing; a passive session closes when the agents in it have ended, so the agreement's write check no longer goes silent after `/clear`.
 - Cost is read from the session's own agent transcripts, so two agents in one repo are no longer each billed for both. `week <id> --full` says how a cost was captured.
 - A session that used several models is priced at each model's own rate.
+- The bundled rates price `gpt-6.1-sol` and `gpt-6-astra`, so Codex sessions on them are no longer unpriced.
 - Codex spend counts at the moment it was reported, not when its turn started.
 - A rename records both of its paths.
 - A revert no longer reads as merged the moment it stops; a deletion of a file the default branch never had is not a landing.

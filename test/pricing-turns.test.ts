@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { costOfTurns } from "../src/capture/adapters/codex.js";
 import { readRollout, turnsOf } from "../src/capture/adapters/codex-rollout.js";
-import { priceSession, sessionFigure, spendOf, wasMeasured, type ModelRate } from "../src/pricing.js";
+import { loadRates, priceSession, sessionFigure, spendOf, wasMeasured, type ModelRate } from "../src/pricing.js";
 import { CACHE_WRITE_REASON } from "../src/pricing-turns.js";
 import { formatWeek } from "../src/render/terminal/week.js";
 import type { Session, SessionCost } from "../src/store.js";
@@ -50,6 +50,23 @@ describe("pricing Codex turns", () => {
     expect(priceSession(cost, rates)).toEqual({ priced: false, model: "gpt-6-astra", reason: CACHE_WRITE_REASON });
     expect(sessionFigure(cost, rates)).toBeUndefined();
     expect(spendOf([session(cost)], rates)).toMatchObject({ usd: 0, unpriced: 1, unpricedModels: [CACHE_WRITE_REASON] });
+  });
+});
+
+describe("the bundled table on the Codex models", () => {
+  const onModel = async (model: string): Promise<SessionCost> => ({ ...(await fixtureCost()), model, turnModels: [model, model, model] });
+  const [input, cacheRead, output] = [14222 + 22980 + 841, 19328 + 16256 + 39040, 206 + 219 + 21];
+
+  it("prices gpt-6.1-sol at its published standard rates", async () => {
+    const price = priceSession(await onModel("gpt-6.1-sol"), await loadRates());
+    expect(price).toMatchObject({ priced: true, matched: "gpt-6.1-sol" });
+    expect(price.priced && price.usd).toBeCloseTo((input * 2 + cacheRead * 0.1 + output * 10) / 1e6, 10);
+  });
+
+  it("prices gpt-6-astra at its published standard rates", async () => {
+    const price = priceSession(await onModel("gpt-6-astra"), await loadRates());
+    expect(price).toMatchObject({ priced: true, matched: "gpt-6-astra" });
+    expect(price.priced && price.usd).toBeCloseTo((input * 10 + cacheRead * 1 + output * 50) / 1e6, 10);
   });
 });
 
