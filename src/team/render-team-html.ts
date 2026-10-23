@@ -1,6 +1,8 @@
 // Self-contained HTML report for team-level agent activity.
 import { formatUsd } from "../pricing.js";
 import { escapeHtml } from "../render/html/text.js";
+import { REMOTE_PREFIX, repoName } from "../store/paths.js";
+import { shareOfChanged } from "./changed-share.js";
 import type { CostlyUnshipped, TeamGroup, TeamReport } from "./team-report.js";
 
 export { escapeHtml };
@@ -26,10 +28,37 @@ ol { padding-left: 1.5rem; margin-top: 0.5rem; }
 li { padding: 0.25rem 0; }
 `.trim();
 
-// Formats a count as a rounded share percentage of total sessions.
-function percent(count: number, total: number): string {
-  if (total === 0) return "0%";
-  return `${Math.round((count / total) * 100)}%`;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const SHIPPED_LABEL = "shipped (of sessions that changed code)";
+
+// The label for an agent aggregation could not name.
+function agentDisplay(agent: string): string {
+  return agent === "unknown" ? "agent not recorded" : agent;
+}
+
+// A remote key as owner/name; a path key as repoName shows it.
+function repoDisplay(identity: string): string {
+  const name = repoName(identity);
+  return identity.startsWith(REMOTE_PREFIX) ? name.split("/").slice(-2).join("/") : name;
+}
+
+// `Oct 2`, or `Oct 2, 2026` with the year, in the reader's timezone.
+function monthDay(at: Date, withYear: boolean): string {
+  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", ...(withYear ? { year: "numeric" } : {}) };
+  return at.toLocaleDateString("en-US", options);
+}
+
+// `Sep 23 – Oct 23, 2026 (30 days)`; the start keeps its year when the window crosses one.
+function windowDisplay(window: TeamReport["window"]): string {
+  const from = new Date(window.from);
+  const to = new Date(window.to);
+  const days = Math.round((to.getTime() - from.getTime()) / DAY_MS);
+  return `${monthDay(from, from.getFullYear() !== to.getFullYear())} – ${monthDay(to, true)} (${days} days)`;
+}
+
+// A YYYY-MM-DD start date as `Oct 2`.
+function dateDisplay(date: string): string {
+  return monthDay(new Date(`${date}T12:00:00`), false);
 }
 
 // Formats priced spend or returns unpriced when no money is known.
@@ -43,17 +72,23 @@ function summaryItem(label: string, value: string): string {
   return `<div class="metric"><span class="val">${escapeHtml(value)}</span><span class="lbl">${escapeHtml(label)}</span></div>`;
 }
 
+// Spend over the priced sessions it covers.
+function spendItem(t: TeamReport["totals"]): string {
+  const priced = t.sessions - t.unpricedSessions;
+  return summaryItem(`across ${priced} priced sessions`, spendDisplay(t.pricedUsd, t.unpricedSessions));
+}
+
 // Assembles summary metric cards from the totals block.
 function renderMetrics(report: TeamReport): string[] {
   const t = report.totals;
-  const s = t.sessions;
+  const o = t.outcomes;
   return [
-    summaryItem("Spend", spendDisplay(t.pricedUsd, t.unpricedSessions)),
-    summaryItem("Coverage", `${t.unpricedSessions} unpriced`),
-    summaryItem("Shipped", `${percent(t.outcomes.shipped, s)} shipped`),
-    summaryItem("Never Merged", `${percent(t.outcomes.neverMerged, s)} never-merged`),
-    summaryItem("Still Open", `${percent(t.outcomes.stillOpen, s)} still-open`),
-    summaryItem("No Changes", `${percent(t.outcomes.noChanges, s)} no-changes`),
+    spendItem(t),
+    summaryItem("unpriced", String(t.unpricedSessions)),
+    summaryItem(SHIPPED_LABEL, shareOfChanged(o.shipped, o)),
+    summaryItem("never merged", shareOfChanged(o.neverMerged, o)),
+    summaryItem("still open", shareOfChanged(o.stillOpen, o)),
+    summaryItem("no changes", String(o.noChanges)),
   ];
 }
 
@@ -78,8 +113,8 @@ function compareGroups(a: TeamGroup, b: TeamGroup): number {
 // Renders a single row in the group breakdown table.
 function renderGroupRow(g: TeamGroup): string {
   const spend = spendDisplay(g.pricedUsd, g.unpricedSessions);
-  const share = percent(g.outcomes.shipped, g.sessions);
-  const cells = [g.repo, g.agent, g.sessions, spend, g.unpricedSessions, share];
+  const share = shareOfChanged(g.outcomes.shipped, g.outcomes);
+  const cells = [agentDisplay(g.agent), g.sessions, spend, g.unpricedSessions, share, g.outcomes.noChanges];
   const rendered = cells.map((c) => `<td>${escapeHtml(String(c))}</td>`).join("");
   return `<tr>${rendered}</tr>`;
 }
@@ -88,7 +123,7 @@ function renderGroupRow(g: TeamGroup): string {
 function renderGroupTable(groups: TeamGroup[]): string {
   if (groups.length === 0) return "";
   const sorted = [...groups].sort(compareGroups);
-  const head = "<tr><th>Repo</th><th>Agent</th><th>Sessions</th><th>Spend</th><th>Unpriced</th><th>Shipped</th></tr>";
+  const head = `<tr><th>Agent</th><th>Sessions</th><th>Spend</th><th>Unpriced</th><th>${SHIPPED_LABEL}</th><th>No changes</th></tr>`;
   const rows = sorted.map(renderGroupRow).join("");
   return `<section class="groups"><h2>Groups</h2><table><thead>${head}</thead><tbody>${rows}</tbody></table></section>`;
 }
@@ -96,11 +131,10 @@ function renderGroupTable(groups: TeamGroup[]): string {
 // Renders a single list item for an unshipped session.
 function renderCostlyItem(item: CostlyUnshipped): string {
   const cost = item.usd !== null ? formatUsd(item.usd) : "unpriced";
-  const repo = escapeHtml(item.repo);
-  const agent = escapeHtml(item.agent);
+  const agent = escapeHtml(agentDisplay(item.agent));
   const outcome = escapeHtml(item.outcome);
-  const date = escapeHtml(item.date);
-  return `<li><span class="date">${date}</span> · <span class="repo">${repo}</span> · <span class="agent">${agent}</span> · <span class="outcome">${outcome}</span> · <span class="cost">${cost}</span></li>`;
+  const date = escapeHtml(dateDisplay(item.date));
+  return `<li><span class="date">${date}</span> · <span class="agent">${agent}</span> · <span class="outcome">${outcome}</span> · <span class="cost">${cost}</span></li>`;
 }
 
 // Renders up to 5 costliest unshipped sessions in an ordered list.
@@ -132,10 +166,18 @@ function renderNote(note: string | undefined): string {
   return note === undefined ? "" : `<p class="note">${escapeHtml(note)}</p>`;
 }
 
+// `Team report · <repo> · <window>`, the repo part dropped when no session names one.
+function heading(report: TeamReport): string {
+  const identity = report.groups[0]?.repo;
+  const parts = ["Team report", ...(identity === undefined ? [] : [repoDisplay(identity)]), windowDisplay(report.window)];
+  return parts.join(" · ");
+}
+
 // Renders a complete self-contained HTML page for the team report.
 export function renderTeamHtml(report: TeamReport, note?: string): string {
-  const title = `Team Report (${report.window.from} to ${report.window.to})`;
+  const title = heading(report);
   const head = renderHead(title);
-  const body = `<body><main><h1>${escapeHtml(title)}</h1>${renderNote(note)}${renderBody(report)}</main></body>`;
+  const h1 = escapeHtml(title);
+  const body = `<body><main><h1>${h1}</h1>${renderNote(note)}${renderBody(report)}</main></body>`;
   return `<!doctype html>\n<html lang="en">\n${head}\n${body}\n</html>\n`;
 }
