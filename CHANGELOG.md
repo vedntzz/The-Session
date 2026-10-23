@@ -5,7 +5,13 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.1.0]
+## [Unreleased]
+
+## [3.0.0] — YYYY-MM-DD
+
+### Removed (breaking)
+
+- The full-screen `session ui` launcher and screens are removed. Use `session week` for history and `session week <id> --full` for details.
 
 ### Added
 
@@ -16,7 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A composite GitHub Action and workflow fetch session records and post the PR card. Intent text is included only when `show-intent` is `"true"`. Fork pull requests are skipped.
 - PR matching compares file content against the PR's commits.
 - Cards include file counts, scope flags, outcome, cost, and signed-log status, with a separate card when no record matches.
-- A placeholder file for the TeamReport contract.
+- `session team --html` writes the team report page from every synced session record, to `./session-team.html` or to `--out <path>`.
+- The team report covers this repo only, including sessions recorded under the checkout's path before it had an origin remote, judges outcomes only against the current repo, and says how many sessions from other repos it left out. `--since` takes 7d, 30d or 90d; the default is 30d.
+- Optional Session Lavender color profiles for Apple Terminal and iTerm2, with import instructions.
+- A [local terminal walkthrough](docs/terminal-start.md) for testing this checkout in a disposable repository, with VS Code color guidance.
+
+### Changed
+
+- Terminal week and session-status views use bordered tables.
+- Session-start guidance presents intent and scope in tables.
+- Stop summaries and session details use tables for outcome, declaration, scope, changed paths, usage, cost, and attribution.
+- CI runs the build, typecheck, and tests on every pull request.
+- `session start` uses line prompts for intent and scope; the bare state view and stop confirmation stay in terminal scrollback.
+- Bare and quoted `session start` share a saved-session panel in a terminal. Piped starts keep their compact confirmation, and `start --passive` stays silent.
+- Saved start panels wrap between 40 and 80 columns and preserve the full intent and literal scope paths. When width is unknown, the confirmation prints without a frame.
 
 ### Fixed
 
@@ -28,27 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fake GitHub responses in posting tests use real comment response shapes.
 - Renderer tests expect the sessionPathRows and captureDescription exports.
 - Status and stop tests read path rows from the new tables.
-
-### Changed
-
-- Terminal week and session-status views use bordered tables.
-- Session-start guidance presents intent and scope in tables.
-- Stop summaries and session details use tables for outcome, declaration, scope, changed paths, usage, cost, and attribution.
-- CI runs the build, typecheck, and tests on every pull request.
-
-## [Unreleased]
-
-### Added
-- Optional Session Lavender color profiles for Apple Terminal and iTerm2, with import instructions.
-- A [local terminal walkthrough](docs/terminal-start.md) for testing this checkout in a disposable repository, with VS Code color guidance.
-
-### Changed
-- `session start` uses line prompts for intent and scope; the bare state view and stop confirmation stay in terminal scrollback.
-- Bare and quoted `session start` share a saved-session panel in a terminal. Piped starts keep their compact confirmation, and `start --passive` stays silent.
-- Saved start panels wrap between 40 and 80 columns and preserve the full intent and literal scope paths. When width is unknown, the confirmation prints without a frame.
-- The full-screen `session ui` launcher and screens are removed. Use `session week` for history and `session week <id> --full` for details.
-
-### Fixed
 - Start confirmations wrap attribution and hook-session handoff notices in narrow terminals.
 - Cancelling an unfinished start creates no declared session and keeps any captured session open.
 - A hook never closes a declared session, and `/clear` closes nothing; a passive session closes when the agents in it have ended, so the agreement's write check no longer goes silent after `/clear`.
